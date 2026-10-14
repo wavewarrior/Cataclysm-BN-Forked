@@ -65,7 +65,7 @@ class sound_wave_pass {
 public:
     sound_wave_pass() = default;
     sound_wave_pass(const sound_wave_pass&) = delete;
-    auto operator=(const sound_wave_pass&) -> sound_wave_pass& = delete; // *NOPAD*
+    auto operator=(const sound_wave_pass&) -> sound_wave_pass& = delete;
     ~sound_wave_pass();
 
     // Build pipelines + instance buffers. `target_format` is the world_target

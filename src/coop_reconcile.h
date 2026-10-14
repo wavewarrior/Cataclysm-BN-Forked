@@ -9,11 +9,12 @@
 
 /// Predicted outcome of a non-movement action (for client-side prediction)
 struct predicted_outcome {
-    tripoint_bub_ms target_pos;     ///< Target tile affected
-    int target_expected_hp = -1;    ///< Expected absolute HP of target after action (-1 = unknown/dead)
-    int self_expected_hp = -1;      ///< Expected absolute HP of self after action (-1 = unknown)
-    std::string terrain_change;     ///< Expected terrain id at target after action (empty = none)
-    std::string item_id;            ///< Expected item/furn id at target after action (empty = none)
+    tripoint_bub_ms target_pos;  ///< Target tile affected
+    int target_expected_hp = -1; ///< Expected absolute HP of target after action (-1 =
+                                 ///< unknown/dead)
+    int self_expected_hp = -1;   ///< Expected absolute HP of self after action (-1 = unknown)
+    std::string terrain_change;  ///< Expected terrain id at target after action (empty = none)
+    std::string item_id;         ///< Expected item/furn id at target after action (empty = none)
 };
 
 /// Minimal action descriptor used by the reconciliation function.
@@ -22,10 +23,10 @@ struct predicted_outcome {
 struct reconcile_action {
     uint32_t seq = 0;
     std::string key; ///< MOVE_N, MOVE_S, MOVE_E, MOVE_W, MOVE_NE/NW/SE/SW; others are no-ops
-    std::optional<predicted_outcome> outcome;  ///< Only set for predictive actions
+    std::optional<predicted_outcome> outcome; ///< Only set for predictive actions
 
     reconcile_action() = default;
-    reconcile_action( uint32_t s, const std::string& k ) : seq( s ), key( k ) {}
+    reconcile_action(uint32_t s, const std::string& k): seq(s), key(k) {}
 };
 
 /// Compute the reconciled client position after receiving a seq-confirmed sync.
@@ -44,5 +45,5 @@ struct reconcile_action {
 /// This function is pure: it never mutates @p pending.  The caller is
 /// responsible for trimming confirmed entries from the ring buffer separately.
 auto coop_reconcile_pos(
-    tripoint_bub_ms server_pos, int last_seq, std::span<const reconcile_action> pending )
--> tripoint_bub_ms;
+    tripoint_bub_ms server_pos, int last_seq, std::span<const reconcile_action> pending)
+    -> tripoint_bub_ms;

@@ -1,6 +1,4 @@
 #pragma once
 
-[[ noreturn ]]
-void exit_handler( int status );
-
-
+[[noreturn]]
+void exit_handler(int status);

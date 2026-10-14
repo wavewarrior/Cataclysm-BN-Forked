@@ -50,16 +50,11 @@ struct tile_light_query {
 /// been deepest. The hard 0.001 threshold also made the transition pop rather
 /// than ramp. Darkness is now `gpu_lit` with a dark radiance, and only the
 /// genuine ABSENCE of a lightmap is `unlit`.
-constexpr auto classify_tile_light( const tile_light_query &q ) -> sprite_light_mode
-{
-    if( q.as_independent_entity || q.is_overmap || !q.world_present ) {
+constexpr auto classify_tile_light(const tile_light_query& q) -> sprite_light_mode {
+    if (q.as_independent_entity || q.is_overmap || !q.world_present) {
         return sprite_light_mode::unlit;
     }
-    if( !q.lighting_ready ) {
-        return sprite_light_mode::unlit;
-    }
-    if( q.memorized ) {
-        return sprite_light_mode::memory;
-    }
+    if (!q.lighting_ready) { return sprite_light_mode::unlit; }
+    if (q.memorized) { return sprite_light_mode::memory; }
     return sprite_light_mode::gpu_lit;
 }

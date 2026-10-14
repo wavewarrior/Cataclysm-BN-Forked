@@ -5,8 +5,7 @@
 struct SDL_GPUTexture;
 struct point;
 class nc_color;
-namespace catacurses
-{
+namespace catacurses {
 class window;
 } // namespace catacurses
 
@@ -18,14 +17,13 @@ class window;
 // sprites tinted by a curses color — so one tint yields an outline in the color
 // plus a darker-shade fill, and the art stays crisp at any zoom / HiDPI
 // (re-rasterized when the cell size changes).
-namespace widget_icon
-{
+namespace widget_icon {
 // Return a cached GPU texture for gfx/widgets/<name>.svg rasterized at px*px,
 // rasterizing+uploading once on first request for a given (name, px). Returns
 // nullptr (logged once) if the asset is missing, rasterization fails, or no GPU
 // device is available (e.g. headless tests). The handle is owned by the cache;
 // callers must not free it.
-SDL_GPUTexture *get( const std::string &name, int px );
+SDL_GPUTexture* get(const std::string& name, int px);
 
 // Free all cached icon textures. Call when the font cell size changes (resize /
 // zoom) so stale-size rasters don't accumulate, and on data reload / shutdown.
@@ -48,8 +46,7 @@ void reload();
 // if the window is invalid, the asset is missing, or no GPU device is live.
 // Defined in the SDL backend (sdltiles.cpp), where the font cell size and the
 // render queue live.
-namespace sidebar_anim
-{
+namespace sidebar_anim {
 struct icon_transform;
 } // namespace sidebar_anim
 
@@ -57,15 +54,16 @@ struct icon_transform;
 // alpha, vertical offset, tint colour-blend; rotation lands with the spin stage)
 // resolved from the sidebar animation registry. The plain overload below is the
 // identity case.
-void draw_widget_icon( const catacurses::window &win, const point &cell,
-                       const std::string &icon, const nc_color &color,
-                       const sidebar_anim::icon_transform &tr );
+void draw_widget_icon(
+    const catacurses::window& win, const point& cell, const std::string& icon,
+    const nc_color& color, const sidebar_anim::icon_transform& tr);
 
-void draw_widget_icon( const catacurses::window &win, const point &cell,
-                       const std::string &icon, const nc_color &color );
+void draw_widget_icon(
+    const catacurses::window& win, const point& cell, const std::string& icon,
+    const nc_color& color);
 
 // Draw a translucent highlight bar behind a panel row (cell row `row`, spanning
 // `width_cells`), tinted `color` at `alpha` (0..1). UI rects flush before font
 // glyphs, so the row's text renders on top. Used for the value-row change flash.
-void draw_widget_row_highlight( const catacurses::window &win, int row, int width_cells,
-                                const nc_color &color, float alpha );
+void draw_widget_row_highlight(
+    const catacurses::window& win, int row, int width_cells, const nc_color& color, float alpha);

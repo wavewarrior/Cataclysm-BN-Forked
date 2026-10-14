@@ -57,21 +57,19 @@ struct skill_sync_data {
     std::vector<std::pair<std::string, int>> skills; // skill_id string → level
 };
 
-auto build_skill_sync_fields( JsonOut& jout,
-                              const std::vector<std::pair<std::string, int>> &skills ) -> void;
-auto parse_skill_sync_fields( const JsonObject& d )
--> std::vector<std::pair<std::string, int>>; // *NOPAD*
+auto build_skill_sync_fields(JsonOut& jout, const std::vector<std::pair<std::string, int>>& skills)
+    -> void;
+auto parse_skill_sync_fields(const JsonObject& d) -> std::vector<std::pair<std::string, int>>;
 
-auto build_world_seed_packet( const world_seed_data & ) -> std::string;
-auto build_action_packet( const action_packet_data & ) -> std::string;
+auto build_world_seed_packet(const world_seed_data&) -> std::string;
+auto build_action_packet(const action_packet_data&) -> std::string;
 /// C6: build a join_info packet ({"t":12,"d":{"ax":N,"ay":N,"az":N}}).
-auto build_join_info_packet( const join_info_data & ) -> std::string;
-auto parse_world_seed_packet( const std::string & ) -> std::optional<world_seed_data>;
-auto parse_action_packet( const std::string & ) -> std::optional<action_packet_data>;
-auto parse_sync_header( const std::string & ) -> std::optional<sync_header_data>;
+auto build_join_info_packet(const join_info_data&) -> std::string;
+auto parse_world_seed_packet(const std::string&) -> std::optional<world_seed_data>;
+auto parse_action_packet(const std::string&) -> std::optional<action_packet_data>;
+auto parse_sync_header(const std::string&) -> std::optional<sync_header_data>;
 /// C6: parse a join_info packet; returns nullopt on wrong type or JSON error.
-auto parse_join_info_packet( const std::string& ) -> std::optional<join_info_data>; // *NOPAD*
+auto parse_join_info_packet(const std::string&) -> std::optional<join_info_data>;
 /// C4: parse a MOVE_UP/MOVE_DOWN ctx_json {"ax":N,"ay":N,"az":N}.
 /// Returns nullopt when the string is empty or malformed.
-auto parse_vertical_move_ctx( const std::string& ) -> std::optional<vertical_move_ctx>; // *NOPAD*
-
+auto parse_vertical_move_ctx(const std::string&) -> std::optional<vertical_move_ctx>;

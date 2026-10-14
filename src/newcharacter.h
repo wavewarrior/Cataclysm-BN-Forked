@@ -1,9 +1,9 @@
 #pragma once
 
+#include "type_id.h"
+
 #include <optional>
 #include <string>
-
-#include "type_id.h"
 
 class avatar;
 class Character;
@@ -13,13 +13,13 @@ extern const std::string type_hair_style;
 extern const std::string type_hair_color;
 
 /** Returns the character's currently-selected trait of a cosmetic mutation type, if any. */
-auto selected_cosmetic_trait( const Character &c,
-                              const std::string &mutation_type ) -> std::optional<trait_id>;
+auto selected_cosmetic_trait(const Character& c, const std::string& mutation_type)
+    -> std::optional<trait_id>;
 /** Re-selects a previously selected cosmetic trait if the current scenario allows it. */
-auto restore_cosmetic_trait( Character &c, const std::string &mutation_type,
-                             const std::optional<trait_id> &trait ) -> void;
+auto restore_cosmetic_trait(
+    Character& c, const std::string& mutation_type, const std::optional<trait_id>& trait) -> void;
 /** Restores a saved hair style, or falls back to the gender default. */
-auto restore_or_default_hair_style( avatar &u, const std::optional<trait_id> &hair_style ) -> void;
+auto restore_or_default_hair_style(avatar& u, const std::optional<trait_id>& hair_style) -> void;
 
 struct points_left {
     int stat_points = 0;
@@ -46,8 +46,7 @@ struct points_left {
     std::string to_string();
 };
 
-namespace newcharacter
-{
+namespace newcharacter {
 /** Returns the id of a random starting trait that costs >= 0 points */
 trait_id random_good_trait();
 /** Returns the id of a random starting trait that costs < 0 points */
@@ -56,21 +55,19 @@ trait_id random_bad_trait();
  * Adds mandatory scenario and profession traits unless character already has them.
  * And if they do, refunds the points.
  */
-void add_traits( Character &ch );
-void add_traits( Character &ch, points_left &points );
+void add_traits(Character& ch);
+void add_traits(Character& ch, points_left& points);
 /** Adds configured default mutation traits when their mutation type is missing. */
-auto add_default_mutation_type_traits( Character &ch ) -> void;
+auto add_default_mutation_type_traits(Character& ch) -> void;
 
 /** Returns true if character has a conflicting trait to the bionic. */
-bool bionic_has_conflict( const Character &ch, const bionic_id &b );
+bool bionic_has_conflict(const Character& ch, const bionic_id& b);
 /** Returns true if character has a conflicting trait to the entered trait. */
-bool has_conflicting_trait( const Character &ch, const trait_id &t );
+bool has_conflicting_trait(const Character& ch, const trait_id& t);
 /** Returns true if charcater has a trait which upgrades into the entered trait. */
-bool has_lower_trait( const Character &ch, const trait_id &t );
+bool has_lower_trait(const Character& ch, const trait_id& t);
 /** Returns true if character has a trait which is an upgrade of the entered trait. */
-bool has_higher_trait( const Character &ch, const trait_id &t );
+bool has_higher_trait(const Character& ch, const trait_id& t);
 /** Returns true if character has a trait that shares a type with the entered trait. */
-bool has_same_type_trait( const Character &ch, const trait_id &t );
+bool has_same_type_trait(const Character& ch, const trait_id& t);
 } // namespace newcharacter
-
-

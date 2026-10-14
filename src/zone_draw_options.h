@@ -1,8 +1,8 @@
 #pragma once
 
-#include <vector>
-
 #include "point.h"
+
+#include <vector>
 
 /// Options for rendering zone previews and overlays.
 struct zone_draw_options {

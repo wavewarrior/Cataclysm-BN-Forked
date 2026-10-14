@@ -10,8 +10,7 @@
 /// a non-zero count over a walk means the preloader is losing the race, not that
 /// the renderer is at fault. `game::update_map()` reports the per-shift count in
 /// its `[shift][perf]` line.
-namespace map_load_stats
-{
+namespace map_load_stats {
 
 /// Record one synchronous generation. Called only from `map::loadn()`.
 auto note_sync_generated() -> void;

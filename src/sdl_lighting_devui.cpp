@@ -1,14 +1,15 @@
 #include "sdl_lighting_devui.h"
-#include "lighting/lighting_settings.h"
 
-#include "driver_capture.h"
 #include "avatar.h"
 #include "camera_debug.h"
 #include "cata_tiles.h"
 #include "creature.h"
+#include "debug.h"
+#include "driver_capture.h"
 #include "game.h"
 #include "lighting/dev_test_lights.h"
 #include "lighting/gpu_emitter.h"
+#include "lighting/lighting_settings.h"
 #include "lighting/render_state.h"
 #include "lighting/rmlui_layer.h"
 #include "lighting/rmlui_proc_texture.h"
@@ -23,34 +24,32 @@
 #include "rml_util.h"
 #include "ui.h"
 #include "ui_theme.h"
-#include "debug.h"
 
-#define dbg(x) DebugLogFL((x),DC::Main)
-#include "weather.h"
-#include "sounds.h"
-#include "sound_visualization.h"
-#include "vehicle_part.h"
-#include "vpart_range.h"
+#define dbg(x) DebugLogFL((x), DC::Main)
 #include "json.h"
+#include "lighting/gpu_device.h"
 #include "monster.h"
 #include "npc.h"
-#include "vehicle.h"
+#include "sound_visualization.h"
+#include "sounds.h"
 #include "veh_type.h"
+#include "vehicle.h"
+#include "vehicle_part.h"
 #include "vpart_position.h"
-#include "lighting/gpu_device.h"
-
-#include <fstream>
+#include "vpart_range.h"
+#include "weather.h"
 #include "worldfactory.h"
 
 #include <RmlUi/Core.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstdlib>
 #include <cstdint>
 #include <cstdio>
-#include <map>
+#include <cstdlib>
+#include <fstream>
 #include <limits>
+#include <map>
 #include <queue>
 #include <string>
 #include <unordered_map>
@@ -141,23 +140,21 @@ float g_outline_col_neutral[4] = {1.00f, 0.86f, 0.24f, 1.0f};
 float g_outline_col_friendly[4] = {0.31f, 0.90f, 0.31f, 1.0f};
 float g_outline_col_self[4] = {0.31f, 0.86f, 1.00f, 1.0f};
 // Hover tile highlight (CPU-side screen-space overlay, no shader cbuffer).
-bool   g_hover_highlight_enable       = true;
-float  g_hover_highlight_color[4]     = {1.0f, 1.0f, 1.0f, 0.6f}; // RGBA white, 60% alpha
-float  g_hover_highlight_thickness    = 2.0f;                       // border line width in px
-float  g_hover_highlight_corner_len   =
-    0.3f;                       // bracket arm as fraction of tile edge
-bool   g_hover_highlight_pulse        = true;                        // breathing alpha animation
-float  g_hover_highlight_pulse_speed  = 3.0f;                       // oscillation Hz
+bool g_hover_highlight_enable = true;
+float g_hover_highlight_color[4] = {1.0f, 1.0f, 1.0f, 0.6f}; // RGBA white, 60% alpha
+float g_hover_highlight_thickness = 2.0f;                    // border line width in px
+float g_hover_highlight_corner_len = 0.3f;                   // bracket arm as fraction of tile edge
+bool g_hover_highlight_pulse = true;                         // breathing alpha animation
+float g_hover_highlight_pulse_speed = 3.0f;                  // oscillation Hz
 
 // Hover dotted line (player → hovered tile).
-bool   g_hover_line_enable            = true;
-float  g_hover_line_color[4]          = {1.0f, 1.0f, 1.0f, 0.35f}; // RGBA white, 35% alpha
-float  g_hover_line_dot_size          = 2.0f;                       // dot diameter in px
-float  g_hover_line_dot_spacing       = 8.0f;                       // center-to-center px
-bool   g_hover_line_fade_ends         = true;                        // fade near player/target
+bool g_hover_line_enable = true;
+float g_hover_line_color[4] = {1.0f, 1.0f, 1.0f, 0.35f}; // RGBA white, 35% alpha
+float g_hover_line_dot_size = 2.0f;                      // dot diameter in px
+float g_hover_line_dot_spacing = 8.0f;                   // center-to-center px
+bool g_hover_line_fade_ends = true;                      // fade near player/target
 
-namespace menu_emitter_tuning
-{
+namespace menu_emitter_tuning {
 float radius_input = 100.0f;
 float pos_x = 8.5f;
 float pos_y = 4.5f;
@@ -165,8 +162,7 @@ int pos_preset = 0;
 bool blue_backdrop = true;
 } // namespace menu_emitter_tuning
 
-namespace cursor_light_emitter
-{
+namespace cursor_light_emitter {
 bool enabled = false;
 float radius = 8.0f;
 float intensity = 1.5f;
@@ -175,8 +171,7 @@ float wx = 0.0f, wy = 0.0f, wz = 0.0f;
 } // namespace cursor_light_emitter
 
 // Storage for the click-to-place dev test lights (declared in dev_test_lights.h).
-namespace dev_test_lights
-{
+namespace dev_test_lights {
 bool place_mode = false;
 float hover_wx = 0.0f, hover_wy = 0.0f, hover_wz = 0.0f;
 std::vector<light> lights;
@@ -204,8 +199,7 @@ float g_gi_albedo = 0.6f;
 float g_gi_feedback = 0.3f;
 bool g_seen_force_full_rebuild = false;
 
-namespace sdl_lighting_devui
-{
+namespace sdl_lighting_devui {
 
 // ── Tier 8 slice 1: parallel RmlUi dev-panel preview ────────────────────────
 // A standalone RmlUi document that mirrors part of this ImGui panel, behind a
@@ -213,9 +207,8 @@ namespace sdl_lighting_devui
 // two-way data-binding (checkbox -> *_rmlui_enabled() bool, bound by pointer).
 // Driven per-frame by rml_tick() from sdl_render_frame; opens when (F4 visible &&
 // preview on), closes otherwise. Slice 2 expands it toward full parity.
-namespace
-{
-Rml::ElementDocument *g_devui_doc = nullptr;
+namespace {
+Rml::ElementDocument* g_devui_doc = nullptr;
 Rml::DataModelHandle g_devui_model;
 bool g_devui_visible = false; // §8 gate — the F4 toggle (RmlUi dev panel open/closed)
 int g_devui_tab = 0;          // slice 7 — active tab (data-if/data-class-active in devui.rml)
@@ -223,24 +216,23 @@ int g_devui_tab = 0;          // slice 7 — active tab (data-if/data-class-acti
 // ── Overlays tab: proxy bools synced each frame ─────────────────────────────
 struct overlay_entry {
     action_id action;
-    const char *label;    // display text
-    const char *var_name; // RmlUi data model variable name (lowercase, no spaces)
+    const char* label;    // display text
+    const char* var_name; // RmlUi data model variable name (lowercase, no spaces)
 };
 constexpr std::array<overlay_entry, 12> g_overlay_entries = {{
-        { ACTION_DISPLAY_SCENT,        "Scent",           "scent" },
-        { ACTION_DISPLAY_SCENT_TYPE,   "Scent type",      "scenttype" },
-        { ACTION_DISPLAY_TEMPERATURE,  "Temperature",     "temperature" },
-        { ACTION_DISPLAY_VEHICLE_AI,   "Vehicle AI",      "vehicleai" },
-        { ACTION_DISPLAY_VISIBILITY,   "Visibility",      "visibility" },
-        { ACTION_DISPLAY_LIGHTING,     "Lighting",        "lighting" },
-        { ACTION_DISPLAY_RADIATION,    "Radiation",       "radiation" },
-        { ACTION_DISPLAY_TRANSPARENCY, "Transparency",    "transparency" },
-        { ACTION_DISPLAY_OUTSIDE,      "Outside/Shelter", "outsideshelter" },
-        { ACTION_DISPLAY_SOUND,        "Sound",           "sound" },
-        { ACTION_DISPLAY_SUBMAP_GRID,  "Submap Grid",     "submapgrid" },
-        { ACTION_DISPLAY_TILES_NO_VFX, "Disable VFX",     "disablevfx" },
-    }
-};
+    {ACTION_DISPLAY_SCENT, "Scent", "scent"},
+    {ACTION_DISPLAY_SCENT_TYPE, "Scent type", "scenttype"},
+    {ACTION_DISPLAY_TEMPERATURE, "Temperature", "temperature"},
+    {ACTION_DISPLAY_VEHICLE_AI, "Vehicle AI", "vehicleai"},
+    {ACTION_DISPLAY_VISIBILITY, "Visibility", "visibility"},
+    {ACTION_DISPLAY_LIGHTING, "Lighting", "lighting"},
+    {ACTION_DISPLAY_RADIATION, "Radiation", "radiation"},
+    {ACTION_DISPLAY_TRANSPARENCY, "Transparency", "transparency"},
+    {ACTION_DISPLAY_OUTSIDE, "Outside/Shelter", "outsideshelter"},
+    {ACTION_DISPLAY_SOUND, "Sound", "sound"},
+    {ACTION_DISPLAY_SUBMAP_GRID, "Submap Grid", "submapgrid"},
+    {ACTION_DISPLAY_TILES_NO_VFX, "Disable VFX", "disablevfx"},
+}};
 std::array<bool, 12> g_overlay_states{}; // indexed by g_overlay_entries
 
 // ── Sound spawner: click-to-place test sounds for the Sound debug overlay ──
@@ -249,16 +241,17 @@ std::array<bool, 12> g_overlay_states{}; // indexed by g_overlay_entries
 // true return) and queues a real sounds::sound( alert, vol 30 ) that monster AI
 // reacts to — so a stock build ate LMB world clicks, including the fire click in
 // hold-to-aim, and rang a dinner bell every time.
-auto g_sound_place_mode = false;  // checkbox: click spawns a test sound
-auto g_sound_volume = 30.0f;      // volume slider (1-128, matches sounds::sound vol param)
-auto g_sound_category = 0;        // index into sound_t enum (0=background)
+auto g_sound_place_mode = false; // checkbox: click spawns a test sound
+auto g_sound_volume = 30.0f;     // volume slider (1-128, matches sounds::sound vol param)
+auto g_sound_category = 0;       // index into sound_t enum (0=background)
 
 // Slice 8 — proxies for controls whose backing globals aren't directly bindable
 // (uint32 fields, <select> indices, size_t counts, read-only diagnostics text).
-int g_devui_dbg_mode = static_cast<int>
-                       ( lighting::live_settings().debug_mode() ); // <select> proxy → debug mode (event-applied)
-int g_devui_shadow_steps =
-    16;  // reconciled with uint lighting::live_settings().debug.shadow_steps each frame
+int g_devui_dbg_mode = static_cast<int>(lighting::live_settings().debug_mode()); // <select> proxy →
+                                                                                 // debug mode
+                                                                                 // (event-applied)
+int g_devui_shadow_steps = 16;  // reconciled with uint lighting::live_settings().debug.shadow_steps
+                                // each frame
 int g_devui_placed = 0;         // mirrors dev_test_lights::lights.size() each frame
 int g_runic_template = 0;       // <select> proxy → runic force_template+1 (event-applied)
 bool g_runic_auto_regen = true; // bump regen when a runic field changes (cf. ImGui auto-regen)
@@ -284,17 +277,16 @@ Rml::String g_pk_hex = "#ffffff";
 // at the first of 3 contiguous RGB floats (cursor is [3]; the outline colours are [4]
 // RGBA — we edit RGB and leave alpha). g_pk_idx is the active target.
 struct pk_target_t {
-    const char *elem_id; // its swatch element in devui.rml
-    float *rgb;
+    const char* elem_id; // its swatch element in devui.rml
+    float* rgb;
 };
 const std::array<pk_target_t, 5> g_pk_targets = {{
-        {"pkt-cursor", cursor_light_emitter::color},
-        {"pkt-hostile", g_outline_col_hostile},
-        {"pkt-neutral", g_outline_col_neutral},
-        {"pkt-friendly", g_outline_col_friendly},
-        {"pkt-self", g_outline_col_self},
-    }
-};
+    {"pkt-cursor", cursor_light_emitter::color},
+    {"pkt-hostile", g_outline_col_hostile},
+    {"pkt-neutral", g_outline_col_neutral},
+    {"pkt-friendly", g_outline_col_friendly},
+    {"pkt-self", g_outline_col_self},
+}};
 int g_pk_idx = 0;
 float g_pk_orig[3] = {1.f, 1.f, 1.f}; // colour at the moment this target was selected
 
@@ -312,79 +304,76 @@ Rml::Vector<Rml::String> g_pk_combo_labels; // bound for the <option data-for>
 int g_pk_combo_idx = 0;                     // bound <select> value
 bool g_pk_named_active = false;             // true → edit the combo's named colour
 
-void pk_read_target( float out[3] )
-{
-    if( g_pk_named_active && g_pk_combo_idx >= 0
-        && g_pk_combo_idx < static_cast<int>( g_pk_combo.size() ) ) {
-        const pk_named_t &n = g_pk_combo[g_pk_combo_idx];
+void pk_read_target(float out[3]) {
+    if (g_pk_named_active && g_pk_combo_idx >= 0
+        && g_pk_combo_idx < static_cast<int>(g_pk_combo.size())) {
+        const pk_named_t& n = g_pk_combo[g_pk_combo_idx];
         float tmp[4] = {0.f, 0.f, 0.f, 1.f};
-        if( n.game ) {
-            ui_theme::get_game_rgba( n.name, tmp );
+        if (n.game) {
+            ui_theme::get_game_rgba(n.name, tmp);
         } else {
-            ui_theme::get_rcss_rgba( n.name, tmp );
+            ui_theme::get_rcss_rgba(n.name, tmp);
         }
         out[0] = tmp[0];
         out[1] = tmp[1];
         out[2] = tmp[2];
         return;
     }
-    const float *c = g_pk_targets[g_pk_idx].rgb;
+    const float* c = g_pk_targets[g_pk_idx].rgb;
     out[0] = c[0];
     out[1] = c[1];
     out[2] = c[2];
 }
 
-void pk_write_target( const float in[3] )
-{
-    if( g_pk_named_active && g_pk_combo_idx >= 0
-        && g_pk_combo_idx < static_cast<int>( g_pk_combo.size() ) ) {
-        const pk_named_t &n = g_pk_combo[g_pk_combo_idx];
+void pk_write_target(const float in[3]) {
+    if (g_pk_named_active && g_pk_combo_idx >= 0
+        && g_pk_combo_idx < static_cast<int>(g_pk_combo.size())) {
+        const pk_named_t& n = g_pk_combo[g_pk_combo_idx];
         float tmp[4] = {0.f, 0.f, 0.f, 1.f};
-        if( n.game ) {
-            ui_theme::get_game_rgba( n.name, tmp ); // preserve alpha
+        if (n.game) {
+            ui_theme::get_game_rgba(n.name, tmp); // preserve alpha
             tmp[0] = in[0];
             tmp[1] = in[1];
             tmp[2] = in[2];
-            ui_theme::set_game_rgba( n.name, tmp );
+            ui_theme::set_game_rgba(n.name, tmp);
             clear_nc_color_cache(); // applies on next screen reopen
         } else {
-            ui_theme::get_rcss_rgba( n.name, tmp );
+            ui_theme::get_rcss_rgba(n.name, tmp);
             tmp[0] = in[0];
             tmp[1] = in[1];
             tmp[2] = in[2];
-            ui_theme::set_rcss_rgba( n.name, tmp );
+            ui_theme::set_rcss_rgba(n.name, tmp);
             rmlui_layer::reload_theme(); // RCSS applies instantly
         }
         return;
     }
-    float *c = g_pk_targets[g_pk_idx].rgb;
+    float* c = g_pk_targets[g_pk_idx].rgb;
     c[0] = in[0];
     c[1] = in[1];
     c[2] = in[2];
 }
 
-void pk_hsv_to_rgb( float h, float s, float v, float &r, float &g, float &b )
-{
-    h = std::fmod( std::fmod( h, 360.f ) + 360.f, 360.f );
+void pk_hsv_to_rgb(float h, float s, float v, float& r, float& g, float& b) {
+    h = std::fmod(std::fmod(h, 360.f) + 360.f, 360.f);
     const float c = v * s;
-    const float x = c * ( 1.f - std::fabs( std::fmod( h / 60.f, 2.f ) - 1.f ) );
+    const float x = c * (1.f - std::fabs(std::fmod(h / 60.f, 2.f) - 1.f));
     const float m = v - c;
     float rr = 0.f;
     float gg = 0.f;
     float bb = 0.f;
-    if( h < 60.f ) {
+    if (h < 60.f) {
         rr = c;
         gg = x;
-    } else if( h < 120.f ) {
+    } else if (h < 120.f) {
         rr = x;
         gg = c;
-    } else if( h < 180.f ) {
+    } else if (h < 180.f) {
         gg = c;
         bb = x;
-    } else if( h < 240.f ) {
+    } else if (h < 240.f) {
         gg = x;
         bb = c;
-    } else if( h < 300.f ) {
+    } else if (h < 300.f) {
         rr = x;
         bb = c;
     } else {
@@ -396,96 +385,91 @@ void pk_hsv_to_rgb( float h, float s, float v, float &r, float &g, float &b )
     b = bb + m;
 }
 
-void pk_rgb_to_hsv( float r, float g, float b, float &h, float &s, float &v )
-{
-    const float mx = std::max( {r, g, b} );
-    const float mn = std::min( {r, g, b} );
+void pk_rgb_to_hsv(float r, float g, float b, float& h, float& s, float& v) {
+    const float mx = std::max({r, g, b});
+    const float mn = std::min({r, g, b});
     const float d = mx - mn;
     v = mx;
     s = mx <= 0.f ? 0.f : d / mx;
-    if( d <= 0.f ) {
+    if (d <= 0.f) {
         h = 0.f;
         return;
     }
-    if( mx == r ) {
-        h = 60.f * std::fmod( ( g - b ) / d, 6.f );
-    } else if( mx == g ) {
-        h = 60.f * ( ( b - r ) / d + 2.f );
+    if (mx == r) {
+        h = 60.f * std::fmod((g - b) / d, 6.f);
+    } else if (mx == g) {
+        h = 60.f * ((b - r) / d + 2.f);
     } else {
-        h = 60.f * ( ( r - g ) / d + 4.f );
+        h = 60.f * ((r - g) / d + 4.f);
     }
-    if( h < 0.f ) { h += 360.f; }
+    if (h < 0.f) { h += 360.f; }
 }
 
-Rml::String pk_hex( float r, float g, float b )
-{
-    const auto q = []( float f ) {
-        return static_cast<unsigned>( std::lround( std::clamp( f, 0.f, 1.f ) * 255.f ) );
+Rml::String pk_hex(float r, float g, float b) {
+    const auto q = [](float f) {
+        return static_cast<unsigned>(std::lround(std::clamp(f, 0.f, 1.f) * 255.f));
     };
     char buf[8];
-    std::snprintf( buf, sizeof( buf ), "#%02x%02x%02x", q( r ), q( g ), q( b ) );
-    return Rml::String( buf );
+    std::snprintf(buf, sizeof(buf), "#%02x%02x%02x", q(r), q(g), q(b));
+    return Rml::String(buf);
 }
 
-Rml::String pk_pct( float frac )
-{
+Rml::String pk_pct(float frac) {
     char buf[16];
-    std::snprintf( buf, sizeof( buf ), "%.2f%%", std::clamp( frac, 0.f, 1.f ) * 100.f );
-    return Rml::String( buf );
+    std::snprintf(buf, sizeof(buf), "%.2f%%", std::clamp(frac, 0.f, 1.f) * 100.f);
+    return Rml::String(buf);
 }
 
 // Recompute RGB from HSV, write the target colour, and refresh the picker visuals.
-void picker_apply()
-{
+void picker_apply() {
     float r = 0.f;
     float g = 0.f;
     float b = 0.f;
-    pk_hsv_to_rgb( g_pk_h, g_pk_s, g_pk_v, r, g, b );
+    pk_hsv_to_rgb(g_pk_h, g_pk_s, g_pk_v, r, g, b);
     const float rgb[3] = {r, g, b};
-    pk_write_target( rgb );
-    g_pk_hex = pk_hex( r, g, b );
-    if( g_devui_model ) { g_devui_model.DirtyVariable( "pk_hex" ); }
-    if( g_devui_doc == nullptr ) { return; }
+    pk_write_target(rgb);
+    g_pk_hex = pk_hex(r, g, b);
+    if (g_devui_model) { g_devui_model.DirtyVariable("pk_hex"); }
+    if (g_devui_doc == nullptr) { return; }
     // Repaint every target swatch from its live colour; outline the active one.
-    for( int i = 0; i < static_cast<int>( g_pk_targets.size() ); ++i ) {
-        if( Rml::Element * el = g_devui_doc->GetElementById( g_pk_targets[i].elem_id ) ) {
-            const float *c = g_pk_targets[i].rgb;
-            el->SetProperty( "background-color", pk_hex( c[0], c[1], c[2] ) );
-            el->SetProperty( "border-color", i == g_pk_idx ? "#ffffff" : "#555555" );
+    for (int i = 0; i < static_cast<int>(g_pk_targets.size()); ++i) {
+        if (Rml::Element* el = g_devui_doc->GetElementById(g_pk_targets[i].elem_id)) {
+            const float* c = g_pk_targets[i].rgb;
+            el->SetProperty("background-color", pk_hex(c[0], c[1], c[2]));
+            el->SetProperty("border-color", i == g_pk_idx ? "#ffffff" : "#555555");
         }
     }
     float hr = 0.f;
     float hg = 0.f;
     float hb = 0.f;
-    pk_hsv_to_rgb( g_pk_h, 1.f, 1.f, hr, hg, hb ); // pure hue for the saturation gradient
-    if( Rml::Element * sv = g_devui_doc->GetElementById( "pk-sv" ) ) {
-        sv->SetProperty( "decorator", "horizontal-gradient(#ffffff " + pk_hex( hr, hg, hb ) + ")" );
+    pk_hsv_to_rgb(g_pk_h, 1.f, 1.f, hr, hg, hb); // pure hue for the saturation gradient
+    if (Rml::Element* sv = g_devui_doc->GetElementById("pk-sv")) {
+        sv->SetProperty("decorator", "horizontal-gradient(#ffffff " + pk_hex(hr, hg, hb) + ")");
     }
-    if( Rml::Element * t = g_devui_doc->GetElementById( "pk-sv-thumb" ) ) {
-        t->SetProperty( "left", pk_pct( g_pk_s ) );
-        t->SetProperty( "top", pk_pct( 1.f - g_pk_v ) );
+    if (Rml::Element* t = g_devui_doc->GetElementById("pk-sv-thumb")) {
+        t->SetProperty("left", pk_pct(g_pk_s));
+        t->SetProperty("top", pk_pct(1.f - g_pk_v));
     }
-    if( Rml::Element * t = g_devui_doc->GetElementById( "pk-hue-thumb" ) ) {
-        t->SetProperty( "top", pk_pct( g_pk_h / 360.f ) );
+    if (Rml::Element* t = g_devui_doc->GetElementById("pk-hue-thumb")) {
+        t->SetProperty("top", pk_pct(g_pk_h / 360.f));
     }
-    if( Rml::Element * sw = g_devui_doc->GetElementById( "pk-swatch" ) ) {
-        sw->SetProperty( "background-color", g_pk_hex );
+    if (Rml::Element* sw = g_devui_doc->GetElementById("pk-swatch")) {
+        sw->SetProperty("background-color", g_pk_hex);
     }
-    if( Rml::Element * sw = g_devui_doc->GetElementById( "pk-swatch-orig" ) ) {
-        sw->SetProperty( "background-color", pk_hex( g_pk_orig[0], g_pk_orig[1], g_pk_orig[2] ) );
+    if (Rml::Element* sw = g_devui_doc->GetElementById("pk-swatch-orig")) {
+        sw->SetProperty("background-color", pk_hex(g_pk_orig[0], g_pk_orig[1], g_pk_orig[2]));
     }
 }
 
 // Seed HSV from the active target colour AND snapshot it as the revert/"orig" colour
 // (call after the doc opens / on target switch — i.e. whenever a fresh target is chosen).
-void picker_init()
-{
+void picker_init() {
     float c[3];
-    pk_read_target( c );
+    pk_read_target(c);
     g_pk_orig[0] = c[0];
     g_pk_orig[1] = c[1];
     g_pk_orig[2] = c[2];
-    pk_rgb_to_hsv( c[0], c[1], c[2], g_pk_h, g_pk_s, g_pk_v );
+    pk_rgb_to_hsv(c[0], c[1], c[2], g_pk_h, g_pk_s, g_pk_v);
 }
 
 // ── Exact slider stepping via the mouse wheel ───────────────────────────────
@@ -502,519 +486,509 @@ void picker_init()
 // The wheel is already forwarded to RmlUi (rmlui_layer::process_event feeds
 // SDL_EVENT_MOUSE_WHEEL to Context::ProcessMouseWheel); keyboard input is NOT,
 // so arrow-key stepping and text entry are not options here.
-class slider_wheel_listener : public Rml::EventListener
-{
-    public:
-        void ProcessEvent( Rml::Event &ev ) override {
-            Rml::Element *el = ev.GetCurrentElement();
-            if( el == nullptr ) { return; }
-            // Positive wheel_delta_y is a scroll DOWN, which should lower the value.
-            const float notches = -ev.GetParameter<float>( "wheel_delta_y", 0.0f );
-            if( notches == 0.0f ) { return; }
-            const float step = el->GetAttribute( "step", 1.0f );
-            const float lo   = el->GetAttribute( "min", 0.0f );
-            const float hi   = el->GetAttribute( "max", 100.0f );
-            const float cur  = el->GetAttribute( "value", lo );
-            // Ctrl coarsens to 10 steps per notch; the fine case is the default.
-            const float mult = ev.GetParameter<int>( "ctrl_key", 0 ) != 0 ? 10.0f : 1.0f;
-            const float next = std::clamp( cur + notches * step * mult,
-                                           std::min( lo, hi ), std::max( lo, hi ) );
-            if( next == cur ) { return; }
-            // Drive the data model rather than the widget: writing the "value"
-            // attribute directly makes WidgetSlider::SetValueInternal see an
-            // unchanged attribute and skip its Change event, so the bound C++
-            // global would never learn about the edit. Dispatching Change with a
-            // float Variant is exactly what a real drag does, and it carries the
-            // full float (no %.3f string round-trip). DataControllerValue then
-            // dirties the variable, which pushes the new value back into the
-            // widget so the thumb follows.
-            Rml::Dictionary params;
-            params["value"] = next;
-            el->DispatchEvent( Rml::EventId::Change, params );
-            ev.StopPropagation(); // don't also scroll the panel body
-        }
+class slider_wheel_listener: public Rml::EventListener {
+public:
+    void ProcessEvent(Rml::Event& ev) override {
+        Rml::Element* el = ev.GetCurrentElement();
+        if (el == nullptr) { return; }
+        // Positive wheel_delta_y is a scroll DOWN, which should lower the value.
+        const float notches = -ev.GetParameter<float>("wheel_delta_y", 0.0f);
+        if (notches == 0.0f) { return; }
+        const float step = el->GetAttribute("step", 1.0f);
+        const float lo = el->GetAttribute("min", 0.0f);
+        const float hi = el->GetAttribute("max", 100.0f);
+        const float cur = el->GetAttribute("value", lo);
+        // Ctrl coarsens to 10 steps per notch; the fine case is the default.
+        const float mult = ev.GetParameter<int>("ctrl_key", 0) != 0 ? 10.0f : 1.0f;
+        const float next =
+            std::clamp(cur + notches * step * mult, std::min(lo, hi), std::max(lo, hi));
+        if (next == cur) { return; }
+        // Drive the data model rather than the widget: writing the "value"
+        // attribute directly makes WidgetSlider::SetValueInternal see an
+        // unchanged attribute and skip its Change event, so the bound C++
+        // global would never learn about the edit. Dispatching Change with a
+        // float Variant is exactly what a real drag does, and it carries the
+        // full float (no %.3f string round-trip). DataControllerValue then
+        // dirties the variable, which pushes the new value back into the
+        // widget so the thumb follows.
+        Rml::Dictionary params;
+        params["value"] = next;
+        el->DispatchEvent(Rml::EventId::Change, params);
+        ev.StopPropagation(); // don't also scroll the panel body
+    }
 };
 
 slider_wheel_listener g_slider_wheel;
 
 /// Attach the wheel stepper to every range input in the freshly opened doc.
-void attach_slider_wheel( Rml::ElementDocument &doc )
-{
+void attach_slider_wheel(Rml::ElementDocument& doc) {
     Rml::ElementList inputs;
-    doc.GetElementsByTagName( inputs, "input" );
-    for( Rml::Element *el : inputs ) {
-        if( el->GetAttribute<Rml::String>( "type", "" ) == "range" ) {
-            el->AddEventListener( Rml::EventId::Mousescroll, &g_slider_wheel );
+    doc.GetElementsByTagName(inputs, "input");
+    for (Rml::Element* el : inputs) {
+        if (el->GetAttribute<Rml::String>("type", "") == "range") {
+            el->AddEventListener(Rml::EventId::Mousescroll, &g_slider_wheel);
         }
     }
 }
 
-void devui_rml_open()
-{
-    if( g_devui_doc != nullptr || !rmlui_layer::ready() ) { return; }
+void devui_rml_open() {
+    if (g_devui_doc != nullptr || !rmlui_layer::ready()) { return; }
     Rml::Context* ctx = rmlui_layer::context();
-    if( ctx == nullptr ) { return; }
-    Rml::DataModelConstructor c = ctx->CreateDataModel( "devui" );
-    if( !c ) { return; }
+    if (ctx == nullptr) { return; }
+    Rml::DataModelConstructor c = ctx->CreateDataModel("devui");
+    if (!c) { return; }
     // Bind the screen-toggle flags BY POINTER: data-checked two-way binds each
     // checkbox to the real static bool, so a click toggles the live screen and
     // ImGui-side changes reflect here (rml_tick DirtyAllVariables each frame). Mirrors
     // the ImGui "Route screens through RmlUi" registry (draw_rmlui_tab).
-    c.Bind( "tab", &g_devui_tab ); // slice 7 — active tab page
+    c.Bind("tab", &g_devui_tab); // slice 7 — active tab page
     // Register the array type ONCE, before any Rml::Vector<Rml::String> Bind below
     // (dbg_mode_names / ru_template_names / pk_names) — binding before this fails with
     // "data type not registered".
     c.RegisterArray<Rml::Vector<Rml::String>>();
-    c.Bind( "ui_scale", &rmlui_layer::ui_scale() ); // slider (float, two-way)
+    c.Bind("ui_scale", &rmlui_layer::ui_scale()); // slider (float, two-way)
     // The per-screen toggle checkboxes — bound BY POINTER from the single-source-of-truth
     // registry so this list can never drift from the flip-all control (rml_toggle_registry).
-    for( const rml_toggle& t : rml_toggle_registry() ) { c.Bind( t.name, &t.accessor() ); }
+    for (const rml_toggle& t : rml_toggle_registry()) { c.Bind(t.name, &t.accessor()); }
     // Flip-all controls (mirror the ImGui buttons). The checkbox vars are bound by
     // pointer + rml_tick DirtyAllVariables each frame, so they reflect the flip next frame.
     c.BindEventCallback(
-    "rml_all_on", []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
-        rml_toggles_set_all( true );
-    } );
+        "rml_all_on", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            rml_toggles_set_all(true);
+        });
     c.BindEventCallback(
-    "rml_all_off", []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
-        rml_toggles_set_all( false );
-    } );
-    c.BindEventCallback( "rml_reset", []( Rml::DataModelHandle, Rml::Event &,
-    const Rml::VariantList & ) {
+        "rml_all_off", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            rml_toggles_set_all(false);
+        });
+    c.BindEventCallback("rml_reset", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
         rml_toggles_reset_defaults();
-    } );
+    });
     // Slice 3 — Effects tab tuning params (live lighting). Floats two-way bound to the
     // same globals the ImGui sliders drive; the game render reads them each frame.
-    c.Bind( "nrm_amount", &lighting::live_settings().debug.nrm_amount );
-    c.Bind( "nrm_relief", &lighting::live_settings().debug.nrm_relief );
-    c.Bind( "nrm_elev", &lighting::live_settings().debug.nrm_elev );
-    c.Bind( "nrm_entity_amount", &lighting::live_settings().debug.nrm_entity_amount );
+    c.Bind("nrm_amount", &lighting::live_settings().debug.nrm_amount);
+    c.Bind("nrm_relief", &lighting::live_settings().debug.nrm_relief);
+    c.Bind("nrm_elev", &lighting::live_settings().debug.nrm_elev);
+    c.Bind("nrm_entity_amount", &lighting::live_settings().debug.nrm_entity_amount);
     // Camera follow knobs (CPU-only; pushed into game::main_camera_ in draw_ter).
-    c.Bind( "cam_smooth", &camera_dbg::smooth_speed );
-    c.Bind( "cam_lookahead", &camera_dbg::look_ahead );
-    c.Bind( "cam_deadzone", &camera_dbg::dead_zone );
-    c.Bind( "gi_enable", &g_gi_enable );
-    c.Bind( "shaft_enable", &g_shaft_enable );
-    c.Bind( "shaft_intensity", &g_shaft_intensity );
-    c.Bind( "shaft_length_scale", &g_shaft_length_scale );
-    c.Bind( "shaft_width", &g_shaft_width );
-    c.Bind( "dust_enable", &g_dust_enable );
-    c.Bind( "dust_density", &g_dust_density );
-    c.Bind( "dust_size", &g_dust_size );
-    c.Bind( "dust_drift", &g_dust_drift );
-    c.Bind( "glow_enable", &g_glow_enable );
-    c.Bind( "glow_intensity", &g_glow_intensity );
-    c.Bind( "glow_radius", &g_glow_radius );
-    c.Bind( "glow_saturation", &g_glow_saturation );
-    c.Bind( "rain_enable", &g_rain_enable );
-    c.Bind( "rain_intensity", &g_rain_intensity );
-    c.Bind( "spec_strength", &g_spec_strength );
-    c.Bind( "splatmap_enable", &g_splatmap_enable );
-    c.Bind( "splat_blood_strength", &g_splat_blood_strength );
+    c.Bind("cam_smooth", &camera_dbg::smooth_speed);
+    c.Bind("cam_lookahead", &camera_dbg::look_ahead);
+    c.Bind("cam_deadzone", &camera_dbg::dead_zone);
+    c.Bind("gi_enable", &g_gi_enable);
+    c.Bind("shaft_enable", &g_shaft_enable);
+    c.Bind("shaft_intensity", &g_shaft_intensity);
+    c.Bind("shaft_length_scale", &g_shaft_length_scale);
+    c.Bind("shaft_width", &g_shaft_width);
+    c.Bind("dust_enable", &g_dust_enable);
+    c.Bind("dust_density", &g_dust_density);
+    c.Bind("dust_size", &g_dust_size);
+    c.Bind("dust_drift", &g_dust_drift);
+    c.Bind("glow_enable", &g_glow_enable);
+    c.Bind("glow_intensity", &g_glow_intensity);
+    c.Bind("glow_radius", &g_glow_radius);
+    c.Bind("glow_saturation", &g_glow_saturation);
+    c.Bind("rain_enable", &g_rain_enable);
+    c.Bind("rain_intensity", &g_rain_intensity);
+    c.Bind("spec_strength", &g_spec_strength);
+    c.Bind("splatmap_enable", &g_splatmap_enable);
+    c.Bind("splat_blood_strength", &g_splat_blood_strength);
     // Atmospheric HUD particles. The emitter <select> binds an int index straight
     // into g_hud_part_type (the value IS the enum order), so unlike dbg_mode it
     // needs no apply-event: sdl_render_frame reads the int each frame.
-    c.Bind( "hud_part_enable", &g_hud_part_enable );
-    c.Bind( "hud_part_force", &g_hud_part_force );
-    c.Bind( "hud_part_type", &g_hud_part_type );
-    c.Bind( "hud_part_type_names", &g_hud_part_type_names );
-    c.Bind( "hud_part_ember", &g_hud_part_ember_enable );
-    c.Bind( "hud_part_dust", &g_hud_part_dust_enable );
-    c.Bind( "hud_part_pollen", &g_hud_part_pollen_enable );
-    c.Bind( "hud_part_snow", &g_hud_part_snow_enable );
-    c.Bind( "hud_part_leaf", &g_hud_part_leaf_enable );
-    c.Bind( "hud_part_in_rain", &g_hud_part_in_rain );
-    c.Bind( "hud_part_mask_play", &g_hud_part_mask_play );
-    c.Bind( "hud_part_rate_scale", &g_hud_part_rate_scale );
-    c.Bind( "hud_part_alpha_scale", &g_hud_part_alpha_scale );
-    c.Bind( "hud_part_size_scale", &g_hud_part_size_scale );
-    c.Bind( "hud_part_speed_scale", &g_hud_part_speed_scale );
-    c.BindEventCallback( "hud_part_reset", []( Rml::DataModelHandle, Rml::Event &,
-    const Rml::VariantList & ) {
-        g_hud_part_enable = true;
-        g_hud_part_force = false;
-        g_hud_part_ember_enable = true;
-        g_hud_part_dust_enable = true;
-        g_hud_part_pollen_enable = true;
-        g_hud_part_snow_enable = true;
-        g_hud_part_leaf_enable = true;
-        g_hud_part_in_rain = false;
-        g_hud_part_mask_play = true;
-        g_hud_part_rate_scale = 1.0f;
-        g_hud_part_alpha_scale = 1.0f;
-        g_hud_part_size_scale = 1.0f;
-        g_hud_part_speed_scale = 1.0f;
-    } );
-    c.Bind( "shadow_debug", &g_shadow_debug );
-    c.Bind( "seen_force_full_rebuild", &g_seen_force_full_rebuild );
-    c.Bind( "shadow_mask_str", &lighting::live_settings().debug.shadow_mask_str );
-    c.Bind( "mem_dim", &lighting::live_settings().debug.mem_dim );
-    c.Bind( "mem_radius", &lighting::live_settings().debug.mem_radius );
+    c.Bind("hud_part_enable", &g_hud_part_enable);
+    c.Bind("hud_part_force", &g_hud_part_force);
+    c.Bind("hud_part_type", &g_hud_part_type);
+    c.Bind("hud_part_type_names", &g_hud_part_type_names);
+    c.Bind("hud_part_ember", &g_hud_part_ember_enable);
+    c.Bind("hud_part_dust", &g_hud_part_dust_enable);
+    c.Bind("hud_part_pollen", &g_hud_part_pollen_enable);
+    c.Bind("hud_part_snow", &g_hud_part_snow_enable);
+    c.Bind("hud_part_leaf", &g_hud_part_leaf_enable);
+    c.Bind("hud_part_in_rain", &g_hud_part_in_rain);
+    c.Bind("hud_part_mask_play", &g_hud_part_mask_play);
+    c.Bind("hud_part_rate_scale", &g_hud_part_rate_scale);
+    c.Bind("hud_part_alpha_scale", &g_hud_part_alpha_scale);
+    c.Bind("hud_part_size_scale", &g_hud_part_size_scale);
+    c.Bind("hud_part_speed_scale", &g_hud_part_speed_scale);
+    c.BindEventCallback(
+        "hud_part_reset", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            g_hud_part_enable = true;
+            g_hud_part_force = false;
+            g_hud_part_ember_enable = true;
+            g_hud_part_dust_enable = true;
+            g_hud_part_pollen_enable = true;
+            g_hud_part_snow_enable = true;
+            g_hud_part_leaf_enable = true;
+            g_hud_part_in_rain = false;
+            g_hud_part_mask_play = true;
+            g_hud_part_rate_scale = 1.0f;
+            g_hud_part_alpha_scale = 1.0f;
+            g_hud_part_size_scale = 1.0f;
+            g_hud_part_speed_scale = 1.0f;
+        });
+    c.Bind("shadow_debug", &g_shadow_debug);
+    c.Bind("seen_force_full_rebuild", &g_seen_force_full_rebuild);
+    c.Bind("shadow_mask_str", &lighting::live_settings().debug.shadow_mask_str);
+    c.Bind("mem_dim", &lighting::live_settings().debug.mem_dim);
+    c.Bind("mem_radius", &lighting::live_settings().debug.mem_radius);
     // Grid-decoupled lighting knobs (art-texel quantisation, sub-tile occluders,
     // palette shade ramps). texels_per_tile is DATA, not a knob — not bound.
-    c.Bind( "light_quant", &lighting::live_settings().debug.light_quant );
-    c.Bind( "occ_soft_gain", &lighting::live_settings().debug.occ_soft_gain );
-    c.Bind( "self_eps_tall", &lighting::live_settings().debug.self_eps_tall );
-    c.Bind( "vis_curve", &lighting::live_settings().debug.vis_curve );
-    c.Bind( "vis_radius", &lighting::live_settings().debug.vis_radius );
-    c.Bind( "ramp_enable", &lighting::live_settings().debug.ramp_enable );
-    c.Bind( "ramp_steps", &lighting::live_settings().debug.ramp_steps );
-    c.Bind( "ramp_chroma", &lighting::live_settings().debug.ramp_chroma );
-    c.Bind( "guard_amount", &lighting::live_settings().debug.guard_amount );
-    c.Bind( "gi_bilat", &lighting::live_settings().debug.gi_bilat );
-    c.Bind( "gi_albedo", &g_gi_albedo );
-    c.Bind( "gi_feedback", &g_gi_feedback );
-    c.Bind( "vis_edge", &lighting::live_settings().debug.vis_edge );
-    c.Bind( "flicker_gain", &lighting::live_settings().debug.flicker_gain );
+    c.Bind("light_quant", &lighting::live_settings().debug.light_quant);
+    c.Bind("occ_soft_gain", &lighting::live_settings().debug.occ_soft_gain);
+    c.Bind("self_eps_tall", &lighting::live_settings().debug.self_eps_tall);
+    c.Bind("vis_curve", &lighting::live_settings().debug.vis_curve);
+    c.Bind("vis_radius", &lighting::live_settings().debug.vis_radius);
+    c.Bind("ramp_enable", &lighting::live_settings().debug.ramp_enable);
+    c.Bind("ramp_steps", &lighting::live_settings().debug.ramp_steps);
+    c.Bind("ramp_chroma", &lighting::live_settings().debug.ramp_chroma);
+    c.Bind("guard_amount", &lighting::live_settings().debug.guard_amount);
+    c.Bind("gi_bilat", &lighting::live_settings().debug.gi_bilat);
+    c.Bind("gi_albedo", &g_gi_albedo);
+    c.Bind("gi_feedback", &g_gi_feedback);
+    c.Bind("vis_edge", &lighting::live_settings().debug.vis_edge);
+    c.Bind("flicker_gain", &lighting::live_settings().debug.flicker_gain);
     // Procedural normal atlas V offset (0 = feature off, 0.5 = double-height page) and
     // the SIGNED strength of the per-sprite vertical-face arc, both swept live.
-    c.Bind( "nrm_atlas_v", &lighting::live_settings().debug.nrm_atlas_v );
-    c.Bind( "face_arc", &lighting::live_settings().debug.face_arc );
-    c.Bind( "nrm_radial_amount", &lighting::live_settings().debug.nrm_radial_amount );
-    c.Bind( "cloud_strength", &lighting::live_settings().debug.cloud_strength );
-    c.Bind( "cloud_scale", &lighting::live_settings().debug.cloud_scale );
-    c.Bind( "cloud_wind_x", &lighting::live_settings().debug.cloud_wind_x );
-    c.Bind( "cloud_wind_y", &lighting::live_settings().debug.cloud_wind_y );
-    c.Bind( "cloud_threshold", &lighting::live_settings().debug.cloud_threshold );
-    c.Bind( "cloud_softness", &lighting::live_settings().debug.cloud_softness );
-    c.Bind( "sway_amp", &lighting::live_settings().debug.sway_amp );
-    c.Bind( "sway_freq", &lighting::live_settings().debug.sway_freq );
-    c.Bind( "ripple_k", &lighting::live_settings().debug.ripple_k );
-    c.Bind( "gust_amp", &lighting::live_settings().debug.gust_amp );
-    c.Bind( "gust_freq", &lighting::live_settings().debug.gust_freq );
-    c.Bind( "part_radius", &lighting::live_settings().debug.part_radius );
-    c.Bind( "part_strength", &lighting::live_settings().debug.part_strength );
-    c.Bind( "outline_enable", &g_outline_enable );
-    c.Bind( "outline_thickness", &g_outline_thickness );
-    c.Bind( "outline_alpha", &g_outline_alpha );
-    c.Bind( "outline_alpha_cut", &g_outline_alpha_cut );
-    c.Bind( "hover_highlight_enable", &g_hover_highlight_enable );
-    c.Bind( "hover_highlight_color", &g_hover_highlight_color );
-    c.Bind( "hover_highlight_thickness", &g_hover_highlight_thickness );
-    c.Bind( "hover_highlight_corner_len", &g_hover_highlight_corner_len );
-    c.Bind( "hover_highlight_pulse", &g_hover_highlight_pulse );
-    c.Bind( "hover_highlight_pulse_speed", &g_hover_highlight_pulse_speed );
-    c.Bind( "hover_line_enable", &g_hover_line_enable );
-    c.Bind( "hover_line_color", &g_hover_line_color );
-    c.Bind( "hover_line_dot_size", &g_hover_line_dot_size );
-    c.Bind( "hover_line_dot_spacing", &g_hover_line_dot_spacing );
-    c.Bind( "hover_line_fade_ends", &g_hover_line_fade_ends );
+    c.Bind("nrm_atlas_v", &lighting::live_settings().debug.nrm_atlas_v);
+    c.Bind("face_arc", &lighting::live_settings().debug.face_arc);
+    c.Bind("nrm_radial_amount", &lighting::live_settings().debug.nrm_radial_amount);
+    c.Bind("cloud_strength", &lighting::live_settings().debug.cloud_strength);
+    c.Bind("cloud_scale", &lighting::live_settings().debug.cloud_scale);
+    c.Bind("cloud_wind_x", &lighting::live_settings().debug.cloud_wind_x);
+    c.Bind("cloud_wind_y", &lighting::live_settings().debug.cloud_wind_y);
+    c.Bind("cloud_threshold", &lighting::live_settings().debug.cloud_threshold);
+    c.Bind("cloud_softness", &lighting::live_settings().debug.cloud_softness);
+    c.Bind("sway_amp", &lighting::live_settings().debug.sway_amp);
+    c.Bind("sway_freq", &lighting::live_settings().debug.sway_freq);
+    c.Bind("ripple_k", &lighting::live_settings().debug.ripple_k);
+    c.Bind("gust_amp", &lighting::live_settings().debug.gust_amp);
+    c.Bind("gust_freq", &lighting::live_settings().debug.gust_freq);
+    c.Bind("part_radius", &lighting::live_settings().debug.part_radius);
+    c.Bind("part_strength", &lighting::live_settings().debug.part_strength);
+    c.Bind("outline_enable", &g_outline_enable);
+    c.Bind("outline_thickness", &g_outline_thickness);
+    c.Bind("outline_alpha", &g_outline_alpha);
+    c.Bind("outline_alpha_cut", &g_outline_alpha_cut);
+    c.Bind("hover_highlight_enable", &g_hover_highlight_enable);
+    c.Bind("hover_highlight_color", &g_hover_highlight_color);
+    c.Bind("hover_highlight_thickness", &g_hover_highlight_thickness);
+    c.Bind("hover_highlight_corner_len", &g_hover_highlight_corner_len);
+    c.Bind("hover_highlight_pulse", &g_hover_highlight_pulse);
+    c.Bind("hover_highlight_pulse_speed", &g_hover_highlight_pulse_speed);
+    c.Bind("hover_line_enable", &g_hover_line_enable);
+    c.Bind("hover_line_color", &g_hover_line_color);
+    c.Bind("hover_line_dot_size", &g_hover_line_dot_size);
+    c.Bind("hover_line_dot_spacing", &g_hover_line_dot_spacing);
+    c.Bind("hover_line_fade_ends", &g_hover_line_fade_ends);
     // Slice 8 — Lighting tab. Floats two-way bound to the same globals the ImGui sliders
     // drive; debug_mode + shadow_steps are uint32 so they go through int proxies.
-    c.Bind( "emitter_scale", &lighting::live_settings().debug.emitter_scale );
-    c.Bind( "sun_scale", &lighting::live_settings().debug.sun_scale );
-    c.Bind( "sky_scale", &lighting::live_settings().debug.sky_scale );
-    c.Bind( "skylight_bleed", &g_skylight_bleed );
-    c.Bind( "tonemap_exposure", &g_tonemap_exposure );
-    c.Bind( "tonemap_min_ev", &g_tonemap_min_ev );
-    c.Bind( "bloom_enable", &g_bloom_enable );
-    c.Bind( "sky_sun_enable", &g_sky_sun_enable );
-    c.Bind( "sun_arrow", &g_sun_arrow );
-    c.Bind( "bloom_threshold", &g_bloom_threshold );
-    c.Bind( "bloom_intensity", &g_bloom_intensity );
+    c.Bind("emitter_scale", &lighting::live_settings().debug.emitter_scale);
+    c.Bind("sun_scale", &lighting::live_settings().debug.sun_scale);
+    c.Bind("sky_scale", &lighting::live_settings().debug.sky_scale);
+    c.Bind("skylight_bleed", &g_skylight_bleed);
+    c.Bind("tonemap_exposure", &g_tonemap_exposure);
+    c.Bind("tonemap_min_ev", &g_tonemap_min_ev);
+    c.Bind("bloom_enable", &g_bloom_enable);
+    c.Bind("sky_sun_enable", &g_sky_sun_enable);
+    c.Bind("sun_arrow", &g_sun_arrow);
+    c.Bind("bloom_threshold", &g_bloom_threshold);
+    c.Bind("bloom_intensity", &g_bloom_intensity);
     // ASC-CDL colour grade + post-processing (b1/space3 in tonemap.frag).
-    c.Bind( "grade_cdl_slope_r", &g_grade_cdl_slope_r );
-    c.Bind( "grade_cdl_slope_g", &g_grade_cdl_slope_g );
-    c.Bind( "grade_cdl_slope_b", &g_grade_cdl_slope_b );
-    c.Bind( "grade_cdl_offset_r", &g_grade_cdl_offset_r );
-    c.Bind( "grade_cdl_offset_g", &g_grade_cdl_offset_g );
-    c.Bind( "grade_cdl_offset_b", &g_grade_cdl_offset_b );
-    c.Bind( "grade_cdl_power_r", &g_grade_cdl_power_r );
-    c.Bind( "grade_cdl_power_g", &g_grade_cdl_power_g );
-    c.Bind( "grade_cdl_power_b", &g_grade_cdl_power_b );
-    c.Bind( "grade_temperature", &g_grade_temperature );
-    c.Bind( "grade_tint", &g_grade_tint );
-    c.Bind( "grade_saturation", &g_grade_saturation );
-    c.Bind( "grade_contrast", &g_grade_contrast );
-    c.Bind( "grade_vignette", &g_grade_vignette );
-    c.Bind( "grade_grain", &g_grade_grain );
-    c.Bind( "grade_ca", &g_grade_ca );
-    c.Bind( "depth_lean_str", &g_depth_lean_str );
-    c.Bind( "depth_dark_str", &g_depth_dark_str );
-    c.Bind( "dither_amt", &lighting::live_settings().debug.dither_amt );
-    c.Bind( "dither_bands", &lighting::live_settings().debug.dither_bands );
-    c.Bind( "gi_strength", &lighting::live_settings().debug.gi_strength );
-    c.Bind( "shadow_k", &lighting::live_settings().debug.shadow_k );
-    c.Bind( "shadow_steps", &g_devui_shadow_steps ); // int proxy → uint each frame
+    c.Bind("grade_cdl_slope_r", &g_grade_cdl_slope_r);
+    c.Bind("grade_cdl_slope_g", &g_grade_cdl_slope_g);
+    c.Bind("grade_cdl_slope_b", &g_grade_cdl_slope_b);
+    c.Bind("grade_cdl_offset_r", &g_grade_cdl_offset_r);
+    c.Bind("grade_cdl_offset_g", &g_grade_cdl_offset_g);
+    c.Bind("grade_cdl_offset_b", &g_grade_cdl_offset_b);
+    c.Bind("grade_cdl_power_r", &g_grade_cdl_power_r);
+    c.Bind("grade_cdl_power_g", &g_grade_cdl_power_g);
+    c.Bind("grade_cdl_power_b", &g_grade_cdl_power_b);
+    c.Bind("grade_temperature", &g_grade_temperature);
+    c.Bind("grade_tint", &g_grade_tint);
+    c.Bind("grade_saturation", &g_grade_saturation);
+    c.Bind("grade_contrast", &g_grade_contrast);
+    c.Bind("grade_vignette", &g_grade_vignette);
+    c.Bind("grade_grain", &g_grade_grain);
+    c.Bind("grade_ca", &g_grade_ca);
+    c.Bind("depth_lean_str", &g_depth_lean_str);
+    c.Bind("depth_dark_str", &g_depth_dark_str);
+    c.Bind("dither_amt", &lighting::live_settings().debug.dither_amt);
+    c.Bind("dither_bands", &lighting::live_settings().debug.dither_bands);
+    c.Bind("gi_strength", &lighting::live_settings().debug.gi_strength);
+    c.Bind("shadow_k", &lighting::live_settings().debug.shadow_k);
+    c.Bind("shadow_steps", &g_devui_shadow_steps); // int proxy → uint each frame
     // P5b: sky/sun quality knobs (sky_sun.comp cbuffer, read each frame)
-    c.Bind( "sky_dirs", &lighting::live_settings().debug.sky_dirs );
-    c.Bind( "sky_reach", &lighting::live_settings().debug.sky_reach );
-    c.Bind( "portal_dirs", &lighting::live_settings().debug.portal_dirs );
-    c.Bind( "portal_reach", &lighting::live_settings().debug.portal_reach );
-    c.Bind( "sun_steps", &lighting::live_settings().debug.sun_steps );
-    c.Bind( "sun_penumbra", &lighting::live_settings().debug.sun_penumbra );
-    c.Bind( "sun_soft", &lighting::live_settings().debug.sun_soft );
-    c.Bind( "light_eps", &lighting::live_settings().debug.light_eps );
-    c.Bind( "max_shadow_k", &lighting::live_settings().debug.max_shadow_k );
-    c.Bind( "ao_strength", &lighting::live_settings().debug.ao_strength );
-    c.Bind( "night_floor", &lighting::live_settings().debug.night_floor );
-    c.Bind( "day_floor", &lighting::live_settings().debug.day_floor );
-    c.Bind( "dbg_mode_idx", &g_devui_dbg_mode );
-    c.Bind( "dbg_mode_names", &g_dbg_mode_names );
-    c.BindEventCallback( "dbg_mode", []( Rml::DataModelHandle, Rml::Event &,
-    const Rml::VariantList & ) {
-        lighting::live_settings().set_debug_mode( static_cast<uint32_t>( std::max( 0,
-                g_devui_dbg_mode ) ) );
-    } );
+    c.Bind("sky_dirs", &lighting::live_settings().debug.sky_dirs);
+    c.Bind("sky_reach", &lighting::live_settings().debug.sky_reach);
+    c.Bind("portal_dirs", &lighting::live_settings().debug.portal_dirs);
+    c.Bind("portal_reach", &lighting::live_settings().debug.portal_reach);
+    c.Bind("sun_steps", &lighting::live_settings().debug.sun_steps);
+    c.Bind("sun_penumbra", &lighting::live_settings().debug.sun_penumbra);
+    c.Bind("sun_soft", &lighting::live_settings().debug.sun_soft);
+    c.Bind("light_eps", &lighting::live_settings().debug.light_eps);
+    c.Bind("max_shadow_k", &lighting::live_settings().debug.max_shadow_k);
+    c.Bind("ao_strength", &lighting::live_settings().debug.ao_strength);
+    c.Bind("night_floor", &lighting::live_settings().debug.night_floor);
+    c.Bind("day_floor", &lighting::live_settings().debug.day_floor);
+    c.Bind("dbg_mode_idx", &g_devui_dbg_mode);
+    c.Bind("dbg_mode_names", &g_dbg_mode_names);
+    c.BindEventCallback("dbg_mode", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+        lighting::live_settings().set_debug_mode(
+            static_cast<uint32_t>(std::max(0, g_devui_dbg_mode)));
+    });
     c.BindEventCallback(
-        "rc_readback",
-    []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) { lighting::live_settings().pulses.rc_readback = true; } );
+        "rc_readback", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            lighting::live_settings().pulses.rc_readback = true;
+        });
     // Slice 8 — Effects tab cursor-light controls (colour is on the Colour tab).
-    c.Bind( "cursor_enable", &cursor_light_emitter::enabled );
-    c.Bind( "cursor_radius", &cursor_light_emitter::radius );
-    c.Bind( "cursor_intensity", &cursor_light_emitter::intensity );
-    c.Bind( "place_mode", &dev_test_lights::place_mode );
-    c.Bind( "placed_count", &g_devui_placed );
+    c.Bind("cursor_enable", &cursor_light_emitter::enabled);
+    c.Bind("cursor_radius", &cursor_light_emitter::radius);
+    c.Bind("cursor_intensity", &cursor_light_emitter::intensity);
+    c.Bind("place_mode", &dev_test_lights::place_mode);
+    c.Bind("placed_count", &g_devui_placed);
     c.BindEventCallback(
-    "clear_lights", []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
-        dev_test_lights::lights.clear();
-    } );
+        "clear_lights", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            dev_test_lights::lights.clear();
+        });
     // Slice 8 — CRT post-effect + world-text (Screens tab).
     rmlui_layer::crt_params& crtp = rmlui_layer::crt();
-    c.Bind( "crt_enable", &crtp.enabled );
-    c.Bind( "crt_scanline_alpha", &crtp.scanline_alpha );
-    c.Bind( "crt_scanline_pitch", &crtp.scanline_pitch );
-    c.Bind( "crt_scanline_thickness", &crtp.scanline_thickness );
-    c.Bind( "crt_roll_speed", &crtp.roll_speed );
-    c.Bind( "crt_flicker", &crtp.flicker );
-    c.Bind( "crt_vignette", &crtp.vignette_alpha );
-    c.Bind( "crt_world", &crtp.crt_world );
-    c.Bind( "wt_px", &rmlui_layer::world_text_px() );
-    c.Bind( "wt_dx", &rmlui_layer::world_text_dx() );
-    c.Bind( "wt_dy", &rmlui_layer::world_text_dy() );
+    c.Bind("crt_enable", &crtp.enabled);
+    c.Bind("crt_scanline_alpha", &crtp.scanline_alpha);
+    c.Bind("crt_scanline_pitch", &crtp.scanline_pitch);
+    c.Bind("crt_scanline_thickness", &crtp.scanline_thickness);
+    c.Bind("crt_roll_speed", &crtp.roll_speed);
+    c.Bind("crt_flicker", &crtp.flicker);
+    c.Bind("crt_vignette", &crtp.vignette_alpha);
+    c.Bind("crt_world", &crtp.crt_world);
+    c.Bind("wt_px", &rmlui_layer::world_text_px());
+    c.Bind("wt_dx", &rmlui_layer::world_text_dx());
+    c.Bind("wt_dy", &rmlui_layer::world_text_dy());
     // Slice 8 — Animation tab (struct fields are bindable; the singleton is persistent).
-    c.Bind( "anim_override", &debug_anim_override() );
+    c.Bind("anim_override", &debug_anim_override());
     animation_tuning& at = debug_anim_tuning();
-    c.Bind( "an_move_bob", &at.move_bob );
-    c.Bind( "an_breathing", &at.breathing );
-    c.Bind( "an_hit_reaction", &at.hit_reaction );
-    c.Bind( "an_attack_lunge", &at.attack_lunge );
-    c.Bind( "an_bob_amplitude", &at.bob_amplitude );
-    c.Bind( "an_bob_duration", &at.bob_duration );
-    c.Bind( "an_move_bob_freq", &at.move_bob_freq );
-    c.Bind( "an_move_tilt_deg", &at.move_tilt_deg );
-    c.Bind( "an_move_slide_dur", &at.move_slide_dur );
-    c.Bind( "an_idle_sway", &at.idle_sway );
-    c.Bind( "an_idle_freq", &at.idle_freq );
-    c.Bind( "an_idle_tilt_deg", &at.idle_tilt_deg );
-    c.Bind( "an_idle_vbob_mult", &at.idle_vbob_mult );
-    c.Bind( "an_hit_push", &at.hit_push );
-    c.Bind( "an_hit_duration", &at.hit_duration );
-    c.Bind( "an_hit_burst_total", &at.hit_burst_total );
-    c.Bind( "an_hit_flash_intensity", &at.hit_flash_intensity );
-    c.Bind( "an_hit_flash_frac", &at.hit_flash_frac );
-    c.Bind( "an_hit_freq", &at.hit_freq );
-    c.Bind( "an_hit_tilt_deg", &at.hit_tilt_deg );
-    c.Bind( "an_attack_amplitude", &at.attack_amplitude );
-    c.Bind( "an_attack_duration", &at.attack_duration );
-    c.Bind( "an_attack_freq", &at.attack_freq );
-    c.Bind( "an_attack_ranged_mult", &at.attack_ranged_mult );
-    c.Bind( "an_attack_tilt_melee_deg", &at.attack_tilt_melee_deg );
-    c.Bind( "an_attack_tilt_ranged_deg", &at.attack_tilt_ranged_deg );
+    c.Bind("an_move_bob", &at.move_bob);
+    c.Bind("an_breathing", &at.breathing);
+    c.Bind("an_hit_reaction", &at.hit_reaction);
+    c.Bind("an_attack_lunge", &at.attack_lunge);
+    c.Bind("an_bob_amplitude", &at.bob_amplitude);
+    c.Bind("an_bob_duration", &at.bob_duration);
+    c.Bind("an_move_bob_freq", &at.move_bob_freq);
+    c.Bind("an_move_tilt_deg", &at.move_tilt_deg);
+    c.Bind("an_move_slide_dur", &at.move_slide_dur);
+    c.Bind("an_idle_sway", &at.idle_sway);
+    c.Bind("an_idle_freq", &at.idle_freq);
+    c.Bind("an_idle_tilt_deg", &at.idle_tilt_deg);
+    c.Bind("an_idle_vbob_mult", &at.idle_vbob_mult);
+    c.Bind("an_hit_push", &at.hit_push);
+    c.Bind("an_hit_duration", &at.hit_duration);
+    c.Bind("an_hit_burst_total", &at.hit_burst_total);
+    c.Bind("an_hit_flash_intensity", &at.hit_flash_intensity);
+    c.Bind("an_hit_flash_frac", &at.hit_flash_frac);
+    c.Bind("an_hit_freq", &at.hit_freq);
+    c.Bind("an_hit_tilt_deg", &at.hit_tilt_deg);
+    c.Bind("an_attack_amplitude", &at.attack_amplitude);
+    c.Bind("an_attack_duration", &at.attack_duration);
+    c.Bind("an_attack_freq", &at.attack_freq);
+    c.Bind("an_attack_ranged_mult", &at.attack_ranged_mult);
+    c.Bind("an_attack_tilt_melee_deg", &at.attack_tilt_melee_deg);
+    c.Bind("an_attack_tilt_ranged_deg", &at.attack_tilt_ranged_deg);
     // Slice 8 — Runic frame tab (all int/bool fields bindable; template via <select>;
     // buttons via event-click; auto-regen handled in rml_tick by a change check).
     lighting::runic_params& rc = lighting::runic_cfg();
-    c.Bind( "ru_col_r", &rc.col_r );
-    c.Bind( "ru_col_g", &rc.col_g );
-    c.Bind( "ru_col_b", &rc.col_b );
-    c.Bind( "ru_ring", &rc.ring );
-    c.Bind( "ru_glyph_scale", &rc.glyph_scale );
-    c.Bind( "ru_band_top", &rc.band_top );
-    c.Bind( "ru_div_top", &rc.div_top );
-    c.Bind( "ru_div_bot", &rc.div_bot );
-    c.Bind( "ru_frame_inset", &rc.frame_inset );
-    c.Bind( "ru_fill_pct", &rc.fill_pct );
-    c.Bind( "ru_wall", &rc.wall );
-    c.Bind( "ru_divw", &rc.divw );
-    c.Bind( "ru_pad", &rc.pad );
-    c.Bind( "ru_ggap", &rc.ggap );
-    c.Bind( "ru_gapi", &rc.gapi );
-    c.Bind( "ru_border_frac", &rc.border_frac );
-    c.Bind( "ru_rgap", &rc.rgap );
-    c.Bind( "ru_pitch", &rc.pitch );
-    c.Bind( "ru_unit", &rc.unit );
-    c.Bind( "ru_corrode_pct", &rc.corrode_pct );
-    c.Bind( "ru_corrode_grid", &rc.corrode_grid );
-    c.Bind( "ru_corrode_reach", &rc.corrode_reach );
-    c.Bind( "ru_corrode_grit", &rc.corrode_grit );
-    c.Bind( "ru_taper_dots", &rc.taper_dots );
-    c.Bind( "ru_taper_gap", &rc.taper_gap );
-    c.Bind( "ru_rune_small_px", &rc.rune_small_px );
-    c.Bind( "ru_fixed_seed", &rc.use_fixed_seed );
-    c.Bind( "ru_auto_regen", &g_runic_auto_regen );
-    c.Bind( "ru_template_idx", &g_runic_template );
-    c.Bind( "ru_template_names", &g_runic_template_names );
+    c.Bind("ru_col_r", &rc.col_r);
+    c.Bind("ru_col_g", &rc.col_g);
+    c.Bind("ru_col_b", &rc.col_b);
+    c.Bind("ru_ring", &rc.ring);
+    c.Bind("ru_glyph_scale", &rc.glyph_scale);
+    c.Bind("ru_band_top", &rc.band_top);
+    c.Bind("ru_div_top", &rc.div_top);
+    c.Bind("ru_div_bot", &rc.div_bot);
+    c.Bind("ru_frame_inset", &rc.frame_inset);
+    c.Bind("ru_fill_pct", &rc.fill_pct);
+    c.Bind("ru_wall", &rc.wall);
+    c.Bind("ru_divw", &rc.divw);
+    c.Bind("ru_pad", &rc.pad);
+    c.Bind("ru_ggap", &rc.ggap);
+    c.Bind("ru_gapi", &rc.gapi);
+    c.Bind("ru_border_frac", &rc.border_frac);
+    c.Bind("ru_rgap", &rc.rgap);
+    c.Bind("ru_pitch", &rc.pitch);
+    c.Bind("ru_unit", &rc.unit);
+    c.Bind("ru_corrode_pct", &rc.corrode_pct);
+    c.Bind("ru_corrode_grid", &rc.corrode_grid);
+    c.Bind("ru_corrode_reach", &rc.corrode_reach);
+    c.Bind("ru_corrode_grit", &rc.corrode_grit);
+    c.Bind("ru_taper_dots", &rc.taper_dots);
+    c.Bind("ru_taper_gap", &rc.taper_gap);
+    c.Bind("ru_rune_small_px", &rc.rune_small_px);
+    c.Bind("ru_fixed_seed", &rc.use_fixed_seed);
+    c.Bind("ru_auto_regen", &g_runic_auto_regen);
+    c.Bind("ru_template_idx", &g_runic_template);
+    c.Bind("ru_template_names", &g_runic_template_names);
     c.BindEventCallback(
-    "ru_template", []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
-        lighting::runic_params& r = lighting::runic_cfg();
-        r.force_template = g_runic_template - 1; // 0 (Auto) -> -1
-        r.regen++;
-    } );
+        "ru_template", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            lighting::runic_params& r = lighting::runic_cfg();
+            r.force_template = g_runic_template - 1; // 0 (Auto) -> -1
+            r.regen++;
+        });
     c.BindEventCallback(
-    "ru_randomize", []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
-        lighting::runic_params& r = lighting::runic_cfg();
-        r.seed = r.seed * 1664525u + 1013904223u; // LCG step
-        r.regen++;
-    } );
+        "ru_randomize", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            lighting::runic_params& r = lighting::runic_cfg();
+            r.seed = r.seed * 1664525u + 1013904223u; // LCG step
+            r.regen++;
+        });
     c.BindEventCallback(
-    "ru_generate", []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
-        lighting::runic_cfg().regen++;
-    } );
-    c.BindEventCallback( "ru_save", []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & ) {
+        "ru_generate", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
+            lighting::runic_cfg().regen++;
+        });
+    c.BindEventCallback("ru_save", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
         lighting::save_runic_cfg();
-    } );
-    c.BindEventCallback( "ru_reload", []( Rml::DataModelHandle, Rml::Event &,
-    const Rml::VariantList & ) {
+    });
+    c.BindEventCallback("ru_reload", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
         lighting::load_runic_cfg();
         lighting::runic_cfg().regen++;
-    } );
-    c.BindEventCallback( "ru_reset", []( Rml::DataModelHandle, Rml::Event &,
-    const Rml::VariantList & ) {
+    });
+    c.BindEventCallback("ru_reset", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
         lighting::runic_params& r = lighting::runic_cfg();
         const unsigned keep = r.regen;
         r = lighting::runic_params{};
         r.regen = keep + 1;
-    } );
+    });
     // Diagnostics read-out (rebuilt each frame in rml_tick).
-    c.Bind( "diag_text", &g_diag_text );
+    c.Bind("diag_text", &g_diag_text);
     // Slice 4 — colour picker. pk_hex is the readout; the SV square + hue strip emit
     // mousedown/drag → map mouse pos to S/V or H, then picker_apply() writes the colour.
-    c.Bind( "pk_hex", &g_pk_hex );
-    c.BindEventCallback( "pk_sv", []( Rml::DataModelHandle, Rml::Event & ev,
-    const Rml::VariantList & ) {
-        if( g_devui_doc == nullptr ) { return; }
-        Rml::Element* sv = g_devui_doc->GetElementById( "pk-sv" );
-        if( sv == nullptr ) { return; }
-        const Rml::Vector2f off = sv->GetAbsoluteOffset( Rml::BoxArea::Border );
+    c.Bind("pk_hex", &g_pk_hex);
+    c.BindEventCallback("pk_sv", [](Rml::DataModelHandle, Rml::Event& ev, const Rml::VariantList&) {
+        if (g_devui_doc == nullptr) { return; }
+        Rml::Element* sv = g_devui_doc->GetElementById("pk-sv");
+        if (sv == nullptr) { return; }
+        const Rml::Vector2f off = sv->GetAbsoluteOffset(Rml::BoxArea::Border);
         const float w = sv->GetClientWidth();
         const float h = sv->GetClientHeight();
-        if( w <= 0.f || h <= 0.f ) { return; }
-        const float mx = ev.GetParameter<float>( "mouse_x", off.x );
-        const float my = ev.GetParameter<float>( "mouse_y", off.y );
-        g_pk_s = std::clamp( ( mx - off.x ) / w, 0.f, 1.f );
-        g_pk_v = std::clamp( 1.f - ( my - off.y ) / h, 0.f, 1.f );
+        if (w <= 0.f || h <= 0.f) { return; }
+        const float mx = ev.GetParameter<float>("mouse_x", off.x);
+        const float my = ev.GetParameter<float>("mouse_y", off.y);
+        g_pk_s = std::clamp((mx - off.x) / w, 0.f, 1.f);
+        g_pk_v = std::clamp(1.f - (my - off.y) / h, 0.f, 1.f);
         picker_apply();
-    } );
-    c.BindEventCallback( "pk_hue", []( Rml::DataModelHandle, Rml::Event & ev,
-    const Rml::VariantList & ) {
-        if( g_devui_doc == nullptr ) { return; }
-        Rml::Element* hue = g_devui_doc->GetElementById( "pk-hue" );
-        if( hue == nullptr ) { return; }
-        const Rml::Vector2f off = hue->GetAbsoluteOffset( Rml::BoxArea::Border );
+    });
+    c.BindEventCallback("pk_hue", [](Rml::DataModelHandle, Rml::Event& ev, const Rml::VariantList&) {
+        if (g_devui_doc == nullptr) { return; }
+        Rml::Element* hue = g_devui_doc->GetElementById("pk-hue");
+        if (hue == nullptr) { return; }
+        const Rml::Vector2f off = hue->GetAbsoluteOffset(Rml::BoxArea::Border);
         const float h = hue->GetClientHeight();
-        if( h <= 0.f ) { return; }
-        const float my = ev.GetParameter<float>( "mouse_y", off.y );
-        g_pk_h = std::clamp( ( my - off.y ) / h, 0.f, 1.f ) * 360.f;
+        if (h <= 0.f) { return; }
+        const float my = ev.GetParameter<float>("mouse_y", off.y);
+        g_pk_h = std::clamp((my - off.y) / h, 0.f, 1.f) * 360.f;
         picker_apply();
-    } );
+    });
     c.BindEventCallback(
-    "pk_target", []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
-        int idx = -1;
-        if( !args.empty() ) { args[0].GetInto( idx ); }
-        if( idx >= 0 && idx < static_cast<int>( g_pk_targets.size() ) ) {
-            g_pk_named_active = false; // back to a direct (cursor/outline) target
-            g_pk_idx = idx;
-            picker_init(); // reseed HSV + snapshot orig from the newly-selected colour
-            picker_apply();
-        }
-    } );
-    c.BindEventCallback( "pk_combo", []( Rml::DataModelHandle, Rml::Event &,
-    const Rml::VariantList & ) {
+        "pk_target", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
+            int idx = -1;
+            if (!args.empty()) { args[0].GetInto(idx); }
+            if (idx >= 0 && idx < static_cast<int>(g_pk_targets.size())) {
+                g_pk_named_active = false; // back to a direct (cursor/outline) target
+                g_pk_idx = idx;
+                picker_init(); // reseed HSV + snapshot orig from the newly-selected colour
+                picker_apply();
+            }
+        });
+    c.BindEventCallback("pk_combo", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
         // The <select> two-way binds g_pk_combo_idx; switch to that named theme colour.
-        if( g_pk_combo_idx >= 0 && g_pk_combo_idx < static_cast<int>( g_pk_combo.size() ) ) {
+        if (g_pk_combo_idx >= 0 && g_pk_combo_idx < static_cast<int>(g_pk_combo.size())) {
             g_pk_named_active = true;
             picker_init();
             picker_apply();
         }
-    } );
-    c.BindEventCallback( "pk_revert", []( Rml::DataModelHandle, Rml::Event &,
-    const Rml::VariantList & ) {
+    });
+    c.BindEventCallback("pk_revert", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList&) {
         // Restore the snapshot taken when this target was selected; reseed HSV WITHOUT
         // re-snapshotting (picker_init would overwrite orig), then repaint.
-        pk_write_target( g_pk_orig );
-        pk_rgb_to_hsv( g_pk_orig[0], g_pk_orig[1], g_pk_orig[2], g_pk_h, g_pk_s, g_pk_v );
+        pk_write_target(g_pk_orig);
+        pk_rgb_to_hsv(g_pk_orig[0], g_pk_orig[1], g_pk_orig[2], g_pk_h, g_pk_s, g_pk_v);
         picker_apply();
-    } );
+    });
     // Slice 7 — tab bar. data-event-click="devui_tab(N)" sets the active page; data-if /
     // data-class-active in devui.rml read `tab`. Dirty it so the switch is instant (rml_tick
     // also DirtyAllVariables each frame, but don't wait a frame on a click).
     c.BindEventCallback(
-    "devui_tab", []( Rml::DataModelHandle, Rml::Event &, const Rml::VariantList & args ) {
-        int idx = 0;
-        if( !args.empty() ) { args[0].GetInto( idx ); }
-        g_devui_tab = idx;
-        if( g_devui_model ) { g_devui_model.DirtyVariable( "tab" ); }
-    } );
+        "devui_tab", [](Rml::DataModelHandle, Rml::Event&, const Rml::VariantList& args) {
+            int idx = 0;
+            if (!args.empty()) { args[0].GetInto(idx); }
+            g_devui_tab = idx;
+            if (g_devui_model) { g_devui_model.DirtyVariable("tab"); }
+        });
     // Slice 7 — bottom-right drag handle resizes the panel. Drag emits absolute mouse_x/y;
     // panel size = mouse - panel top-left. The panel is a fixed-height flex column, so the
     // body flexes to fill the new height (and scrolls when content exceeds it).
     c.BindEventCallback(
-    "devui_resize", []( Rml::DataModelHandle, Rml::Event & ev, const Rml::VariantList & ) {
-        if( g_devui_doc == nullptr ) { return; }
-        Rml::Element* panel = g_devui_doc->GetElementById( "devui-panel" );
-        if( panel == nullptr ) { return; }
-        const Rml::Vector2f poff = panel->GetAbsoluteOffset( Rml::BoxArea::Border );
-        const float mx = ev.GetParameter<float>( "mouse_x", poff.x );
-        const float my = ev.GetParameter<float>( "mouse_y", poff.y );
-        const float w = std::clamp( mx - poff.x, 240.f, 900.f );
-        const float h = std::clamp( my - poff.y, 160.f, 1200.f );
-        panel->SetProperty( "width", std::to_string( static_cast<int>( w ) ) + "px" );
-        panel->SetProperty( "height", std::to_string( static_cast<int>( h ) ) + "px" );
-    } );
+        "devui_resize", [](Rml::DataModelHandle, Rml::Event& ev, const Rml::VariantList&) {
+            if (g_devui_doc == nullptr) { return; }
+            Rml::Element* panel = g_devui_doc->GetElementById("devui-panel");
+            if (panel == nullptr) { return; }
+            const Rml::Vector2f poff = panel->GetAbsoluteOffset(Rml::BoxArea::Border);
+            const float mx = ev.GetParameter<float>("mouse_x", poff.x);
+            const float my = ev.GetParameter<float>("mouse_y", poff.y);
+            const float w = std::clamp(mx - poff.x, 240.f, 900.f);
+            const float h = std::clamp(my - poff.y, 160.f, 1200.f);
+            panel->SetProperty("width", std::to_string(static_cast<int>(w)) + "px");
+            panel->SetProperty("height", std::to_string(static_cast<int>(h)) + "px");
+        });
     // Overlays tab — bind each overlay state bool (two-way; sync driven in rml_tick).
-    for( size_t i = 0; i < g_overlay_entries.size(); ++i ) {
-        c.Bind( g_overlay_entries[i].var_name, &g_overlay_states[i] );
+    for (size_t i = 0; i < g_overlay_entries.size(); ++i) {
+        c.Bind(g_overlay_entries[i].var_name, &g_overlay_states[i]);
     }
-    c.Bind( "sound_place_mode", &g_sound_place_mode );
-    c.Bind( "sound_volume", &g_sound_volume );
-    c.Bind( "sound_wave_speed", &g_sound_wave_speed );
-    c.Bind( "sound_wave_max_radius", &g_sound_wave_max_radius );
-    c.Bind( "sound_wave_min_radius", &g_sound_wave_min_radius );
-    c.Bind( "sound_category", &g_sound_category );
+    c.Bind("sound_place_mode", &g_sound_place_mode);
+    c.Bind("sound_volume", &g_sound_volume);
+    c.Bind("sound_wave_speed", &g_sound_wave_speed);
+    c.Bind("sound_wave_max_radius", &g_sound_wave_max_radius);
+    c.Bind("sound_wave_min_radius", &g_sound_wave_min_radius);
+    c.Bind("sound_category", &g_sound_category);
     // Build + bind the theme/game colour combo (names + selected index).
     g_pk_combo.clear();
     g_pk_combo_labels.clear();
-    for( const std::string& n : ui_theme::rcss_names() ) {
-        g_pk_combo.push_back( {Rml::String( n ), false} );
-        g_pk_combo_labels.push_back( Rml::String( n ) );
+    for (const std::string& n : ui_theme::rcss_names()) {
+        g_pk_combo.push_back({Rml::String(n), false});
+        g_pk_combo_labels.push_back(Rml::String(n));
     }
-    for( const std::string& n : ui_theme::game_color_names() ) {
-        g_pk_combo.push_back( {Rml::String( n ), true} );
-        g_pk_combo_labels.push_back( Rml::String( n ) );
+    for (const std::string& n : ui_theme::game_color_names()) {
+        g_pk_combo.push_back({Rml::String(n), true});
+        g_pk_combo_labels.push_back(Rml::String(n));
     }
-    c.Bind( "pk_names", &g_pk_combo_labels );
-    c.Bind( "pk_combo_idx", &g_pk_combo_idx );
+    c.Bind("pk_names", &g_pk_combo_labels);
+    c.Bind("pk_combo_idx", &g_pk_combo_idx);
     // Slice 8 — <select> option lists + seed the int proxies from their live globals.
-    g_dbg_mode_names = {
-        "off",     "ambient", "emitter", "sun",         "sky", "total",      "SDF",    "sky_vis",
-        "emit_bw", "normal",  "AO",      "shadow mask", "GI",  "sky access", "sun occ",
-        "vision frontier", "light mode", "cloud shadow"
-    };
+    g_dbg_mode_names =
+        {"off",        "ambient",     "emitter", "sun",
+         "sky",        "total",       "SDF",     "sky_vis",
+         "emit_bw",    "normal",      "AO",      "shadow mask",
+         "GI",         "sky access",  "sun occ", "vision frontier",
+         "light mode", "cloud shadow"};
     g_runic_template_names = {"Auto", "Centred", "Thirds", "Fixed-interval"};
     // Order MUST match lighting::hud_emitter_type — the <select> index is the enum.
     g_hud_part_type_names = {"ember", "dust", "pollen", "snow", "leaf"};
-    g_devui_dbg_mode = static_cast<int>( lighting::live_settings().debug_mode() );
-    g_devui_shadow_steps = static_cast<int>( lighting::live_settings().debug.shadow_steps );
+    g_devui_dbg_mode = static_cast<int>(lighting::live_settings().debug_mode());
+    g_devui_shadow_steps = static_cast<int>(lighting::live_settings().debug.shadow_steps);
     g_runic_template = lighting::runic_cfg().force_template + 1;
     g_devui_model = c.GetModelHandle();
     Rml::ElementDocument* doc =
-        rmlui_layer::open_document( PATH_INFO::datadir() + "gui/devui.rml", false );
-    if( doc == nullptr ) {
-        ctx->RemoveDataModel( "devui" );
+        rmlui_layer::open_document(PATH_INFO::datadir() + "gui/devui.rml", false);
+    if (doc == nullptr) {
+        ctx->RemoveDataModel("devui");
         return;
     }
     g_devui_doc = doc;
-    attach_slider_wheel( *doc );
+    attach_slider_wheel(*doc);
     // Seed the picker from the current cursor-light colour + paint the initial visuals.
     picker_init();
     picker_apply();
 }
 
-void devui_rml_close()
-{
-    if( g_devui_doc == nullptr ) { return; }
-    rmlui_layer::close_document( g_devui_doc );
-    if( Rml::Context * ctx = rmlui_layer::context() ) { ctx->RemoveDataModel( "devui" ); }
+void devui_rml_close() {
+    if (g_devui_doc == nullptr) { return; }
+    rmlui_layer::close_document(g_devui_doc);
+    if (Rml::Context* ctx = rmlui_layer::context()) { ctx->RemoveDataModel("devui"); }
     g_devui_doc = nullptr;
     g_devui_model = Rml::DataModelHandle();
 }
@@ -1026,81 +1000,79 @@ void devui_rml_close()
 // reflect in the RmlUi checkboxes.
 // Slice 8 — the Diagnostics tab as one multi-line string (RmlUi has no per-frame text
 // widget; we rebuild + bind a string). Mirrors draw_diagnostics_tab's read-out.
-static Rml::String build_diag_text()
-{
-    if( !g_dbg_lighting ) { return "enable Debug HUD (F5) for live readout"; }
+static Rml::String build_diag_text() {
+    if (!g_dbg_lighting) { return "enable Debug HUD (F5) for live readout"; }
     auto& rs = lighting::get_render_state();
     const float tp = s_emo.tile_px > 0.f ? s_emo.tile_px : 32.f;
-    const float sw = static_cast<float>( s_emo.screen_w );
-    const float sh = static_cast<float>( s_emo.screen_h );
+    const float sw = static_cast<float>(s_emo.screen_w);
+    const float sh = static_cast<float>(s_emo.screen_h);
     const size_t cache_sz =
-        g ? get_map().access_cache( g->u.bub_pos().z() ).transparency_cache.size() : 0;
-    const int wanted = g ? ( get_map().getmapsize() * SEEX ) * ( get_map().getmapsize() * SEEY ) : 0;
+        g ? get_map().access_cache(g->u.bub_pos().z()).transparency_cache.size() : 0;
+    const int wanted = g ? (get_map().getmapsize() * SEEX) * (get_map().getmapsize() * SEEY) : 0;
     std::string out;
     char buf[256];
-    snprintf( buf, sizeof( buf ), "screen=%dx%d  tile_px=%.1f\n", s_emo.screen_w, s_emo.screen_h, tp );
+    snprintf(buf, sizeof(buf), "screen=%dx%d  tile_px=%.1f\n", s_emo.screen_w, s_emo.screen_h, tp);
     out += buf;
-    snprintf( buf, sizeof( buf ), "SDF pop=%d  rt=%dx%d  tex=%dx%d  cache=%zu/%d\n",
-              rs.sdf().populated() ? 1 : 0, rs.sdf().map_w(), rs.sdf().map_h(), rs.sdf().tex_w(),
-              rs.sdf().tex_h(), cache_sz, wanted );
+    snprintf(buf, sizeof(buf), "SDF pop=%d  rt=%dx%d  tex=%dx%d  cache=%zu/%d\n",
+             rs.sdf().populated() ? 1 : 0, rs.sdf().map_w(), rs.sdf().map_h(), rs.sdf().tex_w(),
+             rs.sdf().tex_h(), cache_sz, wanted);
     out += buf;
-    if( g && cache_sz > 0 ) {
+    if (g && cache_sz > 0) {
         map& mm = get_map();
         const int H = mm.getmapsize() * SEEY;
-        const auto& tc = mm.access_cache( g->u.bub_pos().z() ).transparency_cache;
+        const auto& tc = mm.access_cache(g->u.bub_pos().z()).transparency_cache;
         const int px = g->u.bub_pos().x();
         const int py = g->u.bub_pos().y();
-        auto T = [&]( int x, int y ) -> float {
+        auto T = [&](int x, int y) -> float {
             const int i = x * H + y;
-            return ( i >= 0 && i < static_cast<int>( tc.size() ) ) ? tc[i] : -1.f;
+            return (i >= 0 && i < static_cast<int>(tc.size())) ? tc[i] : -1.f;
         };
-        snprintf( buf, sizeof( buf ), "trans@p=%.3f N=%.3f S=%.3f E=%.3f W=%.3f\n", T( px, py ),
-                  T( px, py - 1 ), T( px, py + 1 ), T( px + 1, py ), T( px - 1, py ) );
+        snprintf(buf, sizeof(buf), "trans@p=%.3f N=%.3f S=%.3f E=%.3f W=%.3f\n", T(px, py),
+                 T(px, py - 1), T(px, py + 1), T(px + 1, py), T(px - 1, py));
         out += buf;
-        snprintf( buf, sizeof( buf ), "trans@p(submit)=%.3f sdfW=%d sz=%zu\n", s_emo.trans_at_player,
-                  s_emo.sdf_W_at_submit, s_emo.sdf_size_at_submit );
+        snprintf(buf, sizeof(buf), "trans@p(submit)=%.3f sdfW=%d sz=%zu\n", s_emo.trans_at_player,
+                 s_emo.sdf_W_at_submit, s_emo.sdf_size_at_submit);
         out += buf;
     }
-    snprintf( buf, sizeof( buf ), "map_origin=(%d,%d)  draw_off_px=(%d,%d)\n", s_emo.map_origin_x,
-              s_emo.map_origin_y, s_emo.draw_off_px_x, s_emo.draw_off_px_y );
+    snprintf(buf, sizeof(buf), "map_origin=(%d,%d)  draw_off_px=(%d,%d)\n", s_emo.map_origin_x,
+             s_emo.map_origin_y, s_emo.draw_off_px_x, s_emo.draw_off_px_y);
     out += buf;
-    snprintf( buf, sizeof( buf ), "cam_off=(%.2f,%.2f)  op=(%.0f,%.0f)\n", s_emo.cam_off_x,
-              s_emo.cam_off_y, s_emo.op_x, s_emo.op_y );
+    snprintf(buf, sizeof(buf), "cam_off=(%.2f,%.2f)  op=(%.0f,%.0f)\n", s_emo.cam_off_x,
+             s_emo.cam_off_y, s_emo.op_x, s_emo.op_y);
     out += buf;
-    snprintf( buf, sizeof( buf ), "player=(%d,%d,%d)  emitters=%zu  pushed=%u\n", s_emo.player_x,
-              s_emo.player_y, s_emo.player_z, s_emo.snap.size(), s_emo.last_n_emit_pushed );
+    snprintf(buf, sizeof(buf), "player=(%d,%d,%d)  emitters=%zu  pushed=%u\n", s_emo.player_x,
+             s_emo.player_y, s_emo.player_z, s_emo.snap.size(), s_emo.last_n_emit_pushed);
     out += buf;
-    const float pscr_x = ( s_emo.player_x + s_emo.cam_off_x ) * tp + s_emo.op_x;
-    const float pscr_y = ( s_emo.player_y + s_emo.cam_off_y ) * tp + s_emo.op_y;
-    snprintf( buf, sizeof( buf ), "player_screen=(%.1f,%.1f)  center=(%.1f,%.1f)\n", pscr_x, pscr_y,
-              sw * 0.5f, sh * 0.5f );
+    const float pscr_x = (s_emo.player_x + s_emo.cam_off_x) * tp + s_emo.op_x;
+    const float pscr_y = (s_emo.player_y + s_emo.cam_off_y) * tp + s_emo.op_y;
+    snprintf(buf, sizeof(buf), "player_screen=(%.1f,%.1f)  center=(%.1f,%.1f)\n", pscr_x, pscr_y,
+             sw * 0.5f, sh * 0.5f);
     out += buf;
     const float dx = pscr_x - sw * 0.5f;
     const float dy = pscr_y - sh * 0.5f;
-    snprintf( buf, sizeof( buf ), "delta_to_center=(%.1f,%.1f)px  =(%.2f,%.2f)tiles\n", dx, dy,
-              dx / tp, dy / tp );
+    snprintf(buf, sizeof(buf), "delta_to_center=(%.1f,%.1f)px  =(%.2f,%.2f)tiles\n", dx, dy,
+             dx / tp, dy / tp);
     out += buf;
-    if( !s_emo.snap.empty() ) {
+    if (!s_emo.snap.empty()) {
         const lighting::gpu_emitter& e0 = s_emo.snap.front();
-        const float ed_x = e0.pos_x - static_cast<float>( s_emo.player_x );
-        const float ed_y = e0.pos_y - static_cast<float>( s_emo.player_y );
-        const float ed = std::sqrt( ed_x * ed_x + ed_y * ed_y );
-        snprintf( buf, sizeof( buf ), "emit[0] pos=(%.1f,%.1f,%.1f) r=%.1f dist=%.2f %s\n", e0.pos_x,
-                  e0.pos_y, e0.pos_z, e0.radius, ed, ( ed < e0.radius ) ? "INSIDE" : "outside" );
+        const float ed_x = e0.pos_x - static_cast<float>(s_emo.player_x);
+        const float ed_y = e0.pos_y - static_cast<float>(s_emo.player_y);
+        const float ed = std::sqrt(ed_x * ed_x + ed_y * ed_y);
+        snprintf(buf, sizeof(buf), "emit[0] pos=(%.1f,%.1f,%.1f) r=%.1f dist=%.2f %s\n", e0.pos_x,
+                 e0.pos_y, e0.pos_z, e0.radius, ed, (ed < e0.radius) ? "INSIDE" : "outside");
         out += buf;
     }
-    snprintf( buf, sizeof( buf ), "menu  F10:r_in=%.0f  F11:pos=(%.1f,%.1f)  F12:bgBlue=%s",
-              menu_emitter_tuning::radius_input, menu_emitter_tuning::pos_x,
-              menu_emitter_tuning::pos_y, menu_emitter_tuning::blue_backdrop ? "ON" : "off" );
+    snprintf(buf, sizeof(buf), "menu  F10:r_in=%.0f  F11:pos=(%.1f,%.1f)  F12:bgBlue=%s",
+             menu_emitter_tuning::radius_input, menu_emitter_tuning::pos_x,
+             menu_emitter_tuning::pos_y, menu_emitter_tuning::blue_backdrop ? "ON" : "off");
     out += buf;
     return out;
 }
 
-bool &devui_visible() { return g_devui_visible; }
-auto sound_place_mode() -> bool & { return g_sound_place_mode; } // *NOPAD*
+bool& devui_visible() { return g_devui_visible; }
+auto sound_place_mode() -> bool& { return g_sound_place_mode; }
 
-auto sound_pulses_visible( bool player_in_stealth ) -> bool
-{
+auto sound_pulses_visible(bool player_in_stealth) -> bool {
     // Stealth is the gameplay gate: the wavefront rings are the stealth-mode
     // readout of how far your noise carried, so every other movement mode keeps
     // them off. An open F4 panel is the one bypass — that is a deliberate
@@ -1109,87 +1081,85 @@ auto sound_pulses_visible( bool player_in_stealth ) -> bool
     return player_in_stealth || devui_visible();
 }
 
-bool place_test_light()
-{
+bool place_test_light() {
     // Gate solely on the checkbox — placement works even with the F4 panel
     // closed, so closing it for an unobstructed view doesn't break testing.
     // Returns true when it placed one, so the caller can consume the click.
-    if( !dev_test_lights::place_mode ) { return false; }
-    dev_test_lights::lights.push_back( dev_test_lights::light{
+    if (!dev_test_lights::place_mode) { return false; }
+    dev_test_lights::lights.push_back(dev_test_lights::light{
         dev_test_lights::hover_wx, dev_test_lights::hover_wy, dev_test_lights::hover_wz,
         cursor_light_emitter::radius, cursor_light_emitter::intensity,
         cursor_light_emitter::color[0], cursor_light_emitter::color[1],
-        cursor_light_emitter::color[2]} );
-    dbg( DL::Info ) << "[light_vis] light placed, total_lights="
-                    << dev_test_lights::lights.size();
+        cursor_light_emitter::color[2]});
+    dbg(DL::Info) << "[light_vis] light placed, total_lights=" << dev_test_lights::lights.size();
     return true;
 }
 
-bool place_test_sound()
-{
+bool place_test_sound() {
     // Gate solely on the checkbox + valid game state — same reasoning as
     // place_test_light(): the F4 panel doesn't need to stay open.
-    if( !g_sound_place_mode || g == nullptr ) { return false; }
-    const auto src = tripoint_bub_ms( static_cast<int>( dev_test_lights::hover_wx ),
-                                      static_cast<int>( dev_test_lights::hover_wy ),
-                                      static_cast<int>( dev_test_lights::hover_wz ) );
+    if (!g_sound_place_mode || g == nullptr) { return false; }
+    const auto src = tripoint_bub_ms(
+        static_cast<int>(dev_test_lights::hover_wx), static_cast<int>(dev_test_lights::hover_wy),
+        static_cast<int>(dev_test_lights::hover_wz));
     // Queue a real sound so monster AI still reacts (drained by the turn loop).
     // Creature-less emitter, so all from_* flags stay false (ambient) per upstream's model.
     // g_sound_volume is now interpreted as dB SPL rather than a legacy tile radius.
     sound_event se;
     se.origin = src;
-    se.volume = static_cast<short>( g_sound_volume );
-    se.category = static_cast<sounds::sound_t>( g_sound_category );
+    se.volume = static_cast<short>(g_sound_volume);
+    se.category = static_cast<sounds::sound_t>(g_sound_category);
     se.description = "debug test sound";
-    sounds::sound( se );
-    sfx::emit_sound_pulse( src, g_sound_volume );
-    dbg( DL::Info ) << "[sound_vis] pulse pushed, total_pulses="
-                    << dev_test_lights::sound_pulses.size();
+    sounds::sound(se);
+    sfx::emit_sound_pulse(src, g_sound_volume);
+    dbg(DL::Info) << "[sound_vis] pulse pushed, total_pulses="
+                  << dev_test_lights::sound_pulses.size();
     return true;
 }
 
-void rml_tick()
-{
-    if( g_devui_visible ) {
+void rml_tick() {
+    if (g_devui_visible) {
         devui_rml_open();
-        if( g_devui_doc != nullptr ) {
+        if (g_devui_doc != nullptr) {
             // Slice 8 per-frame sync of the values that can't two-way bind directly.
             // Both knobs are uint storage behind an int widget: the panel wins only when ITS
             // proxy moved, otherwise the storage (any other channel) wins. `last` always takes
             // the final proxy, so a /tmp/cata_knob shadow_steps write survives the open panel.
             static int last_ss = -1;
             {
-                auto &dbg = lighting::live_settings().debug;
-                const auto r = lighting::knob_reconcile_int_proxy( { .proxy = g_devui_shadow_steps, .last = last_ss },
-                               static_cast<int>( dbg.shadow_steps ), std::max( 1, g_devui_shadow_steps ) );
-                dbg.shadow_steps = static_cast<uint32_t>( r.store );
+                auto& dbg = lighting::live_settings().debug;
+                const auto r = lighting::knob_reconcile_int_proxy(
+                    {.proxy = g_devui_shadow_steps, .last = last_ss},
+                    static_cast<int>(dbg.shadow_steps), std::max(1, g_devui_shadow_steps));
+                dbg.shadow_steps = static_cast<uint32_t>(r.store);
                 g_devui_shadow_steps = r.store;
                 last_ss = r.last;
             }
             static int last_dm = -1;
             {
-                auto &settings = lighting::live_settings();
-                const auto r = lighting::knob_reconcile_int_proxy( { .proxy = g_devui_dbg_mode, .last = last_dm },
-                               static_cast<int>( settings.debug_mode() ), std::max( 0, g_devui_dbg_mode ) );
-                settings.set_debug_mode( static_cast<uint32_t>( r.store ) );
+                auto& settings = lighting::live_settings();
+                const auto r = lighting::knob_reconcile_int_proxy(
+                    {.proxy = g_devui_dbg_mode, .last = last_dm},
+                    static_cast<int>(settings.debug_mode()), std::max(0, g_devui_dbg_mode));
+                settings.set_debug_mode(static_cast<uint32_t>(r.store));
                 g_devui_dbg_mode = r.store;
                 last_dm = r.last;
             }
             // placed-light count (size_t → int readout).
-            g_devui_placed = static_cast<int>( dev_test_lights::lights.size() );
+            g_devui_placed = static_cast<int>(dev_test_lights::lights.size());
             // runic auto-regen: bump regen when any edited field changed (cheap field sum).
-            if( g_runic_auto_regen ) {
+            if (g_runic_auto_regen) {
                 lighting::runic_params& r = lighting::runic_cfg();
                 const long sig =
                     r.col_r + r.col_g + r.col_b + r.ring + r.glyph_scale + r.band_top + r.div_top
                     + r.div_bot + r.wall + r.divw + r.pad + r.ggap + r.gapi + r.rgap + r.pitch
                     + r.border_frac + r.unit + r.fill_pct + r.frame_inset + r.corrode_pct
                     + r.corrode_grid + r.corrode_reach + r.corrode_grit + r.taper_dots + r.taper_gap
-                    + r.rune_small_px + ( r.use_fixed_seed ? 1 : 0 ) + r.force_template;
+                    + r.rune_small_px + (r.use_fixed_seed ? 1 : 0) + r.force_template;
                 static bool sig_init = false;
                 static long last_sig = 0;
-                if( !sig_init || sig != last_sig ) {
-                    if( sig_init ) {
+                if (!sig_init || sig != last_sig) {
+                    if (sig_init) {
                         r.regen++; // skip the spurious first-frame bump
                     }
                     last_sig = sig;
@@ -1200,25 +1170,25 @@ void rml_tick()
             // Phase 1 detects that UI change and drives game state, Phase 2 reads
             // authoritative game state back (reflects mutual exclusion + external
             // toggles from the debug menu / keybinds).
-            if( g != nullptr ) {
+            if (g != nullptr) {
                 static std::array<bool, g_overlay_entries.size()> prev_states{};
                 // Phase 1: UI -> game. A checkbox changed since last sync drives game state.
-                for( size_t i = 0; i < g_overlay_entries.size(); ++i ) {
-                    if( g_overlay_states[i] == prev_states[i] ) { continue; }
-                    const auto &entry = g_overlay_entries[i];
-                    if( entry.action == ACTION_DISPLAY_SUBMAP_GRID ) {
+                for (size_t i = 0; i < g_overlay_entries.size(); ++i) {
+                    if (g_overlay_states[i] == prev_states[i]) { continue; }
+                    const auto& entry = g_overlay_entries[i];
+                    if (entry.action == ACTION_DISPLAY_SUBMAP_GRID) {
                         g->debug_submap_grid_overlay = g_overlay_states[i];
-                    } else if( g->display_overlay_state( entry.action ) != g_overlay_states[i] ) {
-                        g->display_toggle_overlay( entry.action );
+                    } else if (g->display_overlay_state(entry.action) != g_overlay_states[i]) {
+                        g->display_toggle_overlay(entry.action);
                     }
                 }
                 // Phase 2: game -> UI. Read back authoritative state and re-sync prev.
-                for( size_t i = 0; i < g_overlay_entries.size(); ++i ) {
-                    const auto &entry = g_overlay_entries[i];
-                    if( entry.action == ACTION_DISPLAY_SUBMAP_GRID ) {
+                for (size_t i = 0; i < g_overlay_entries.size(); ++i) {
+                    const auto& entry = g_overlay_entries[i];
+                    if (entry.action == ACTION_DISPLAY_SUBMAP_GRID) {
                         g_overlay_states[i] = g->debug_submap_grid_overlay;
                     } else {
-                        g_overlay_states[i] = g->display_overlay_state( entry.action );
+                        g_overlay_states[i] = g->display_overlay_state(entry.action);
                     }
                     prev_states[i] = g_overlay_states[i];
                 }
@@ -1236,34 +1206,33 @@ void rml_tick()
 // correlation of the F7 debug fields against what is physically on the map.
 // Paired with CATA_FRAME_DUMP so both fire on the same frame count.
 // ---------------------------------------------------------------------------
-auto dump_map_to( std::uint64_t frame, const std::string &path ) -> bool
-{
-    if( g == nullptr ) { return false; }
+auto dump_map_to(std::uint64_t frame, const std::string& path) -> bool {
+    if (g == nullptr) { return false; }
 
     map& mm = get_map();
     const int z = g->u.bub_pos().z();
     const int W = mm.getmapsize() * SEEX;
     const int H = mm.getmapsize() * SEEY;
-    const auto& tc = mm.access_cache( z ).transparency_cache;
+    const auto& tc = mm.access_cache(z).transparency_cache;
 
-    std::ofstream f( path, std::ios::binary );
-    if( !f ) {
-        DebugLogFL( DL::Warn, DC::Main ) << "map dump: cannot open " << path;
+    std::ofstream f(path, std::ios::binary);
+    if (!f) {
+        DebugLogFL(DL::Warn, DC::Main) << "map dump: cannot open " << path;
         return false;
     }
-    JsonOut j( f );
+    JsonOut j(f);
     j.start_object();
-    j.member( "frame", static_cast<long long>( frame ) );
-    j.member( "turn", to_turn<int>( calendar::turn ) );
-    j.member( "z", z );
-    j.member( "width", W );
-    j.member( "height", H );
-    j.member( "player", std::vector<int> { g->u.bub_pos().x(), g->u.bub_pos().y(), z } );
-    j.member( "map_origin", std::vector<int> { s_emo.map_origin_x, s_emo.map_origin_y } );
-    j.member( "draw_off_px", std::vector<int> { s_emo.draw_off_px_x, s_emo.draw_off_px_y } );
-    j.member( "tile_px", s_emo.tile_px );
-    j.member( "screen", std::vector<int> { s_emo.screen_w, s_emo.screen_h } );
-    j.member( "trans_at_player", s_emo.trans_at_player );
+    j.member("frame", static_cast<long long>(frame));
+    j.member("turn", to_turn<int>(calendar::turn));
+    j.member("z", z);
+    j.member("width", W);
+    j.member("height", H);
+    j.member("player", std::vector<int>{g->u.bub_pos().x(), g->u.bub_pos().y(), z});
+    j.member("map_origin", std::vector<int>{s_emo.map_origin_x, s_emo.map_origin_y});
+    j.member("draw_off_px", std::vector<int>{s_emo.draw_off_px_x, s_emo.draw_off_px_y});
+    j.member("tile_px", s_emo.tile_px);
+    j.member("screen", std::vector<int>{s_emo.screen_w, s_emo.screen_h});
+    j.member("trans_at_player", s_emo.trans_at_player);
 
     // Terrain / furniture: flat W*H arrays of int ids (row-major, y outer),
     // plus id→name maps for the distinct ids present. Transparency: full
@@ -1271,89 +1240,83 @@ auto dump_map_to( std::uint64_t frame, const std::string &path ) -> bool
     // field the F4 diag's trans@p reads.
     std::map<int, std::string> ter_names;
     std::map<int, std::string> furn_names;
-    j.member( "terrain" );
+    j.member("terrain");
     j.start_array();
-    for( int y = 0; y < H; ++y ) {
-        for( int x = 0; x < W; ++x ) {
-            const ter_id tid = mm.ter( tripoint_bub_ms( x, y, z ) );
-            j.write( tid.to_i() );
+    for (int y = 0; y < H; ++y) {
+        for (int x = 0; x < W; ++x) {
+            const ter_id tid = mm.ter(tripoint_bub_ms(x, y, z));
+            j.write(tid.to_i());
             ter_names[tid.to_i()] = tid.id().str();
         }
     }
     j.end_array();
-    j.member( "terrain_names" );
+    j.member("terrain_names");
     j.start_object();
-    for( const auto& [k, v] : ter_names ) {
-        j.member( std::to_string( k ), v );
-    }
+    for (const auto& [k, v] : ter_names) { j.member(std::to_string(k), v); }
     j.end_object();
 
-    j.member( "furniture" );
+    j.member("furniture");
     j.start_array();
-    for( int y = 0; y < H; ++y ) {
-        for( int x = 0; x < W; ++x ) {
-            const furn_id fid = mm.furn( tripoint_bub_ms( x, y, z ) );
-            j.write( fid.to_i() );
-            if( fid.to_i() != 0 ) {
-                furn_names[fid.to_i()] = fid.id().str();
-            }
+    for (int y = 0; y < H; ++y) {
+        for (int x = 0; x < W; ++x) {
+            const furn_id fid = mm.furn(tripoint_bub_ms(x, y, z));
+            j.write(fid.to_i());
+            if (fid.to_i() != 0) { furn_names[fid.to_i()] = fid.id().str(); }
         }
     }
     j.end_array();
-    j.member( "furniture_names" );
+    j.member("furniture_names");
     j.start_object();
-    for( const auto& [k, v] : furn_names ) {
-        j.member( std::to_string( k ), v );
-    }
+    for (const auto& [k, v] : furn_names) { j.member(std::to_string(k), v); }
     j.end_object();
 
-    j.member( "transparency" );
+    j.member("transparency");
     j.start_array();
-    for( int y = 0; y < H; ++y ) {
-        for( int x = 0; x < W; ++x ) {
+    for (int y = 0; y < H; ++y) {
+        for (int x = 0; x < W; ++x) {
             const int i = x * H + y;
-            j.write( i >= 0 && i < static_cast<int>( tc.size() ) ? tc[i] : -1.f );
+            j.write(i >= 0 && i < static_cast<int>(tc.size()) ? tc[i] : -1.f);
         }
     }
     j.end_array();
 
-    j.member( "creatures" );
+    j.member("creatures");
     j.start_array();
-    for( Creature * c : mm.get_creatures_in_radius( g->u.bub_pos(), 100, 1 ) ) {
-        if( c == nullptr ) { continue; }
+    for (Creature* c : mm.get_creatures_in_radius(g->u.bub_pos(), 100, 1)) {
+        if (c == nullptr) { continue; }
         const tripoint_bub_ms p = c->bub_pos();
-        if( p.z() != z ) { continue; }
+        if (p.z() != z) { continue; }
         j.start_object();
-        j.member( "kind", c->is_avatar() ? "avatar" : ( c->is_npc() ? "npc" : "monster" ) );
-        j.member( "x", p.x() );
-        j.member( "y", p.y() );
-        if( const monster * m = c->as_monster() ) {
-            j.member( "id", m->type ? m->type->id.str() : "" );
-        } else if( const npc * n = c->as_npc() ) {
-            j.member( "id", n->myclass.str() );
+        j.member("kind", c->is_avatar() ? "avatar" : (c->is_npc() ? "npc" : "monster"));
+        j.member("x", p.x());
+        j.member("y", p.y());
+        if (const monster* m = c->as_monster()) {
+            j.member("id", m->type ? m->type->id.str() : "");
+        } else if (const npc* n = c->as_npc()) {
+            j.member("id", n->myclass.str());
         }
         j.end_object();
     }
     j.end_array();
 
-    j.member( "vehicles" );
+    j.member("vehicles");
     j.start_array();
-    for( const wrapped_vehicle& wv : mm.get_vehicles() ) {
+    for (const wrapped_vehicle& wv : mm.get_vehicles()) {
         vehicle* v = wv.v;
-        if( v == nullptr ) { continue; }
+        if (v == nullptr) { continue; }
         j.start_object();
-        j.member( "name", v->name );
-        j.member( "pos", std::vector<int> { wv.pos.x(), wv.pos.y(), wv.pos.z() } );
-        j.member( "parts" );
+        j.member("name", v->name);
+        j.member("pos", std::vector<int>{wv.pos.x(), wv.pos.y(), wv.pos.z()});
+        j.member("parts");
         j.start_array();
-        for( const vpart_reference& prt : v->get_all_parts() ) {
-            if( prt.part().removed ) { continue; }
+        for (const vpart_reference& prt : v->get_all_parts()) {
+            if (prt.part().removed) { continue; }
             const tripoint_bub_ms pp = prt.pos();
-            if( pp.z() != z ) { continue; }
+            if (pp.z() != z) { continue; }
             j.start_object();
-            j.member( "x", pp.x() );
-            j.member( "y", pp.y() );
-            j.member( "id", prt.info().get_id().str() );
+            j.member("x", pp.x());
+            j.member("y", pp.y());
+            j.member("id", prt.info().get_id().str());
             j.end_object();
         }
         j.end_array();
@@ -1363,30 +1326,29 @@ auto dump_map_to( std::uint64_t frame, const std::string &path ) -> bool
 
     j.end_object();
     f.flush();
-    if( !f ) {
-        DebugLogFL( DL::Warn, DC::Main ) << "map dump: cannot write " << path;
+    if (!f) {
+        DebugLogFL(DL::Warn, DC::Main) << "map dump: cannot write " << path;
         return false;
     }
-    DebugLogFL( DL::Info, DC::Main ) << "map dump: wrote " << path
-                                     << " (" << W << "x" << H << ", z=" << z << ")";
+    DebugLogFL(DL::Info, DC::Main)
+        << "map dump: wrote " << path << " (" << W << "x" << H << ", z=" << z << ")";
     return true;
 }
 
-void maybe_dump_map( std::uint64_t frame, std::uint64_t last_dump_frame )
-{
+void maybe_dump_map(std::uint64_t frame, std::uint64_t last_dump_frame) {
     std::string path;
-    if( frame == last_dump_frame ) {
+    if (frame == last_dump_frame) {
         // F13 / file-trigger on-demand dump: pair with the BMP written this frame.
-        path = "/tmp/cata_map_" + std::to_string( frame ) + ".json";
+        path = "/tmp/cata_map_" + std::to_string(frame) + ".json";
     } else {
-        static const char *spec = std::getenv( "CATA_MAP_DUMP" );
-        if( spec == nullptr ) { return; }
-        const char *colon = std::strchr( spec, ':' );
-        if( colon == nullptr ) { return; }
-        if( std::strtoull( spec, nullptr, 10 ) != frame ) { return; }
-        path.assign( colon + 1 );
+        static const char* spec = std::getenv("CATA_MAP_DUMP");
+        if (spec == nullptr) { return; }
+        const char* colon = std::strchr(spec, ':');
+        if (colon == nullptr) { return; }
+        if (std::strtoull(spec, nullptr, 10) != frame) { return; }
+        path.assign(colon + 1);
     }
-    dump_map_to( frame, path );
+    dump_map_to(frame, path);
 }
 
 } // namespace sdl_lighting_devui

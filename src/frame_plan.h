@@ -1,12 +1,12 @@
 #pragma once
 #ifndef CATA_SRC_FRAME_PLAN_H
-#define CATA_SRC_FRAME_PLAN_H
+#    define CATA_SRC_FRAME_PLAN_H
 
-#include <array>
-#include <cstddef>
-#include <cstdint>
-#include <span>
-#include <string_view>
+#    include <array>
+#    include <cstddef>
+#    include <cstdint>
+#    include <span>
+#    include <string_view>
 
 // The frame plan: the ordered list of named steps the render frame runs, as a pure
 // value. Built by `default_frame_plan()` (every step runs, in today's phase order)
@@ -71,40 +71,33 @@ struct frame_step {
     /// Skip reason; empty while the step runs.
     std::string_view reason;
 
-    constexpr auto has( frame_step_flag f ) const -> bool {
-        return ( flags & static_cast<unsigned>( f ) ) != 0u;
+    constexpr auto has(frame_step_flag f) const -> bool {
+        return (flags & static_cast<unsigned>(f)) != 0u;
     }
 };
 
 /// An ordered list of steps. A value; copyable; nothing in it reaches outside itself.
-class frame_plan
-{
-    public:
-        auto steps() const -> std::span<const frame_step> {
-            return std::span<const frame_step>( steps_.data(), size_ );
-        }
-        auto size() const -> std::size_t {
-            return size_;
-        }
-        bool empty() const {
-            return size_ == 0;
-        }
-        /// Index of `kind`, or `size()` when the plan has no such step.
-        auto index_of( frame_step_kind kind ) const -> std::size_t;
-        auto step_at( std::size_t index ) const -> const frame_step & {
-            return steps_[index];
-        }
-        auto step( frame_step_kind kind ) const -> const frame_step * ; // *NOPAD*
+class frame_plan {
+public:
+    auto steps() const -> std::span<const frame_step> {
+        return std::span<const frame_step>(steps_.data(), size_);
+    }
+    auto size() const -> std::size_t { return size_; }
+    bool empty() const { return size_ == 0; }
+    /// Index of `kind`, or `size()` when the plan has no such step.
+    auto index_of(frame_step_kind kind) const -> std::size_t;
+    auto step_at(std::size_t index) const -> const frame_step& { return steps_[index]; }
+    auto step(frame_step_kind kind) const -> const frame_step*;
 
-        /// Builder-style append, used by `default_frame_plan` and by tests that build
-        /// a hypothetical order to check a law against.
-        auto push_back( frame_step step ) -> frame_plan & ; // *NOPAD*
-        /// Members of the fused lighting group, in plan order.
-        auto fused_lighting_members() const -> std::array<frame_step_kind, 6>;
+    /// Builder-style append, used by `default_frame_plan` and by tests that build
+    /// a hypothetical order to check a law against.
+    auto push_back(frame_step step) -> frame_plan&;
+    /// Members of the fused lighting group, in plan order.
+    auto fused_lighting_members() const -> std::array<frame_step_kind, 6>;
 
-    private:
-        std::array<frame_step, 24> steps_;
-        std::size_t size_ = 0;
+private:
+    std::array<frame_step, 24> steps_;
+    std::size_t size_ = 0;
 };
 
 /// Today's frame, as a plan: every step runs, in the order `refresh_display` has always
@@ -117,7 +110,7 @@ auto frame_lap_names() -> std::span<const std::string_view>;
 auto frame_lap_count() -> std::size_t;
 
 /// The lap a step reports under, so the ten names survive the finer steps.
-auto frame_lap_of( frame_step_kind kind ) -> std::size_t;
-auto frame_lap_name( std::size_t lap ) -> std::string_view;
+auto frame_lap_of(frame_step_kind kind) -> std::size_t;
+auto frame_lap_name(std::size_t lap) -> std::string_view;
 
 #endif // CATA_SRC_FRAME_PLAN_H

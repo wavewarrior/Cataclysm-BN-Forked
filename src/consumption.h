@@ -1,10 +1,10 @@
 #pragma once
 
-#include <list>
-
 #include "calendar.h"
 #include "character.h"
 #include "type_id.h"
+
+#include <list>
 
 class item;
 class JsonOut;
@@ -16,17 +16,17 @@ struct consumption_event {
     uint64_t component_hash;
 
     consumption_event() = default;
-    consumption_event( const item &food );
-    void serialize( JsonOut &json ) const;
-    void deserialize( JsonIn &jsin );
+    consumption_event(const item& food);
+    void serialize(JsonOut& json) const;
+    void deserialize(JsonIn& jsin);
 };
 
 struct consumption_history_t {
     std::list<consumption_event> elems;
 
-    void serialize( JsonOut &json ) const;
-    void deserialize( JsonIn &jsin );
+    void serialize(JsonOut& json) const;
+    void deserialize(JsonIn& jsin);
 };
-bool query_consume_ownership( item &target, avatar &you );
+bool query_consume_ownership(item& target, avatar& you);
 
-void consume_poison( Character &consumer, item &food );
+void consume_poison(Character& consumer, item& food);

@@ -1,11 +1,11 @@
 #pragma once
 #ifndef CATA_SRC_HUD_SOMA_FIGURE_H
-#define CATA_SRC_HUD_SOMA_FIGURE_H
+#    define CATA_SRC_HUD_SOMA_FIGURE_H
 
-#include <algorithm>
-#include <array>
-#include <cstddef>
-#include <string_view>
+#    include <algorithm>
+#    include <array>
+#    include <cstddef>
+#    include <string_view>
 
 /// Geometry and summary arithmetic for the SOMA panel's body figure and its
 /// collapsed one-line reading. Pure arithmetic over plain numbers, split out of
@@ -30,8 +30,7 @@
 /// correct for a medical diagram and wrong here, because the figure sits
 /// directly beside a column of rows labelled `L ARM` / `R ARM` and the two
 /// would contradict each other.
-namespace hud_figure
-{
+namespace hud_figure {
 
 /// Canonical display order, matching `data/json/body_parts.json` `sort_order`
 /// (head 0, torso 100, arm_l 200, arm_r 300, leg_l 500, leg_r 600). The producer
@@ -58,7 +57,7 @@ struct limb_state {
     bool infected = false;
     bool broken = false;
     bool splinted = false;
-    bool critical = false;  ///< `hud_runic::is_critical`, decided by the producer
+    bool critical = false; ///< `hud_runic::is_critical`, decided by the producer
 };
 
 struct body_state {
@@ -80,12 +79,9 @@ struct conditions {
 /// A limb's health, 0..1. A non-positive `max` reads as 0 rather than dividing:
 /// a mod may define a part with no hit points, and a HUD that crashes on one is
 /// worse than a HUD that draws it empty.
-inline auto ratio_of( const limb_state &l ) -> float
-{
-    if( l.max <= 0 ) {
-        return 0.0f;
-    }
-    return std::clamp( static_cast<float>( l.cur ) / static_cast<float>( l.max ), 0.0f, 1.0f );
+inline auto ratio_of(const limb_state& l) -> float {
+    if (l.max <= 0) { return 0.0f; }
+    return std::clamp(static_cast<float>(l.cur) / static_cast<float>(l.max), 0.0f, 1.0f);
 }
 
 /// Whole-body health, 0..1: sum of current over sum of maximum.
@@ -96,36 +92,26 @@ inline auto ratio_of( const limb_state &l ) -> float
 /// The cost of that choice is that one crippled limb hides inside five healthy
 /// ones, which is exactly why `worst_limb` sits beside this in the collapsed
 /// row rather than the percentage standing alone.
-inline auto overall_ratio( const body_state &b ) -> float
-{
+inline auto overall_ratio(const body_state& b) -> float {
     auto cur = 0;
     auto max = 0;
-    for( const limb_state &l : b.limbs ) {
-        if( l.max > 0 ) {
-            cur += std::clamp( l.cur, 0, l.max );
+    for (const limb_state& l : b.limbs) {
+        if (l.max > 0) {
+            cur += std::clamp(l.cur, 0, l.max);
             max += l.max;
         }
     }
-    if( max <= 0 ) {
-        return 0.0f;
-    }
-    return std::clamp( static_cast<float>( cur ) / static_cast<float>( max ), 0.0f, 1.0f );
+    if (max <= 0) { return 0.0f; }
+    return std::clamp(static_cast<float>(cur) / static_cast<float>(max), 0.0f, 1.0f);
 }
 
 /// How urgent a limb's state is, for tie-breaking only. Bleeding and bitten tick
 /// damage between turns, so they outrank a fracture, which outranks plain
 /// damage.
-inline auto severity_of( const limb_state &l ) -> int
-{
-    if( l.bleeding || l.bitten ) {
-        return 3;
-    }
-    if( l.infected ) {
-        return 2;
-    }
-    if( l.broken ) {
-        return 1;
-    }
+inline auto severity_of(const limb_state& l) -> int {
+    if (l.bleeding || l.bitten) { return 3; }
+    if (l.infected) { return 2; }
+    if (l.broken) { return 1; }
     return 0;
 }
 
@@ -137,24 +123,21 @@ inline auto severity_of( const limb_state &l ) -> int
 /// Always names a limb: on an undamaged body it reports the head, which is
 /// truthful (nothing is worse than anything else) and keeps the collapsed row a
 /// fixed shape instead of appearing and disappearing.
-inline auto worst_limb( const body_state &b ) -> limb
-{
-    auto best = static_cast<std::size_t>( 0 );
-    for( std::size_t k = 1; k < limb_count; ++k ) {
-        const auto r = ratio_of( b.limbs[k] );
-        const auto r_best = ratio_of( b.limbs[best] );
-        if( r < r_best ||
-            ( r == r_best && severity_of( b.limbs[k] ) > severity_of( b.limbs[best] ) ) ) {
+inline auto worst_limb(const body_state& b) -> limb {
+    auto best = static_cast<std::size_t>(0);
+    for (std::size_t k = 1; k < limb_count; ++k) {
+        const auto r = ratio_of(b.limbs[k]);
+        const auto r_best = ratio_of(b.limbs[best]);
+        if (r < r_best || (r == r_best && severity_of(b.limbs[k]) > severity_of(b.limbs[best]))) {
             best = k;
         }
     }
-    return static_cast<limb>( best );
+    return static_cast<limb>(best);
 }
 
-inline auto conditions_of( const body_state &b ) -> conditions
-{
+inline auto conditions_of(const body_state& b) -> conditions {
     conditions c;
-    for( const limb_state &l : b.limbs ) {
+    for (const limb_state& l : b.limbs) {
         c.bleeding = c.bleeding || l.bleeding;
         c.bitten = c.bitten || l.bitten;
         c.infected = c.infected || l.infected;
@@ -169,24 +152,20 @@ inline auto conditions_of( const body_state &b ) -> conditions
 /// and a fed element that leaves the DOM without being forgotten keeps its
 /// registry key alive — which holds `sidebar_requires_animation()` true and pins
 /// the game to 33 ms input plus full-screen redraws.
-inline auto element_id( limb l ) -> std::string_view
-{
-    constexpr std::array<std::string_view, limb_count> ids = {
-        "hud-soma-fig-head", "hud-soma-fig-torso", "hud-soma-fig-arml",
-        "hud-soma-fig-armr", "hud-soma-fig-legl", "hud-soma-fig-legr"
-    };
-    const auto k = static_cast<std::size_t>( l );
+inline auto element_id(limb l) -> std::string_view {
+    constexpr std::array<std::string_view, limb_count> ids =
+        {"hud-soma-fig-head", "hud-soma-fig-torso", "hud-soma-fig-arml",
+         "hud-soma-fig-armr", "hud-soma-fig-legl",  "hud-soma-fig-legr"};
+    const auto k = static_cast<std::size_t>(l);
     return ids[k < limb_count ? k : 0];
 }
 
 /// The layout class for a limb's box, paired with `element_id` by position.
-inline auto shape_class( limb l ) -> std::string_view
-{
-    constexpr std::array<std::string_view, limb_count> shapes = {
-        "hud-fig-head", "hud-fig-torso", "hud-fig-arm",
-        "hud-fig-arm", "hud-fig-leg", "hud-fig-leg"
-    };
-    const auto k = static_cast<std::size_t>( l );
+inline auto shape_class(limb l) -> std::string_view {
+    constexpr std::array<std::string_view, limb_count> shapes =
+        {"hud-fig-head", "hud-fig-torso", "hud-fig-arm",
+         "hud-fig-arm",  "hud-fig-leg",   "hud-fig-leg"};
+    const auto k = static_cast<std::size_t>(l);
     return shapes[k < limb_count ? k : 0];
 }
 
@@ -211,28 +190,19 @@ inline auto shape_class( limb l ) -> std::string_view
 /// Four rather than five because four is what the data distinguishes — healthy,
 /// grazed, hurt, critical — and a fifth step between `fg` and `fg0` is 20 luma
 /// apart, which is under the just-noticeable difference on a 10 dp box.
-inline auto fill_class( const limb_state &l ) -> std::string_view
-{
-    if( l.critical ) {
-        return "hud-fig-f4";
-    }
-    if( l.broken ) {
+inline auto fill_class(const limb_state& l) -> std::string_view {
+    if (l.critical) { return "hud-fig-f4"; }
+    if (l.broken) {
         // A fracture is not `critical` on its own (see `hud_runic::is_critical`),
         // but at hp == 0 the ratio test below would answer the brightest rung and
         // shout as loudly as a bleeding limb. Splinted is being dealt with and
         // recedes a step; unsplinted still wants the eye.
         return l.splinted ? "hud-fig-f2" : "hud-fig-f3";
     }
-    const auto r = ratio_of( l );
-    if( r >= 1.0f ) {
-        return "hud-fig-f1";
-    }
-    if( r >= 2.0f / 3.0f ) {
-        return "hud-fig-f2";
-    }
-    if( r >= 1.0f / 3.0f ) {
-        return "hud-fig-f3";
-    }
+    const auto r = ratio_of(l);
+    if (r >= 1.0f) { return "hud-fig-f1"; }
+    if (r >= 2.0f / 3.0f) { return "hud-fig-f2"; }
+    if (r >= 1.0f / 3.0f) { return "hud-fig-f3"; }
     return "hud-fig-f4";
 }
 
@@ -244,9 +214,9 @@ inline auto fill_class( const limb_state &l ) -> std::string_view
 // producer and a stylesheet drifts the moment only one of them is edited, and
 // the split below only fits because these numbers are what they are.
 
-inline constexpr float fig_w = 46.0f;   ///< `.hud-fig` width:  8 + 2 + 22 + 2 + 8 + 4 margins
-inline constexpr float fig_h = 78.0f;   ///< `.hud-fig` height: 12 + 2 + 32 + 2 + 26 + 4 padding
-inline constexpr float fig_gap = 8.0f;  ///< `.hud-fig` margin-right
+inline constexpr float fig_w = 46.0f;  ///< `.hud-fig` width:  8 + 2 + 22 + 2 + 8 + 4 margins
+inline constexpr float fig_h = 78.0f;  ///< `.hud-fig` height: 12 + 2 + 32 + 2 + 26 + 4 padding
+inline constexpr float fig_gap = 8.0f; ///< `.hud-fig` margin-right
 
 /// Width the detail rows keep beside the figure, given the panel's inner width.
 ///
@@ -256,9 +226,8 @@ inline constexpr float fig_gap = 8.0f;  ///< `.hud-fig` margin-right
 /// the twelve-pip meter gets the remaining 84. That is the arithmetic that
 /// decides the figure can sit beside the rows rather than above them, which in
 /// turn is why the expanded panel's height does not grow.
-inline auto rows_width( float panel_inner_w ) -> float
-{
-    return std::max( 0.0f, panel_inner_w - fig_w - fig_gap );
+inline auto rows_width(float panel_inner_w) -> float {
+    return std::max(0.0f, panel_inner_w - fig_w - fig_gap);
 }
 
 } // namespace hud_figure

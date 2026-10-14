@@ -1,15 +1,5 @@
 #include "action.h"
 
-#include <algorithm>
-#include <climits>
-#include <istream>
-#include <iterator>
-#include <memory>
-#include <optional>
-#include <ranges>
-#include <set>
-#include <utility>
-
 #include "avatar.h"
 #include "cata_utility.h"
 #include "catacharset.h"
@@ -46,220 +36,227 @@
 #include "vehicle_part.h"
 #include "vpart_position.h"
 
-static const quality_id qual_BUTCHER( "BUTCHER" );
-static const quality_id qual_CUT_FINE( "CUT_FINE" );
+#include <algorithm>
+#include <climits>
+#include <istream>
+#include <iterator>
+#include <memory>
+#include <optional>
+#include <ranges>
+#include <set>
+#include <utility>
 
-static const std::string flag_CONSOLE( "CONSOLE" );
-static const std::string flag_GOES_DOWN( "GOES_DOWN" );
-static const std::string flag_GOES_UP( "GOES_UP" );
-static const std::string flag_SEALED( "SEALED" );
-static const std::string flag_SWIMMABLE( "SWIMMABLE" );
+static const quality_id qual_BUTCHER("BUTCHER");
+static const quality_id qual_CUT_FINE("CUT_FINE");
 
-static const trait_flag_str_id trait_flag_MUTATION_SWIM( "MUTATION_SWIM" );
-#define PAIR(x) case x: return #x;
-template<>
-std::string io::enum_to_string<action_id>( action_id data )
-{
-    switch( data ) {
-            PAIR( ACTION_NULL )
-            PAIR( ACTION_SELECT )
-            PAIR( ACTION_SEC_SELECT )
-            PAIR( ACTION_PAUSE )
-            PAIR( ACTION_TIMEOUT )
-            PAIR( ACTION_MOVE_FORTH )
-            PAIR( ACTION_MOVE_FORTH_RIGHT )
-            PAIR( ACTION_MOVE_RIGHT )
-            PAIR( ACTION_MOVE_BACK_RIGHT )
-            PAIR( ACTION_MOVE_BACK )
-            PAIR( ACTION_MOVE_BACK_LEFT )
-            PAIR( ACTION_MOVE_LEFT )
-            PAIR( ACTION_MOVE_FORTH_LEFT )
-            PAIR( ACTION_MOVE_DOWN )
-            PAIR( ACTION_MOVE_UP )
-            PAIR( ACTION_CYCLE_MOVE )
-            PAIR( ACTION_RESET_MOVE )
-            PAIR( ACTION_TOGGLE_RUN )
-            PAIR( ACTION_TOGGLE_CROUCH )
-            PAIR( ACTION_TOGGLE_PRONE )
-            PAIR( ACTION_OPEN_MOVEMENT )
-            PAIR( ACTION_TOGGLE_MAP_MEMORY )
-            PAIR( ACTION_CENTER )
-            PAIR( ACTION_SHIFT_N )
-            PAIR( ACTION_SHIFT_NE )
-            PAIR( ACTION_SHIFT_E )
-            PAIR( ACTION_SHIFT_SE )
-            PAIR( ACTION_SHIFT_S )
-            PAIR( ACTION_SHIFT_SW )
-            PAIR( ACTION_SHIFT_W )
-            PAIR( ACTION_SHIFT_NW )
+static const std::string flag_CONSOLE("CONSOLE");
+static const std::string flag_GOES_DOWN("GOES_DOWN");
+static const std::string flag_GOES_UP("GOES_UP");
+static const std::string flag_SEALED("SEALED");
+static const std::string flag_SWIMMABLE("SWIMMABLE");
 
-            PAIR( ACTION_OPEN )
-            PAIR( ACTION_CLOSE )
-            PAIR( ACTION_SMASH )
-            PAIR( ACTION_EXAMINE )
-            PAIR( ACTION_JUMP )
-            PAIR( ACTION_PICKUP )
-            PAIR( ACTION_PICKUP_ALL )
-            PAIR( ACTION_PICKUP_FEET )
-            PAIR( ACTION_GRAB )
-            PAIR( ACTION_HAUL )
-            PAIR( ACTION_BUTCHER )
-            PAIR( ACTION_CHAT )
-            PAIR( ACTION_LOOK )
-            PAIR( ACTION_PEEK )
-            PAIR( ACTION_LIST_ITEMS )
-            PAIR( ACTION_ZONES )
-            PAIR( ACTION_LOOT )
+static const trait_flag_str_id trait_flag_MUTATION_SWIM("MUTATION_SWIM");
+#define PAIR(x) \
+    case x:     \
+        return #x;
+template <> std::string io::enum_to_string<action_id>(action_id data) {
+    switch (data) {
+        PAIR(ACTION_NULL)
+        PAIR(ACTION_SELECT)
+        PAIR(ACTION_SEC_SELECT)
+        PAIR(ACTION_PAUSE)
+        PAIR(ACTION_TIMEOUT)
+        PAIR(ACTION_MOVE_FORTH)
+        PAIR(ACTION_MOVE_FORTH_RIGHT)
+        PAIR(ACTION_MOVE_RIGHT)
+        PAIR(ACTION_MOVE_BACK_RIGHT)
+        PAIR(ACTION_MOVE_BACK)
+        PAIR(ACTION_MOVE_BACK_LEFT)
+        PAIR(ACTION_MOVE_LEFT)
+        PAIR(ACTION_MOVE_FORTH_LEFT)
+        PAIR(ACTION_MOVE_DOWN)
+        PAIR(ACTION_MOVE_UP)
+        PAIR(ACTION_CYCLE_MOVE)
+        PAIR(ACTION_RESET_MOVE)
+        PAIR(ACTION_TOGGLE_RUN)
+        PAIR(ACTION_TOGGLE_CROUCH)
+        PAIR(ACTION_TOGGLE_PRONE)
+        PAIR(ACTION_OPEN_MOVEMENT)
+        PAIR(ACTION_TOGGLE_MAP_MEMORY)
+        PAIR(ACTION_CENTER)
+        PAIR(ACTION_SHIFT_N)
+        PAIR(ACTION_SHIFT_NE)
+        PAIR(ACTION_SHIFT_E)
+        PAIR(ACTION_SHIFT_SE)
+        PAIR(ACTION_SHIFT_S)
+        PAIR(ACTION_SHIFT_SW)
+        PAIR(ACTION_SHIFT_W)
+        PAIR(ACTION_SHIFT_NW)
 
-            PAIR( ACTION_INVENTORY )
-            PAIR( ACTION_ADVANCEDINV )
-            PAIR( ACTION_COMPARE )
-            PAIR( ACTION_ORGANIZE )
-            PAIR( ACTION_USE )
-            PAIR( ACTION_USE_WIELDED )
-            PAIR( ACTION_WEAR )
-            PAIR( ACTION_TAKE_OFF )
-            PAIR( ACTION_EAT )
-            PAIR( ACTION_OPEN_CONSUME )
-            PAIR( ACTION_READ )
-            PAIR( ACTION_WIELD )
-            PAIR( ACTION_PICK_STYLE )
-            PAIR( ACTION_RELOAD_ITEM )
-            PAIR( ACTION_RELOAD_WEAPON )
-            PAIR( ACTION_RELOAD_WIELDED )
-            PAIR( ACTION_UNLOAD )
-            PAIR( ACTION_UNLOAD_ALL )
-            PAIR( ACTION_MEND )
-            PAIR( ACTION_THROW )
-            PAIR( ACTION_THROW_QUICKSLOT )
-            PAIR( ACTION_FIRE )
-            PAIR( ACTION_AIM_HOLD )
-            PAIR( ACTION_FIRE_BURST )
-            PAIR( ACTION_SELECT_FIRE_MODE )
-            PAIR( ACTION_SELECT_DEFAULT_AMMO )
-            PAIR( ACTION_CAST_SPELL )
-            PAIR( ACTION_CAST_LAST_SPELL )
-            PAIR( ACTION_DROP )
-            PAIR( ACTION_DIR_DROP )
-            PAIR( ACTION_BIONICS )
-            PAIR( ACTION_MUTATIONS )
-            PAIR( ACTION_SORT_ARMOR )
-            PAIR( ACTION_AUTOATTACK )
-            PAIR( ACTION_TOGGLE_MANUAL_COMBAT_MODE )
+        PAIR(ACTION_OPEN)
+        PAIR(ACTION_CLOSE)
+        PAIR(ACTION_SMASH)
+        PAIR(ACTION_EXAMINE)
+        PAIR(ACTION_JUMP)
+        PAIR(ACTION_PICKUP)
+        PAIR(ACTION_PICKUP_ALL)
+        PAIR(ACTION_PICKUP_FEET)
+        PAIR(ACTION_GRAB)
+        PAIR(ACTION_HAUL)
+        PAIR(ACTION_BUTCHER)
+        PAIR(ACTION_CHAT)
+        PAIR(ACTION_LOOK)
+        PAIR(ACTION_PEEK)
+        PAIR(ACTION_LIST_ITEMS)
+        PAIR(ACTION_ZONES)
+        PAIR(ACTION_LOOT)
 
-            PAIR( ACTION_WAIT )
-            PAIR( ACTION_CRAFT )
-            PAIR( ACTION_RECRAFT )
-            PAIR( ACTION_LONGCRAFT )
-            PAIR( ACTION_CONSTRUCT )
-            PAIR( ACTION_DISASSEMBLE )
-            PAIR( ACTION_SALVAGE )
-            PAIR( ACTION_SLEEP )
-            PAIR( ACTION_CONTROL_VEHICLE )
-            PAIR( ACTION_TOGGLE_AUTO_TRAVEL_MODE )
-            PAIR( ACTION_TOGGLE_SAFEMODE )
-            PAIR( ACTION_TOGGLE_AUTOSAFE )
-            PAIR( ACTION_TOGGLE_THIEF_MODE )
-            PAIR( ACTION_IGNORE_ENEMY )
-            PAIR( ACTION_WHITELIST_ENEMY )
-            PAIR( ACTION_SAVE )
-            PAIR( ACTION_QUICKSAVE )
-            PAIR( ACTION_QUICKLOAD )
-            PAIR( ACTION_SUICIDE )
+        PAIR(ACTION_INVENTORY)
+        PAIR(ACTION_ADVANCEDINV)
+        PAIR(ACTION_COMPARE)
+        PAIR(ACTION_ORGANIZE)
+        PAIR(ACTION_USE)
+        PAIR(ACTION_USE_WIELDED)
+        PAIR(ACTION_WEAR)
+        PAIR(ACTION_TAKE_OFF)
+        PAIR(ACTION_EAT)
+        PAIR(ACTION_OPEN_CONSUME)
+        PAIR(ACTION_READ)
+        PAIR(ACTION_WIELD)
+        PAIR(ACTION_PICK_STYLE)
+        PAIR(ACTION_RELOAD_ITEM)
+        PAIR(ACTION_RELOAD_WEAPON)
+        PAIR(ACTION_RELOAD_WIELDED)
+        PAIR(ACTION_UNLOAD)
+        PAIR(ACTION_UNLOAD_ALL)
+        PAIR(ACTION_MEND)
+        PAIR(ACTION_THROW)
+        PAIR(ACTION_THROW_QUICKSLOT)
+        PAIR(ACTION_FIRE)
+        PAIR(ACTION_AIM_HOLD)
+        PAIR(ACTION_FIRE_BURST)
+        PAIR(ACTION_SELECT_FIRE_MODE)
+        PAIR(ACTION_SELECT_DEFAULT_AMMO)
+        PAIR(ACTION_CAST_SPELL)
+        PAIR(ACTION_CAST_LAST_SPELL)
+        PAIR(ACTION_DROP)
+        PAIR(ACTION_DIR_DROP)
+        PAIR(ACTION_BIONICS)
+        PAIR(ACTION_MUTATIONS)
+        PAIR(ACTION_SORT_ARMOR)
+        PAIR(ACTION_AUTOATTACK)
+        PAIR(ACTION_TOGGLE_MANUAL_COMBAT_MODE)
 
-            PAIR( ACTION_PL_INFO )
-            PAIR( ACTION_MAP )
-            PAIR( ACTION_SKY )
-            PAIR( ACTION_MISSIONS )
-            PAIR( ACTION_SCORES )
-            PAIR( ACTION_FACTIONS )
-            PAIR( ACTION_MORALE )
-            PAIR( ACTION_MESSAGES )
-            PAIR( ACTION_OPEN_WIKI )
-            PAIR( ACTION_OPEN_HHG )
-            PAIR( ACTION_HELP )
-            PAIR( ACTION_MAIN_MENU )
-            PAIR( ACTION_DIARY )
-            PAIR( ACTION_KEYBINDINGS )
-            PAIR( ACTION_OPTIONS )
-            PAIR( ACTION_AUTOPICKUP )
-            PAIR( ACTION_AUTONOTES )
-            PAIR( ACTION_SAFEMODE )
-            PAIR( ACTION_COLOR )
-            PAIR( ACTION_WORLD_MODS )
-            PAIR( ACTION_DISTRACTION_MANAGER )
+        PAIR(ACTION_WAIT)
+        PAIR(ACTION_CRAFT)
+        PAIR(ACTION_RECRAFT)
+        PAIR(ACTION_LONGCRAFT)
+        PAIR(ACTION_CONSTRUCT)
+        PAIR(ACTION_DISASSEMBLE)
+        PAIR(ACTION_SALVAGE)
+        PAIR(ACTION_SLEEP)
+        PAIR(ACTION_CONTROL_VEHICLE)
+        PAIR(ACTION_TOGGLE_AUTO_TRAVEL_MODE)
+        PAIR(ACTION_TOGGLE_SAFEMODE)
+        PAIR(ACTION_TOGGLE_AUTOSAFE)
+        PAIR(ACTION_TOGGLE_THIEF_MODE)
+        PAIR(ACTION_IGNORE_ENEMY)
+        PAIR(ACTION_WHITELIST_ENEMY)
+        PAIR(ACTION_SAVE)
+        PAIR(ACTION_QUICKSAVE)
+        PAIR(ACTION_QUICKLOAD)
+        PAIR(ACTION_SUICIDE)
 
-            PAIR( ACTION_TOGGLE_CHARACTER_PREVIEW_CLOTHES )
+        PAIR(ACTION_PL_INFO)
+        PAIR(ACTION_MAP)
+        PAIR(ACTION_SKY)
+        PAIR(ACTION_MISSIONS)
+        PAIR(ACTION_SCORES)
+        PAIR(ACTION_FACTIONS)
+        PAIR(ACTION_MORALE)
+        PAIR(ACTION_MESSAGES)
+        PAIR(ACTION_OPEN_WIKI)
+        PAIR(ACTION_OPEN_HHG)
+        PAIR(ACTION_HELP)
+        PAIR(ACTION_MAIN_MENU)
+        PAIR(ACTION_DIARY)
+        PAIR(ACTION_KEYBINDINGS)
+        PAIR(ACTION_OPTIONS)
+        PAIR(ACTION_AUTOPICKUP)
+        PAIR(ACTION_AUTONOTES)
+        PAIR(ACTION_SAFEMODE)
+        PAIR(ACTION_COLOR)
+        PAIR(ACTION_WORLD_MODS)
+        PAIR(ACTION_DISTRACTION_MANAGER)
 
-            PAIR( ACTION_TOGGLE_FULLSCREEN )
-            PAIR( ACTION_DEBUG )
-            PAIR( ACTION_LUA_CONSOLE )
-            PAIR( ACTION_LUA_RELOAD )
-            PAIR( ACTION_DISPLAY_SCENT )
-            PAIR( ACTION_DISPLAY_SCENT_TYPE )
-            PAIR( ACTION_TOGGLE_DEBUG_MODE )
-            PAIR( ACTION_ZOOM_OUT )
-            PAIR( ACTION_ZOOM_IN )
-            PAIR( ACTION_ACTIONMENU )
-            PAIR( ACTION_ITEMACTION )
-            PAIR( ACTION_TOGGLE_PIXEL_MINIMAP )
-            PAIR( ACTION_TOGGLE_PANEL_ADM )
-            PAIR( ACTION_PANEL_MGMT )
-            PAIR( ACTION_RELOAD_TILESET )
-            PAIR( ACTION_TOGGLE_AUTO_FEATURES )
-            PAIR( ACTION_TOGGLE_AUTO_PULP_BUTCHER )
-            PAIR( ACTION_TOGGLE_AUTO_MINING )
-            PAIR( ACTION_TOGGLE_AUTO_FORAGING )
-            PAIR( ACTION_TOGGLE_AUTO_PICKUP )
-            PAIR( ACTION_DISPLAY_TEMPERATURE )
-            PAIR( ACTION_DISPLAY_VEHICLE_AI )
-            PAIR( ACTION_DISPLAY_VISIBILITY )
-            PAIR( ACTION_DISPLAY_LIGHTING )
-            PAIR( ACTION_DISPLAY_RADIATION )
-            PAIR( ACTION_DISPLAY_TRANSPARENCY )
-            PAIR( ACTION_DISPLAY_OUTSIDE )
-            PAIR( ACTION_DISPLAY_SUBMAP_GRID )
-            PAIR( ACTION_DISPLAY_SOUND_ABSORPTION )
-            PAIR( ACTION_DISPLAY_SOUND_WALLS )
-            PAIR( ACTION_TOGGLE_ZONE_OVERLAY )
-            PAIR( ACTION_DISPLAY_TILES_NO_VFX )
-            PAIR( ACTION_TOGGLE_HOUR_TIMER )
-            PAIR( ACTION_SWAP_TO_NPC )
-            PAIR( ACTION_TOGGLE_SOMA_DETAIL )
-            PAIR( ACTION_DISPLAY_SOUND )
-            PAIR( ACTION_TOGGLE_FPS )
-            PAIR( ACTION_CO_OP_CHAT )
-            PAIR( ACTION_CO_OP_TAP_SHOULDER )
-            PAIR( ACTION_CO_OP_EMOTE )
-            PAIR( ACTION_CO_OP_STABILIZE )
-            PAIR( ACTION_CO_OP_PASS_ITEM )
-            PAIR( ACTION_CO_OP_MARK_OVERMAP )
+        PAIR(ACTION_TOGGLE_CHARACTER_PREVIEW_CLOTHES)
+
+        PAIR(ACTION_TOGGLE_FULLSCREEN)
+        PAIR(ACTION_DEBUG)
+        PAIR(ACTION_LUA_CONSOLE)
+        PAIR(ACTION_LUA_RELOAD)
+        PAIR(ACTION_DISPLAY_SCENT)
+        PAIR(ACTION_DISPLAY_SCENT_TYPE)
+        PAIR(ACTION_TOGGLE_DEBUG_MODE)
+        PAIR(ACTION_ZOOM_OUT)
+        PAIR(ACTION_ZOOM_IN)
+        PAIR(ACTION_ACTIONMENU)
+        PAIR(ACTION_ITEMACTION)
+        PAIR(ACTION_TOGGLE_PIXEL_MINIMAP)
+        PAIR(ACTION_TOGGLE_PANEL_ADM)
+        PAIR(ACTION_PANEL_MGMT)
+        PAIR(ACTION_RELOAD_TILESET)
+        PAIR(ACTION_TOGGLE_AUTO_FEATURES)
+        PAIR(ACTION_TOGGLE_AUTO_PULP_BUTCHER)
+        PAIR(ACTION_TOGGLE_AUTO_MINING)
+        PAIR(ACTION_TOGGLE_AUTO_FORAGING)
+        PAIR(ACTION_TOGGLE_AUTO_PICKUP)
+        PAIR(ACTION_DISPLAY_TEMPERATURE)
+        PAIR(ACTION_DISPLAY_VEHICLE_AI)
+        PAIR(ACTION_DISPLAY_VISIBILITY)
+        PAIR(ACTION_DISPLAY_LIGHTING)
+        PAIR(ACTION_DISPLAY_RADIATION)
+        PAIR(ACTION_DISPLAY_TRANSPARENCY)
+        PAIR(ACTION_DISPLAY_OUTSIDE)
+        PAIR(ACTION_DISPLAY_SUBMAP_GRID)
+        PAIR(ACTION_DISPLAY_SOUND_ABSORPTION)
+        PAIR(ACTION_DISPLAY_SOUND_WALLS)
+        PAIR(ACTION_TOGGLE_ZONE_OVERLAY)
+        PAIR(ACTION_DISPLAY_TILES_NO_VFX)
+        PAIR(ACTION_TOGGLE_HOUR_TIMER)
+        PAIR(ACTION_SWAP_TO_NPC)
+        PAIR(ACTION_TOGGLE_SOMA_DETAIL)
+        PAIR(ACTION_DISPLAY_SOUND)
+        PAIR(ACTION_TOGGLE_FPS)
+        PAIR(ACTION_CO_OP_CHAT)
+        PAIR(ACTION_CO_OP_TAP_SHOULDER)
+        PAIR(ACTION_CO_OP_EMOTE)
+        PAIR(ACTION_CO_OP_STABILIZE)
+        PAIR(ACTION_CO_OP_PASS_ITEM)
+        PAIR(ACTION_CO_OP_MARK_OVERMAP)
         case NUM_ACTIONS:
             break;
     }
-    debugmsg( "Invalid action_id" );
+    debugmsg("Invalid action_id");
     return "null";
 }
 
 class inventory;
 
-std::vector<char> keys_bound_to( action_id act, const bool restrict_to_printable )
-{
+std::vector<char> keys_bound_to(action_id act, const bool restrict_to_printable) {
     input_context ctxt = get_default_mode_input_context();
-    return ctxt.keys_bound_to( action_ident( act ), restrict_to_printable );
+    return ctxt.keys_bound_to(action_ident(act), restrict_to_printable);
 }
 
-action_id action_from_key( char ch )
-{
+action_id action_from_key(char ch) {
     input_context ctxt = get_default_mode_input_context();
-    const input_event event( ch, input_event_t::keyboard );
-    const std::string &action = ctxt.input_to_action( event );
-    return look_up_action( action );
+    const input_event event(ch, input_event_t::keyboard);
+    const std::string& action = ctxt.input_to_action(event);
+    return look_up_action(action);
 }
 
-std::string action_ident( action_id act )
-{
-    switch( act ) {
+std::string action_ident(action_id act) {
+    switch (act) {
         case ACTION_PAUSE:
             return "pause";
         case ACTION_TIMEOUT:
@@ -597,9 +594,8 @@ std::string action_ident( action_id act )
     }
 }
 
-bool can_action_change_worldstate( const action_id act )
-{
-    switch( act ) {
+bool can_action_change_worldstate(const action_id act) {
+    switch (act) {
         // Shift view
         case ACTION_TOGGLE_MAP_MEMORY:
         case ACTION_CENTER:
@@ -676,99 +672,88 @@ bool can_action_change_worldstate( const action_id act )
     }
 }
 
-action_id look_up_action( const std::string &ident )
-{
+action_id look_up_action(const std::string& ident) {
     // Temporarily for the interface with the input manager!
-    if( ident == "move_nw" ) {
+    if (ident == "move_nw") {
         return ACTION_MOVE_FORTH_LEFT;
-    } else if( ident == "move_sw" ) {
+    } else if (ident == "move_sw") {
         return ACTION_MOVE_BACK_LEFT;
-    } else if( ident == "move_ne" ) {
+    } else if (ident == "move_ne") {
         return ACTION_MOVE_FORTH_RIGHT;
-    } else if( ident == "move_se" ) {
+    } else if (ident == "move_se") {
         return ACTION_MOVE_BACK_RIGHT;
-    } else if( ident == "move_n" ) {
+    } else if (ident == "move_n") {
         return ACTION_MOVE_FORTH;
-    } else if( ident == "move_s" ) {
+    } else if (ident == "move_s") {
         return ACTION_MOVE_BACK;
-    } else if( ident == "move_w" ) {
+    } else if (ident == "move_w") {
         return ACTION_MOVE_LEFT;
-    } else if( ident == "move_e" ) {
+    } else if (ident == "move_e") {
         return ACTION_MOVE_RIGHT;
-    } else if( ident == "move_down" ) {
+    } else if (ident == "move_down") {
         return ACTION_MOVE_DOWN;
-    } else if( ident == "move_up" ) {
+    } else if (ident == "move_up") {
         return ACTION_MOVE_UP;
     }
     // ^^ Temporarily for the interface with the input manager!
-    for( int i = 0; i < NUM_ACTIONS; i++ ) {
-        if( action_ident( static_cast<action_id>( i ) ) == ident ) {
-            return static_cast<action_id>( i );
-        }
+    for (int i = 0; i < NUM_ACTIONS; i++) {
+        if (action_ident(static_cast<action_id>(i)) == ident) { return static_cast<action_id>(i); }
     }
     return ACTION_NULL;
 }
 
 // (Press X (or Y)|Try) to Z
-std::string press_x( action_id act )
-{
+std::string press_x(action_id act) {
     input_context ctxt = get_default_mode_input_context();
-    return ctxt.press_x( action_ident( act ), _( "Press " ), "", _( "Try" ) );
+    return ctxt.press_x(action_ident(act), _("Press "), "", _("Try"));
 }
-std::string press_x( action_id act, const std::string &key_bound, const std::string &key_unbound )
-{
+std::string press_x(action_id act, const std::string& key_bound, const std::string& key_unbound) {
     input_context ctxt = get_default_mode_input_context();
-    return ctxt.press_x( action_ident( act ), key_bound, "", key_unbound );
+    return ctxt.press_x(action_ident(act), key_bound, "", key_unbound);
 }
-std::string press_x( action_id act, const std::string &key_bound_pre,
-                     const std::string &key_bound_suf,
-                     const std::string &key_unbound )
-{
+std::string press_x(
+    action_id act, const std::string& key_bound_pre, const std::string& key_bound_suf,
+    const std::string& key_unbound) {
     input_context ctxt = get_default_mode_input_context();
-    return ctxt.press_x( action_ident( act ), key_bound_pre, key_bound_suf, key_unbound );
+    return ctxt.press_x(action_ident(act), key_bound_pre, key_bound_suf, key_unbound);
 }
-std::optional<std::string> press_x_if_bound( action_id act )
-{
+std::optional<std::string> press_x_if_bound(action_id act) {
     input_context ctxt = get_default_mode_input_context();
-    std::string description = action_ident( act );
-    if( ctxt.keys_bound_to( description ).empty() ) {
-        return std::nullopt;
-    }
-    return press_x( act );
+    std::string description = action_ident(act);
+    if (ctxt.keys_bound_to(description).empty()) { return std::nullopt; }
+    return press_x(act);
 }
 
-action_id get_movement_action_from_delta( const tripoint_rel_ms &d, iso_rotate rot )
-{
-    if( d.z() == -1 ) {
+action_id get_movement_action_from_delta(const tripoint_rel_ms& d, iso_rotate rot) {
+    if (d.z() == -1) {
         return ACTION_MOVE_DOWN;
-    } else if( d.z() == 1 ) {
+    } else if (d.z() == 1) {
         return ACTION_MOVE_UP;
     }
 
     const bool iso_mode = rot == iso_rotate::yes && tile_iso;
-    if( d.xy() == point_rel_ms::north() ) {
+    if (d.xy() == point_rel_ms::north()) {
         return iso_mode ? ACTION_MOVE_FORTH_LEFT : ACTION_MOVE_FORTH;
-    } else if( d.xy() == point_rel_ms::north_east() ) {
+    } else if (d.xy() == point_rel_ms::north_east()) {
         return iso_mode ? ACTION_MOVE_FORTH : ACTION_MOVE_FORTH_RIGHT;
-    } else if( d.xy() == point_rel_ms::east() ) {
+    } else if (d.xy() == point_rel_ms::east()) {
         return iso_mode ? ACTION_MOVE_FORTH_RIGHT : ACTION_MOVE_RIGHT;
-    } else if( d.xy() == point_rel_ms::south_east() ) {
+    } else if (d.xy() == point_rel_ms::south_east()) {
         return iso_mode ? ACTION_MOVE_RIGHT : ACTION_MOVE_BACK_RIGHT;
-    } else if( d.xy() == point_rel_ms::south() ) {
+    } else if (d.xy() == point_rel_ms::south()) {
         return iso_mode ? ACTION_MOVE_BACK_RIGHT : ACTION_MOVE_BACK;
-    } else if( d.xy() == point_rel_ms::south_west() ) {
+    } else if (d.xy() == point_rel_ms::south_west()) {
         return iso_mode ? ACTION_MOVE_BACK : ACTION_MOVE_BACK_LEFT;
-    } else if( d.xy() == point_rel_ms::west() ) {
+    } else if (d.xy() == point_rel_ms::west()) {
         return iso_mode ? ACTION_MOVE_BACK_LEFT : ACTION_MOVE_LEFT;
     } else {
         return iso_mode ? ACTION_MOVE_LEFT : ACTION_MOVE_FORTH_LEFT;
     }
 }
 
-point_rel_ms get_delta_from_movement_action( const action_id act, const iso_rotate rot )
-{
+point_rel_ms get_delta_from_movement_action(const action_id act, const iso_rotate rot) {
     const bool iso_mode = rot == iso_rotate::yes && tile_iso;
-    switch( act ) {
+    switch (act) {
         case ACTION_MOVE_FORTH:
             return iso_mode ? point_rel_ms::north_east() : point_rel_ms::north();
         case ACTION_MOVE_FORTH_RIGHT:
@@ -790,212 +775,167 @@ point_rel_ms get_delta_from_movement_action( const action_id act, const iso_rota
     }
 }
 
-int hotkey_for_action( action_id action, const bool restrict_to_printable )
-{
-    auto is_valid_key = []( char key ) {
-        return key != '?';
-    };
-    std::vector<char> keys = keys_bound_to( action, restrict_to_printable );
-    auto valid = std::ranges::find_if( keys, is_valid_key );
+int hotkey_for_action(action_id action, const bool restrict_to_printable) {
+    auto is_valid_key = [](char key) { return key != '?'; };
+    std::vector<char> keys = keys_bound_to(action, restrict_to_printable);
+    auto valid = std::ranges::find_if(keys, is_valid_key);
     return valid == keys.end() ? -1 : *valid;
 }
 
-bool can_butcher_at( const tripoint_bub_ms &p )
-{
-    avatar &you = get_avatar();
+bool can_butcher_at(const tripoint_bub_ms& p) {
+    avatar& you = get_avatar();
     // TODO: unify this with game::butcher
-    const int factor = you.max_quality( qual_BUTCHER );
-    const int factorD = you.max_quality( qual_CUT_FINE );
-    map_stack items = get_map().i_at( p );
+    const int factor = you.max_quality(qual_BUTCHER);
+    const int factorD = you.max_quality(qual_CUT_FINE);
+    map_stack items = get_map().i_at(p);
 
-    const inventory &crafting_inv = you.crafting_inventory();
-    for( item * &items_it : items ) {
-        if( items_it->is_corpse() ) {
-            if( factor != INT_MIN  || factorD != INT_MIN ) {
-                return true;
-            }
-        } else if( crafting::can_disassemble( you, *items_it, crafting_inv ).success() ) {
+    const inventory& crafting_inv = you.crafting_inventory();
+    for (item*& items_it : items) {
+        if (items_it->is_corpse()) {
+            if (factor != INT_MIN || factorD != INT_MIN) { return true; }
+        } else if (crafting::can_disassemble(you, *items_it, crafting_inv).success()) {
             return true;
-        } else if( item_funcs::can_be_unloaded( *items_it ) ) {
+        } else if (item_funcs::can_be_unloaded(*items_it)) {
             return true;
         }
     }
     return false;
 }
 
-bool can_move_vertical_at( const tripoint_bub_ms &p, int movez )
-{
-    map &here = get_map();
+bool can_move_vertical_at(const tripoint_bub_ms& p, int movez) {
+    map& here = get_map();
     // TODO: unify this with game::move_vertical
-    if( here.has_flag( flag_SWIMMABLE, p ) && here.has_flag( TFLAG_DEEP_WATER, p ) ) {
-        if( movez == -1 ) {
-            return !g->u.is_underwater() && !g->u.worn_with_flag( flag_FLOTATION );
+    if (here.has_flag(flag_SWIMMABLE, p) && here.has_flag(TFLAG_DEEP_WATER, p)) {
+        if (movez == -1) {
+            return !g->u.is_underwater() && !g->u.worn_with_flag(flag_FLOTATION);
         } else {
-            return g->u.swim_speed() < 500 || ( g->u.is_wearing( itype_id( "swim_fins" ) ) ||
-                                                g->u.has_trait_flag( trait_flag_MUTATION_SWIM ) );
+            return g->u.swim_speed() < 500
+                || (g->u.is_wearing(itype_id("swim_fins"))
+                    || g->u.has_trait_flag(trait_flag_MUTATION_SWIM));
         }
     }
 
-    if( movez == -1 ) {
-        return here.has_flag( flag_GOES_DOWN, p );
+    if (movez == -1) {
+        return here.has_flag(flag_GOES_DOWN, p);
     } else {
-        return here.has_flag( flag_GOES_UP, p );
+        return here.has_flag(flag_GOES_UP, p);
     }
 }
 
-bool can_examine_at( const tripoint_bub_ms &p )
-{
-    map &here = get_map();
-    Character &u = get_player_character();
-    if( here.veh_at( p ) ) {
-        return true;
-    }
-    if( here.has_flag( flag_CONSOLE, p ) ) {
-        return true;
-    }
-    if( here.has_items( p ) ) {
-        return true;
-    }
-    const furn_t &xfurn_t = here.furn( p ).obj();
-    const ter_t &xter_t = here.ter( p ).obj();
+bool can_examine_at(const tripoint_bub_ms& p) {
+    map& here = get_map();
+    Character& u = get_player_character();
+    if (here.veh_at(p)) { return true; }
+    if (here.has_flag(flag_CONSOLE, p)) { return true; }
+    if (here.has_items(p)) { return true; }
+    const furn_t& xfurn_t = here.furn(p).obj();
+    const ter_t& xter_t = here.ter(p).obj();
 
-    if( here.has_furn( p ) && xfurn_t.examine != &iexamine::none ) {
+    if (here.has_furn(p) && xfurn_t.examine != &iexamine::none) {
         return true;
-    } else if( xter_t.examine != &iexamine::none ) {
+    } else if (xter_t.examine != &iexamine::none) {
         return true;
     }
 
-    Creature *c = g->critter_at( p );
-    if( c != nullptr && p != u.bub_pos() ) {
-        return true;
-    }
+    Creature* c = g->critter_at(p);
+    if (c != nullptr && p != u.bub_pos()) { return true; }
 
-    return here.can_see_trap_at( p, u );
+    return here.can_see_trap_at(p, u);
 }
 
-static bool can_pickup_at( const tripoint_bub_ms &p )
-{
+static bool can_pickup_at(const tripoint_bub_ms& p) {
     bool veh_has_items = false;
-    map &here = get_map();
-    const optional_vpart_position vp = here.veh_at( p );
-    if( vp ) {
-        const int cargo_part = vp->vehicle().part_with_feature( vp->part_index(), "CARGO", false );
-        veh_has_items = cargo_part >= 0 && !vp->vehicle().get_items( cargo_part ).empty();
+    map& here = get_map();
+    const optional_vpart_position vp = here.veh_at(p);
+    if (vp) {
+        const int cargo_part = vp->vehicle().part_with_feature(vp->part_index(), "CARGO", false);
+        veh_has_items = cargo_part >= 0 && !vp->vehicle().get_items(cargo_part).empty();
     }
-    return ( here.has_items( p ) && !here.has_flag( flag_SEALED, p ) ) || veh_has_items;
+    return (here.has_items(p) && !here.has_flag(flag_SEALED, p)) || veh_has_items;
 }
 
-bool can_interact_at( action_id action, const tripoint_bub_ms &p )
-{
-    map &here = get_map();
-    switch( action ) {
+bool can_interact_at(action_id action, const tripoint_bub_ms& p) {
+    map& here = get_map();
+    switch (action) {
         case ACTION_OPEN:
-            return here.can_open_door( &get_avatar(), p, !here.is_outside( g->u.bub_pos() ) );
+            return here.can_open_door(&get_avatar(), p, !here.is_outside(g->u.bub_pos()));
         case ACTION_CLOSE: {
-            const optional_vpart_position vp = here.veh_at( p );
-            return ( vp &&
-                     vp->vehicle().next_part_to_close( vp->part_index(),
-                             veh_pointer_or_null( here.veh_at( g->u.bub_pos() ) ) != &vp->vehicle() ) >= 0 ) ||
-                   here.close_door( p, !here.is_outside( g->u.bub_pos() ), true );
+            const optional_vpart_position vp = here.veh_at(p);
+            return (vp
+                    && vp->vehicle().next_part_to_close(
+                           vp->part_index(),
+                           veh_pointer_or_null(here.veh_at(g->u.bub_pos())) != &vp->vehicle())
+                           >= 0)
+                || here.close_door(p, !here.is_outside(g->u.bub_pos()), true);
         }
         case ACTION_BUTCHER:
-            return can_butcher_at( p );
+            return can_butcher_at(p);
         case ACTION_MOVE_UP:
-            return can_move_vertical_at( p, 1 );
+            return can_move_vertical_at(p, 1);
         case ACTION_MOVE_DOWN:
-            return can_move_vertical_at( p, -1 );
+            return can_move_vertical_at(p, -1);
         case ACTION_EXAMINE:
-            return can_examine_at( p );
+            return can_examine_at(p);
         case ACTION_JUMP:
-            return iexamine::can_jump_over_tile( get_avatar(), p );
+            return iexamine::can_jump_over_tile(get_avatar(), p);
         case ACTION_PICKUP:
         case ACTION_PICKUP_ALL:
         case ACTION_PICKUP_FEET:
-            return can_pickup_at( p );
+            return can_pickup_at(p);
         default:
             return false;
     }
 }
 
-namespace
-{
-auto action_menu_category_display_name( const std::string &category_id ) -> std::string
-{
-    if( category_id == "look" ) {
-        return _( "Look" );
-    }
-    if( category_id == "interact" ) {
-        return _( "Interact" );
-    }
-    if( category_id == "inventory" ) {
-        return _( "Inventory" );
-    }
-    if( category_id == "combat" ) {
-        return _( "Combat" );
-    }
-    if( category_id == "craft" ) {
-        return _( "Craft" );
-    }
-    if( category_id == "info" ) {
-        return _( "Info" );
-    }
-    if( category_id == "misc" ) {
-        return _( "Misc" );
-    }
-    if( category_id == "debug" ) {
-        return _( "Debug" );
-    }
+namespace {
+auto action_menu_category_display_name(const std::string& category_id) -> std::string {
+    if (category_id == "look") { return _("Look"); }
+    if (category_id == "interact") { return _("Interact"); }
+    if (category_id == "inventory") { return _("Inventory"); }
+    if (category_id == "combat") { return _("Combat"); }
+    if (category_id == "craft") { return _("Craft"); }
+    if (category_id == "info") { return _("Info"); }
+    if (category_id == "misc") { return _("Misc"); }
+    if (category_id == "debug") { return _("Debug"); }
     return category_id;
 }
 
-auto action_menu_base_category_ids() -> const std::vector<std::string> & // *NOPAD*
-{
-    static const auto category_ids = std::vector<std::string> {
-        "look",
-        "interact",
-        "inventory",
-        "combat",
-        "craft",
-        "info",
-        "misc"
-    };
+auto action_menu_base_category_ids() -> const std::vector<std::string>& {
+    static const auto category_ids = std::vector<
+        std::string>{"look", "interact", "inventory", "combat", "craft", "info", "misc"};
     return category_ids;
 }
 
-auto is_action_menu_base_category( const std::string &category_id ) -> bool
-{
-    const auto &ids = action_menu_base_category_ids();
-    return std::ranges::contains( ids, category_id );
+auto is_action_menu_base_category(const std::string& category_id) -> bool {
+    const auto& ids = action_menu_base_category_ids();
+    return std::ranges::contains(ids, category_id);
 }
 
-auto make_register_actions( std::vector<uilist_entry> &entries, const input_context &ctxt )
-{
-    return [&]( std::vector<action_id> &&names ) -> void {
-        const auto fn = [&]( action_id name ) -> uilist_entry {
-            return { name, true, hotkey_for_action( name ), ctxt.get_action_name( action_ident( name ) ) };
+auto make_register_actions(std::vector<uilist_entry>& entries, const input_context& ctxt) {
+    return [&](std::vector<action_id>&& names) -> void {
+        const auto fn = [&](action_id name) -> uilist_entry {
+            return {name, true, hotkey_for_action(name), ctxt.get_action_name(action_ident(name))};
         };
-        std::ranges::transform( names, std::back_inserter( entries ), fn );
+        std::ranges::transform(names, std::back_inserter(entries), fn);
     };
 }
 
-auto make_register_categories( std::vector<uilist_entry> &entries,
-                               std::map<int, std::string> &categories_by_int,
-                               int &last_category )
-{
-    return [&]( std::vector<std::string> &&category_ids ) -> void {
-        const auto fn = [&]( const std::string & category_id ) -> uilist_entry {
-            const auto name = action_menu_category_display_name( category_id );
+auto make_register_categories(
+    std::vector<uilist_entry>& entries, std::map<int, std::string>& categories_by_int,
+    int& last_category) {
+    return [&](std::vector<std::string>&& category_ids) -> void {
+        const auto fn = [&](const std::string& category_id) -> uilist_entry {
+            const auto name = action_menu_category_display_name(category_id);
             categories_by_int[last_category] = category_id;
-            return { last_category++, true, -1, name + "…" };
+            return {last_category++, true, -1, name + "…"};
         };
-        std::ranges::transform( category_ids, std::back_inserter( entries ),  fn );
+        std::ranges::transform(category_ids, std::back_inserter(entries), fn);
     };
 }
 
 } // namespace
 
-action_id handle_action_menu()
-{
+action_id handle_action_menu() {
     const input_context ctxt = get_default_mode_input_context();
 
     // Calculate weightings for the various actions to give the player suggestions
@@ -1003,391 +943,380 @@ action_id handle_action_menu()
     std::map<action_id, int> action_weightings;
 
     // Check if we're in a potential combat situation, if so, sort a few actions to the top.
-    if( !g->u.get_hostile_creatures( g_max_view_distance ).empty() ) {
+    if (!g->u.get_hostile_creatures(g_max_view_distance).empty()) {
         // Only prioritize movement options if we're not driving.
-        if( !g->u.controlling_vehicle ) {
-            action_weightings[ACTION_CYCLE_MOVE] = 400;
-        }
+        if (!g->u.controlling_vehicle) { action_weightings[ACTION_CYCLE_MOVE] = 400; }
         // Only prioritize fire weapon options if we're wielding a ranged weapon.
-        if( g->u.primary_weapon().is_gun() || g->u.primary_weapon().has_flag( flag_REACH_ATTACK ) ) {
+        if (g->u.primary_weapon().is_gun() || g->u.primary_weapon().has_flag(flag_REACH_ATTACK)) {
             action_weightings[ACTION_FIRE] = 350;
         }
     }
 
     // If we're already running, make it simple to toggle running to off.
-    if( g->u.movement_mode_is( CMM_RUN ) ) {
-        action_weightings[ACTION_TOGGLE_RUN] = 300;
-    }
+    if (g->u.movement_mode_is(CMM_RUN)) { action_weightings[ACTION_TOGGLE_RUN] = 300; }
     // If we're already crouching, make it simple to toggle crouching to off.
-    if( g->u.movement_mode_is( CMM_CROUCH ) ) {
-        action_weightings[ACTION_TOGGLE_CROUCH] = 300;
-    }
+    if (g->u.movement_mode_is(CMM_CROUCH)) { action_weightings[ACTION_TOGGLE_CROUCH] = 300; }
     // If we're already prone, make it simple to toggle prone to off.
-    if( g->u.movement_mode_is( CMM_PRONE ) ) {
-        action_weightings[ACTION_TOGGLE_PRONE] = 300;
-    }
+    if (g->u.movement_mode_is(CMM_PRONE)) { action_weightings[ACTION_TOGGLE_PRONE] = 300; }
 
-    map &here = get_map();
+    map& here = get_map();
     // Check if we're on a vehicle, if so, vehicle controls should be top.
-    if( here.veh_at( g->u.bub_pos() ) ) {
+    if (here.veh_at(g->u.bub_pos())) {
         // Make it 300 to prioritize it before examining the vehicle.
         action_weightings[ACTION_CONTROL_VEHICLE] = 300;
     }
 
     // Check if we can perform one of our actions on nearby terrain. If so,
     // display that action at the top of the list.
-    for( const tripoint_bub_ms &pos : here.points_in_radius( g->u.bub_pos(), 1 ) ) {
-        if( pos != g->u.bub_pos() ) {
+    for (const tripoint_bub_ms& pos : here.points_in_radius(g->u.bub_pos(), 1)) {
+        if (pos != g->u.bub_pos()) {
             // Check for actions that work on nearby tiles, skipping tiles blocked by vehicles
-            if( here.obstructed_by_vehicle_rotation( g->u.bub_pos(), pos ) ) {
-                continue;
-            }
+            if (here.obstructed_by_vehicle_rotation(g->u.bub_pos(), pos)) { continue; }
 
-            if( can_interact_at( ACTION_OPEN, pos ) ) {
-                action_weightings[ACTION_OPEN] = 200;
-            }
-            if( can_interact_at( ACTION_CLOSE, pos ) ) {
-                action_weightings[ACTION_CLOSE] = 200;
-            }
-            if( can_interact_at( ACTION_EXAMINE, pos ) ) {
-                action_weightings[ACTION_EXAMINE] = 200;
-            }
+            if (can_interact_at(ACTION_OPEN, pos)) { action_weightings[ACTION_OPEN] = 200; }
+            if (can_interact_at(ACTION_CLOSE, pos)) { action_weightings[ACTION_CLOSE] = 200; }
+            if (can_interact_at(ACTION_EXAMINE, pos)) { action_weightings[ACTION_EXAMINE] = 200; }
         } else {
             // Check for actions that work on own tile only
-            if( can_interact_at( ACTION_BUTCHER, pos ) ) {
-                action_weightings[ACTION_BUTCHER] = 200;
-            }
-            if( can_interact_at( ACTION_MOVE_UP, pos ) ) {
-                action_weightings[ACTION_MOVE_UP] = 200;
-            }
-            if( can_interact_at( ACTION_MOVE_DOWN, pos ) ) {
+            if (can_interact_at(ACTION_BUTCHER, pos)) { action_weightings[ACTION_BUTCHER] = 200; }
+            if (can_interact_at(ACTION_MOVE_UP, pos)) { action_weightings[ACTION_MOVE_UP] = 200; }
+            if (can_interact_at(ACTION_MOVE_DOWN, pos)) {
                 action_weightings[ACTION_MOVE_DOWN] = 200;
             }
         }
     }
 
     // sort the map by its weightings
-    std::vector<std::pair<action_id, int> > sorted_pairs;
-    std::ranges::copy( action_weightings,
-                       std::back_inserter<std::vector<std::pair<action_id, int> > >( sorted_pairs ) );
-    std::ranges::reverse( sorted_pairs );
+    std::vector<std::pair<action_id, int>> sorted_pairs;
+    std::ranges::copy(action_weightings,
+                      std::back_inserter<std::vector<std::pair<action_id, int>>>(sorted_pairs));
+    std::ranges::reverse(sorted_pairs);
 
     // Default category is called "back"
-    auto category_id = std::string{ "back" };
-    const auto &lua_entries = cata::lua_action_menu::get_entries();
+    auto category_id = std::string{"back"};
+    const auto& lua_entries = cata::lua_action_menu::get_entries();
 
-    while( true ) {
+    while (true) {
         std::vector<uilist_entry> entries;
-        uilist_entry *entry;
+        uilist_entry* entry;
         std::map<int, std::string> categories_by_int;
-        auto lua_entries_by_int = std::map<int, std::string> {};
+        auto lua_entries_by_int = std::map<int, std::string>{};
         int last_category = NUM_ACTIONS + 1;
         auto last_lua_entry = 3 * NUM_ACTIONS;
 
-        const auto register_actions = make_register_actions( entries, ctxt );
-        const auto register_action_if_hotkey_assigned = [&]( action_id action ) {
-            if( hotkey_for_action( action ) > -1 ) {
-                register_actions( { action } );
-            }
+        const auto register_actions = make_register_actions(entries, ctxt);
+        const auto register_action_if_hotkey_assigned = [&](action_id action) {
+            if (hotkey_for_action(action) > -1) { register_actions({action}); }
         };
         const auto register_categories =
-            make_register_categories( entries, categories_by_int, last_category );
-        const auto register_lua_action_entries = [&]( const std::string & selected_category ) {
+            make_register_categories(entries, categories_by_int, last_category);
+        const auto register_lua_action_entries = [&](const std::string& selected_category) {
             const auto matches_category =
-            [&]( const cata::lua_action_menu::entry & entry_to_check ) -> bool {
+                [&](const cata::lua_action_menu::entry& entry_to_check) -> bool {
                 return entry_to_check.category_id == selected_category;
             };
-            auto filtered = lua_entries | std::views::filter( matches_category );
-            std::ranges::for_each( filtered, [&]( const cata::lua_action_menu::entry & menu_entry ) {
+            auto filtered = lua_entries | std::views::filter(matches_category);
+            std::ranges::for_each(filtered, [&](const cata::lua_action_menu::entry& menu_entry) {
                 lua_entries_by_int[last_lua_entry] = menu_entry.id;
-                entries.emplace_back( last_lua_entry, true, menu_entry.hotkey, menu_entry.name );
+                entries.emplace_back(last_lua_entry, true, menu_entry.hotkey, menu_entry.name);
                 last_lua_entry++;
-            } );
+            });
         };
 
-        if( category_id == "back" ) {
-            auto lua_category_ids = std::set<std::string> {};
-            std::ranges::for_each( lua_entries,
-            [&]( const cata::lua_action_menu::entry & menu_entry ) {
-                lua_category_ids.insert( menu_entry.category_id );
-            } );
+        if (category_id == "back") {
+            auto lua_category_ids = std::set<std::string>{};
+            std::ranges::for_each(lua_entries, [&](const cata::lua_action_menu::entry& menu_entry) {
+                lua_category_ids.insert(menu_entry.category_id);
+            });
 
-            for( const auto &[ action, weight ] : sorted_pairs ) {
-                if( weight >= 200 ) {
-                    register_actions( { action } );
-                }
+            for (const auto& [action, weight] : sorted_pairs) {
+                if (weight >= 200) { register_actions({action}); }
             }
 
-            register_categories( { "look", "interact", "inventory", "combat", "craft", "info", "misc" } );
+            register_categories(
+                {"look", "interact", "inventory", "combat", "craft", "info", "misc"});
 
-            register_action_if_hotkey_assigned( ACTION_QUICKSAVE );
-            register_actions( { ACTION_SAVE } );
-            register_action_if_hotkey_assigned( ACTION_QUICKLOAD );
-            register_action_if_hotkey_assigned( ACTION_SUICIDE );
-            register_actions( { ACTION_OPEN_WIKI, ACTION_OPEN_HHG, ACTION_HELP } );
-            if( ( entry = &entries.back() ) ) {
+            register_action_if_hotkey_assigned(ACTION_QUICKSAVE);
+            register_actions({ACTION_SAVE});
+            register_action_if_hotkey_assigned(ACTION_QUICKLOAD);
+            register_action_if_hotkey_assigned(ACTION_SUICIDE);
+            register_actions({ACTION_OPEN_WIKI, ACTION_OPEN_HHG, ACTION_HELP});
+            if ((entry = &entries.back())) {
                 // help _is_a menu.
                 entry->txt += "…";
             }
-            const auto has_lua_debug = std::ranges::contains( lua_category_ids, "debug" );
-            if( hotkey_for_action( ACTION_DEBUG ) > -1 || has_lua_debug ) {
+            const auto has_lua_debug = std::ranges::contains(lua_category_ids, "debug");
+            if (hotkey_for_action(ACTION_DEBUG) > -1 || has_lua_debug) {
                 // register with global key
-                register_categories( { "debug" } );
-                if( ( entry = &entries.back() ) && hotkey_for_action( ACTION_DEBUG ) > -1 ) {
-                    entry->hotkey = hotkey_for_action( ACTION_DEBUG );
+                register_categories({"debug"});
+                if ((entry = &entries.back()) && hotkey_for_action(ACTION_DEBUG) > -1) {
+                    entry->hotkey = hotkey_for_action(ACTION_DEBUG);
                 }
             }
-            auto extra_categories = lua_category_ids
-            | std::views::filter( [&]( const std::string & category ) {
-                return !is_action_menu_base_category( category ) &&
-                       category != "debug" &&
-                       category != "back";
-            } )
-            | std::ranges::to<std::vector>();
-            if( !extra_categories.empty() ) {
-                register_categories( std::move( extra_categories ) );
-            }
+            auto extra_categories =
+                lua_category_ids | std::views::filter([&](const std::string& category) {
+                    return !is_action_menu_base_category(category) && category != "debug"
+                        && category != "back";
+                })
+                | std::ranges::to<std::vector>();
+            if (!extra_categories.empty()) { register_categories(std::move(extra_categories)); }
 
-            register_lua_action_entries( category_id );
-        } else if( category_id == "look" ) {
-            register_actions( { ACTION_LOOK, ACTION_PEEK, ACTION_LIST_ITEMS, ACTION_ZONES, ACTION_MAP, ACTION_SKY } );
-            register_lua_action_entries( category_id );
-        } else if( category_id == "inventory" ) {
-            register_actions( {ACTION_INVENTORY, ACTION_ADVANCEDINV, ACTION_SORT_ARMOR, ACTION_DIR_DROP } );
+            register_lua_action_entries(category_id);
+        } else if (category_id == "look") {
+            register_actions(
+                {ACTION_LOOK, ACTION_PEEK, ACTION_LIST_ITEMS, ACTION_ZONES, ACTION_MAP,
+                 ACTION_SKY});
+            register_lua_action_entries(category_id);
+        } else if (category_id == "inventory") {
+            register_actions(
+                {ACTION_INVENTORY, ACTION_ADVANCEDINV, ACTION_SORT_ARMOR, ACTION_DIR_DROP});
 
             // Everything below here can be accessed through
             // the inventory screen, so it's sorted to the
             // end of the list.
-            register_actions( {
-                ACTION_DROP, ACTION_COMPARE, ACTION_ORGANIZE, ACTION_USE,
-                ACTION_WEAR, ACTION_TAKE_OFF, ACTION_EAT, ACTION_OPEN_CONSUME,
-                ACTION_READ, ACTION_WIELD, ACTION_UNLOAD, ACTION_UNLOAD_ALL
-            } );
-            register_lua_action_entries( category_id );
-        } else if( category_id == "debug" ) {
-            register_actions( { ACTION_DEBUG } );
-            if( ( entry = &entries.back() ) ) {
+            register_actions(
+                {ACTION_DROP, ACTION_COMPARE, ACTION_ORGANIZE, ACTION_USE, ACTION_WEAR,
+                 ACTION_TAKE_OFF, ACTION_EAT, ACTION_OPEN_CONSUME, ACTION_READ, ACTION_WIELD,
+                 ACTION_UNLOAD, ACTION_UNLOAD_ALL});
+            register_lua_action_entries(category_id);
+        } else if (category_id == "debug") {
+            register_actions({ACTION_DEBUG});
+            if ((entry = &entries.back())) {
                 // debug _is_a menu.
                 entry->txt += "…";
             }
-            register_actions( { ACTION_TOGGLE_PIXEL_MINIMAP, ACTION_RELOAD_TILESET  } );
-            register_actions( {
-                ACTION_TOGGLE_PANEL_ADM, ACTION_DISPLAY_SCENT, ACTION_DISPLAY_SCENT_TYPE,
-                ACTION_DISPLAY_TEMPERATURE, ACTION_DISPLAY_VEHICLE_AI, ACTION_DISPLAY_VISIBILITY,
-                ACTION_DISPLAY_LIGHTING, ACTION_DISPLAY_TRANSPARENCY, ACTION_DISPLAY_RADIATION,
-                ACTION_DISPLAY_OUTSIDE, ACTION_DISPLAY_SOUND, ACTION_DISPLAY_SOUND_ABSORPTION,
-                ACTION_DISPLAY_SOUND_WALLS,
-                ACTION_DISPLAY_SUBMAP_GRID, ACTION_TOGGLE_ZONE_OVERLAY, ACTION_TOGGLE_DEBUG_MODE,
-                ACTION_TOGGLE_FPS
-            } );
-            register_lua_action_entries( category_id );
-        } else if( category_id == "interact" ) {
-            register_actions( {
-                ACTION_EXAMINE, ACTION_JUMP, ACTION_SMASH, ACTION_MOVE_DOWN, ACTION_MOVE_UP,
-                ACTION_OPEN, ACTION_CLOSE, ACTION_CHAT, ACTION_PICKUP,
-                ACTION_PICKUP_ALL, ACTION_PICKUP_FEET, ACTION_GRAB, ACTION_HAUL, ACTION_BUTCHER, ACTION_LOOT,
-            } );
-            register_lua_action_entries( category_id );
-        } else if( category_id == "combat" ) {
-            register_actions( {
-                ACTION_CYCLE_MOVE, ACTION_RESET_MOVE, ACTION_TOGGLE_RUN, ACTION_TOGGLE_CROUCH,
-                ACTION_TOGGLE_PRONE, ACTION_OPEN_MOVEMENT, ACTION_FIRE, ACTION_RELOAD_ITEM, ACTION_RELOAD_WEAPON,
-                ACTION_RELOAD_WIELDED, ACTION_CAST_SPELL, ACTION_CAST_LAST_SPELL,
-                ACTION_SELECT_FIRE_MODE,
-                ACTION_SELECT_DEFAULT_AMMO, ACTION_THROW, ACTION_FIRE_BURST, ACTION_PICK_STYLE,
-                ACTION_TOGGLE_AUTO_TRAVEL_MODE, ACTION_TOGGLE_SAFEMODE, ACTION_TOGGLE_AUTOSAFE,
-                ACTION_IGNORE_ENEMY, ACTION_TOGGLE_AUTO_FEATURES, ACTION_TOGGLE_AUTO_PULP_BUTCHER,
-                ACTION_TOGGLE_AUTO_MINING, ACTION_TOGGLE_AUTO_FORAGING
-            } );
-            register_lua_action_entries( category_id );
-        } else if( category_id == "craft" ) {
-            register_actions( {
-                ACTION_CRAFT, ACTION_RECRAFT, ACTION_LONGCRAFT,
-                ACTION_CONSTRUCT, ACTION_DISASSEMBLE, ACTION_SALVAGE
-            } );
-            register_lua_action_entries( category_id );
-        } else if( category_id == "info" ) {
-            register_actions( {
-                ACTION_PL_INFO, ACTION_MISSIONS, ACTION_SCORES,
-                ACTION_FACTIONS, ACTION_MORALE, ACTION_MESSAGES, ACTION_DIARY,
-                ACTION_TOGGLE_SOMA_DETAIL
-            } );
-            register_lua_action_entries( category_id );
-        } else if( category_id == "misc" ) {
-            register_actions( {
-                ACTION_WAIT, ACTION_SLEEP, ACTION_BIONICS, ACTION_MUTATIONS,
-                ACTION_CONTROL_VEHICLE, ACTION_ITEMACTION, ACTION_TOGGLE_THIEF_MODE
-            } );
-            register_actions( { ACTION_ZOOM_OUT, ACTION_ZOOM_IN } );
-            register_lua_action_entries( category_id );
+            register_actions({ACTION_TOGGLE_PIXEL_MINIMAP, ACTION_RELOAD_TILESET});
+            register_actions(
+                {ACTION_TOGGLE_PANEL_ADM, ACTION_DISPLAY_SCENT, ACTION_DISPLAY_SCENT_TYPE,
+                 ACTION_DISPLAY_TEMPERATURE, ACTION_DISPLAY_VEHICLE_AI, ACTION_DISPLAY_VISIBILITY,
+                 ACTION_DISPLAY_LIGHTING, ACTION_DISPLAY_TRANSPARENCY, ACTION_DISPLAY_RADIATION,
+                 ACTION_DISPLAY_OUTSIDE, ACTION_DISPLAY_SOUND, ACTION_DISPLAY_SOUND_ABSORPTION,
+                 ACTION_DISPLAY_SOUND_WALLS, ACTION_DISPLAY_SUBMAP_GRID, ACTION_TOGGLE_ZONE_OVERLAY,
+                 ACTION_TOGGLE_DEBUG_MODE, ACTION_TOGGLE_FPS});
+            register_lua_action_entries(category_id);
+        } else if (category_id == "interact") {
+            register_actions({
+                ACTION_EXAMINE,
+                ACTION_JUMP,
+                ACTION_SMASH,
+                ACTION_MOVE_DOWN,
+                ACTION_MOVE_UP,
+                ACTION_OPEN,
+                ACTION_CLOSE,
+                ACTION_CHAT,
+                ACTION_PICKUP,
+                ACTION_PICKUP_ALL,
+                ACTION_PICKUP_FEET,
+                ACTION_GRAB,
+                ACTION_HAUL,
+                ACTION_BUTCHER,
+                ACTION_LOOT,
+            });
+            register_lua_action_entries(category_id);
+        } else if (category_id == "combat") {
+            register_actions(
+                {ACTION_CYCLE_MOVE,
+                 ACTION_RESET_MOVE,
+                 ACTION_TOGGLE_RUN,
+                 ACTION_TOGGLE_CROUCH,
+                 ACTION_TOGGLE_PRONE,
+                 ACTION_OPEN_MOVEMENT,
+                 ACTION_FIRE,
+                 ACTION_RELOAD_ITEM,
+                 ACTION_RELOAD_WEAPON,
+                 ACTION_RELOAD_WIELDED,
+                 ACTION_CAST_SPELL,
+                 ACTION_CAST_LAST_SPELL,
+                 ACTION_SELECT_FIRE_MODE,
+                 ACTION_SELECT_DEFAULT_AMMO,
+                 ACTION_THROW,
+                 ACTION_FIRE_BURST,
+                 ACTION_PICK_STYLE,
+                 ACTION_TOGGLE_AUTO_TRAVEL_MODE,
+                 ACTION_TOGGLE_SAFEMODE,
+                 ACTION_TOGGLE_AUTOSAFE,
+                 ACTION_IGNORE_ENEMY,
+                 ACTION_TOGGLE_AUTO_FEATURES,
+                 ACTION_TOGGLE_AUTO_PULP_BUTCHER,
+                 ACTION_TOGGLE_AUTO_MINING,
+                 ACTION_TOGGLE_AUTO_FORAGING});
+            register_lua_action_entries(category_id);
+        } else if (category_id == "craft") {
+            register_actions(
+                {ACTION_CRAFT, ACTION_RECRAFT, ACTION_LONGCRAFT, ACTION_CONSTRUCT,
+                 ACTION_DISASSEMBLE, ACTION_SALVAGE});
+            register_lua_action_entries(category_id);
+        } else if (category_id == "info") {
+            register_actions(
+                {ACTION_PL_INFO, ACTION_MISSIONS, ACTION_SCORES, ACTION_FACTIONS, ACTION_MORALE,
+                 ACTION_MESSAGES, ACTION_DIARY, ACTION_TOGGLE_SOMA_DETAIL});
+            register_lua_action_entries(category_id);
+        } else if (category_id == "misc") {
+            register_actions(
+                {ACTION_WAIT, ACTION_SLEEP, ACTION_BIONICS, ACTION_MUTATIONS,
+                 ACTION_CONTROL_VEHICLE, ACTION_ITEMACTION, ACTION_TOGGLE_THIEF_MODE});
+            register_actions({ACTION_ZOOM_OUT, ACTION_ZOOM_IN});
+            register_lua_action_entries(category_id);
         } else {
-            register_lua_action_entries( category_id );
+            register_lua_action_entries(category_id);
         }
 
-        if( category_id != "back" ) {
-            std::string msg = _( "Back" );
-            entries.emplace_back( 2 * NUM_ACTIONS, true,
-                                  hotkey_for_action( ACTION_ACTIONMENU ), msg + "…" );
+        if (category_id != "back") {
+            std::string msg = _("Back");
+            entries.emplace_back(
+                2 * NUM_ACTIONS, true, hotkey_for_action(ACTION_ACTIONMENU), msg + "…");
         }
 
-        std::string title = _( "Actions" );
-        if( category_id != "back" ) {
-            auto catgname = action_menu_category_display_name( category_id );
-            capitalize_letter( catgname, 0 );
+        std::string title = _("Actions");
+        if (category_id != "back") {
+            auto catgname = action_menu_category_display_name(category_id);
+            capitalize_letter(catgname, 0);
             title += ": " + catgname;
         }
 
         uilist smenu;
-        smenu.settext( title );
+        smenu.settext(title);
         smenu.entries = entries;
         smenu.query();
         const int selection = smenu.ret;
 
-        if( selection < 0 || selection == NUM_ACTIONS ) {
+        if (selection < 0 || selection == NUM_ACTIONS) {
             return ACTION_NULL;
-        } else if( selection == 2 * NUM_ACTIONS ) {
-            if( category_id != "back" ) {
+        } else if (selection == 2 * NUM_ACTIONS) {
+            if (category_id != "back") {
                 category_id = "back";
             } else {
                 return ACTION_NULL;
             }
-        } else if( const auto lua_entry = lua_entries_by_int.find( selection );
-                   lua_entry != lua_entries_by_int.end() ) {
-            cata::lua_action_menu::run_entry( lua_entry->second );
+        } else if (const auto lua_entry = lua_entries_by_int.find(selection);
+                   lua_entry != lua_entries_by_int.end()) {
+            cata::lua_action_menu::run_entry(lua_entry->second);
             return ACTION_NULL;
-        } else if( selection > NUM_ACTIONS ) {
+        } else if (selection > NUM_ACTIONS) {
             category_id = categories_by_int[selection];
         } else {
-            return static_cast<action_id>( selection );
+            return static_cast<action_id>(selection);
         }
     }
 }
 
-action_id handle_main_menu()
-{
+action_id handle_main_menu() {
     const input_context ctxt = get_default_mode_input_context();
     std::vector<uilist_entry> entries;
 
-    const auto register_actions = make_register_actions( entries, ctxt );
+    const auto register_actions = make_register_actions(entries, ctxt);
 
-    register_actions( {
-        ACTION_OPEN_WIKI, ACTION_OPEN_HHG, ACTION_HELP, ACTION_KEYBINDINGS, ACTION_OPTIONS, ACTION_AUTOPICKUP, ACTION_AUTONOTES,
-        ACTION_SAFEMODE, ACTION_DISTRACTION_MANAGER, ACTION_COLOR, ACTION_WORLD_MODS,
-        ACTION_ACTIONMENU, ACTION_QUICKSAVE, ACTION_SAVE, ACTION_DEBUG, ACTION_LUA_CONSOLE,
-        ACTION_LUA_RELOAD
-    } );
+    register_actions(
+        {ACTION_OPEN_WIKI, ACTION_OPEN_HHG, ACTION_HELP, ACTION_KEYBINDINGS, ACTION_OPTIONS,
+         ACTION_AUTOPICKUP, ACTION_AUTONOTES, ACTION_SAFEMODE, ACTION_DISTRACTION_MANAGER,
+         ACTION_COLOR, ACTION_WORLD_MODS, ACTION_ACTIONMENU, ACTION_QUICKSAVE, ACTION_SAVE,
+         ACTION_DEBUG, ACTION_LUA_CONSOLE, ACTION_LUA_RELOAD});
 
     uilist smenu;
-    smenu.settext( _( "MAIN MENU" ) );
+    smenu.settext(_("MAIN MENU"));
     smenu.entries = entries;
     smenu.query();
     int selection = smenu.ret;
 
-    if( selection < 0 || selection >= NUM_ACTIONS ) {
+    if (selection < 0 || selection >= NUM_ACTIONS) {
         return ACTION_NULL;
     } else {
-        return static_cast<action_id>( selection );
+        return static_cast<action_id>(selection);
     }
 }
 
-std::optional<tripoint_rel_ms> choose_direction( const std::string &message,
-        const bool allow_vertical )
-{
-    input_context ctxt( "DEFAULTMODE" );
-    ctxt.set_iso( true );
+std::optional<tripoint_rel_ms> choose_direction(
+    const std::string& message, const bool allow_vertical) {
+    input_context ctxt("DEFAULTMODE");
+    ctxt.set_iso(true);
     ctxt.register_directions();
-    ctxt.register_action( "pause" );
-    ctxt.register_action( "QUIT" );
-    ctxt.register_action( "HELP_KEYBINDINGS" );
-    if( allow_vertical ) {
-        ctxt.register_action( "LEVEL_UP" );
-        ctxt.register_action( "LEVEL_DOWN" );
+    ctxt.register_action("pause");
+    ctxt.register_action("QUIT");
+    ctxt.register_action("HELP_KEYBINDINGS");
+    if (allow_vertical) {
+        ctxt.register_action("LEVEL_UP");
+        ctxt.register_action("LEVEL_DOWN");
     }
 
     static_popup popup;
     //~ %s: "Close where?" "Pry where?" etc.
-    popup.message( _( "%s (Direction button)" ), message ).on_top( true );
+    popup.message(_("%s (Direction button)"), message).on_top(true);
 
     std::string action;
     do {
         ui_manager::redraw();
         action = ctxt.handle_input();
-        if( const std::optional<tripoint_rel_ms> vec = ctxt.get_direction( action ) ) {
-            // Make player's sprite face left/right if interacting with something to the left or right
-            if( vec->x() > 0 ) {
+        if (const std::optional<tripoint_rel_ms> vec = ctxt.get_direction(action)) {
+            // Make player's sprite face left/right if interacting with something to the left or
+            // right
+            if (vec->x() > 0) {
                 g->u.facing = FD_RIGHT;
-            } else if( vec->x() < 0 ) {
+            } else if (vec->x() < 0) {
                 g->u.facing = FD_LEFT;
             }
             return vec;
-        } else if( action == "pause" ) {
+        } else if (action == "pause") {
             return tripoint_rel_ms::zero();
-        } else if( action == "LEVEL_UP" ) {
+        } else if (action == "LEVEL_UP") {
             return tripoint_rel_ms::above();
-        } else if( action == "LEVEL_DOWN" ) {
+        } else if (action == "LEVEL_DOWN") {
             return tripoint_rel_ms::below();
         }
-    } while( action != "QUIT" );
+    } while (action != "QUIT");
 
-    add_msg( _( "Never mind." ) );
+    add_msg(_("Never mind."));
     return std::nullopt;
 }
 
-std::optional<tripoint_bub_ms> choose_adjacent( const std::string &message,
-        const bool allow_vertical )
-{
-    const std::optional<tripoint_rel_ms> dir = choose_direction( message, allow_vertical );
+std::optional<tripoint_bub_ms> choose_adjacent(
+    const std::string& message, const bool allow_vertical) {
+    const std::optional<tripoint_rel_ms> dir = choose_direction(message, allow_vertical);
 
-    if( !dir ) {
-        return std::nullopt;
-    }
+    if (!dir) { return std::nullopt; }
 
-    if( get_map().obstructed_by_vehicle_rotation( g->u.bub_pos(), *dir + g->u.bub_pos() ) ) {
-        add_msg( _( "You can't reach through that vehicle's wall." ) );
+    if (get_map().obstructed_by_vehicle_rotation(g->u.bub_pos(), *dir + g->u.bub_pos())) {
+        add_msg(_("You can't reach through that vehicle's wall."));
         return std::nullopt;
     }
 
     return *dir + g->u.bub_pos();
 }
 
-std::optional<tripoint_bub_ms> choose_adjacent_highlight( const std::string &message,
-        const std::string &failure_message, const action_id action, bool allow_vertical )
-{
-    const std::function<bool( const tripoint_bub_ms & )> f = [&action]( const tripoint_bub_ms & p ) {
-        return can_interact_at( action, p );
+std::optional<tripoint_bub_ms> choose_adjacent_highlight(
+    const std::string& message, const std::string& failure_message, const action_id action,
+    bool allow_vertical) {
+    const std::function<bool(const tripoint_bub_ms&)> f = [&action](const tripoint_bub_ms& p) {
+        return can_interact_at(action, p);
     };
-    return choose_adjacent_highlight( message, failure_message, f, allow_vertical );
+    return choose_adjacent_highlight(message, failure_message, f, allow_vertical);
 }
 
 std::optional<tripoint_bub_ms> choose_adjacent_highlight(
-    const std::string &message,
-    const std::string &failure_message,
-    const std::function < auto( const tripoint_bub_ms & ) -> bool > &allowed,
-    const bool allow_vertical )
-{
+    const std::string& message, const std::string& failure_message,
+    const std::function<auto(const tripoint_bub_ms&)->bool>& allowed, const bool allow_vertical) {
     std::vector<tripoint_bub_ms> valid;
-    map &here = get_map();
-    if( allowed ) {
-        for( const tripoint_bub_ms &pos : here.points_in_radius( g->u.bub_pos(), 1 ) ) {
-            if( !here.obstructed_by_vehicle_rotation( g->u.bub_pos(), pos ) && allowed( pos ) ) {
-                valid.emplace_back( pos );
+    map& here = get_map();
+    if (allowed) {
+        for (const tripoint_bub_ms& pos : here.points_in_radius(g->u.bub_pos(), 1)) {
+            if (!here.obstructed_by_vehicle_rotation(g->u.bub_pos(), pos) && allowed(pos)) {
+                valid.emplace_back(pos);
             }
         }
     }
 
-    const bool auto_select = get_option<bool>( "AUTOSELECT_SINGLE_VALID_TARGET" );
-    if( valid.empty() && auto_select ) {
-        add_msg( failure_message );
+    const bool auto_select = get_option<bool>("AUTOSELECT_SINGLE_VALID_TARGET");
+    if (valid.empty() && auto_select) {
+        add_msg(failure_message);
         return std::nullopt;
-    } else if( valid.size() == 1 && auto_select ) {
+    } else if (valid.size() == 1 && auto_select) {
         return valid.back();
     }
 
     // TODO(tiles-rip-out): re-add the adjacent-tile highlight via the tiles cursor/
     // highlight overlay. The old curses w_terrain drawsq highlight was dead under
     // tiles and has been removed.
-    const auto selection = choose_adjacent( message, allow_vertical );
-    if( selection.has_value() && std::ranges::contains( valid, selection.value() ) ) {
+    const auto selection = choose_adjacent(message, allow_vertical);
+    if (selection.has_value() && std::ranges::contains(valid, selection.value())) {
         return selection;
     }
 
@@ -1395,141 +1324,130 @@ std::optional<tripoint_bub_ms> choose_adjacent_highlight(
 }
 
 std::optional<tripoint_bub_ms> choose_adjacent_uilist(
-    const std::string &message,
-    const std::string &failure_message,
-    const std::function < auto( const tripoint_bub_ms & ) -> bool > &allowed,
-    const std::function < auto( const tripoint_bub_ms & ) -> std::optional<std::string> > &name,
-    const bool allow_vertical )
-{
+    const std::string& message, const std::string& failure_message,
+    const std::function<auto(const tripoint_bub_ms&)->bool>& allowed,
+    const std::function<auto(const tripoint_bub_ms&)->std::optional<std::string>>& name,
+    const bool allow_vertical) {
     struct direction_entry {
         std::string short_name;
         std::string long_name;
         int inv_key;
 
-        constexpr direction_entry( const std::string &s, const std::string &n, const int k ) noexcept
-            : short_name( s ), long_name( n ), inv_key( k ) {}
+        constexpr direction_entry(const std::string& s, const std::string& n, const int k) noexcept
+            : short_name(s),
+              long_name(n),
+              inv_key(k) {}
     };
 
     static const std::unordered_map<tripoint_rel_ms, direction_entry> DIR_NAMES = {
-        { tripoint_rel_ms::south_west(), direction_entry( _( "SW" ), _( "South West" ), '1' )},
-        { tripoint_rel_ms::south(), direction_entry( _( "S" ), _( "South" ), '2' )},
-        { tripoint_rel_ms::south_east(), direction_entry( _( "SE" ), _( "South East" ), '3' )},
-        { tripoint_rel_ms::west(), direction_entry( _( "W" ), _( "West" ), '4' )},
-        { tripoint_rel_ms::zero(), direction_entry( _( "-" ), _( "Directly below you" ), '5' )},
-        { tripoint_rel_ms::east(), direction_entry( _( "E" ), _( "East" ), '6' )},
-        { tripoint_rel_ms::north_west(), direction_entry( _( "NW" ), _( "North West" ), '7' )},
-        { tripoint_rel_ms::north(), direction_entry( _( "N" ), _( "North" ), '8' )},
-        { tripoint_rel_ms::north_east(), direction_entry( _( "NE" ), _( "North East" ), '9' )},
-        { tripoint_rel_ms::above(), direction_entry( _( "UP" ), _( "Above" ), '<' )},
-        { tripoint_rel_ms::below(), direction_entry( _( "DN" ), _( "Below" ), '>' )},
+        {tripoint_rel_ms::south_west(), direction_entry(_("SW"), _("South West"), '1')},
+        {tripoint_rel_ms::south(), direction_entry(_("S"), _("South"), '2')},
+        {tripoint_rel_ms::south_east(), direction_entry(_("SE"), _("South East"), '3')},
+        {tripoint_rel_ms::west(), direction_entry(_("W"), _("West"), '4')},
+        {tripoint_rel_ms::zero(), direction_entry(_("-"), _("Directly below you"), '5')},
+        {tripoint_rel_ms::east(), direction_entry(_("E"), _("East"), '6')},
+        {tripoint_rel_ms::north_west(), direction_entry(_("NW"), _("North West"), '7')},
+        {tripoint_rel_ms::north(), direction_entry(_("N"), _("North"), '8')},
+        {tripoint_rel_ms::north_east(), direction_entry(_("NE"), _("North East"), '9')},
+        {tripoint_rel_ms::above(), direction_entry(_("UP"), _("Above"), '<')},
+        {tripoint_rel_ms::below(), direction_entry(_("DN"), _("Below"), '>')},
     };
 
     std::vector<tripoint_bub_ms> valid;
-    const map &here = get_map();
+    const map& here = get_map();
     const auto center = g->u.bub_pos();
-    if( allowed ) {
-        for( const auto &pos : here.points_in_radius( center, 1, 0 ) ) {
-            if( !here.obstructed_by_vehicle_rotation( center, pos ) && allowed( pos ) ) {
-                valid.emplace_back( pos );
+    if (allowed) {
+        for (const auto& pos : here.points_in_radius(center, 1, 0)) {
+            if (!here.obstructed_by_vehicle_rotation(center, pos) && allowed(pos)) {
+                valid.emplace_back(pos);
             }
         }
-        if( allow_vertical ) {
-            for( const tripoint_bub_ms &pos : { tripoint_bub_ms::above(), tripoint_bub_ms::below() } ) {
-                if( !here.obstructed_by_vehicle_rotation( center, pos ) && allowed( pos ) ) {
-                    valid.emplace_back( pos );
+        if (allow_vertical) {
+            for (const tripoint_bub_ms& pos :
+                 {tripoint_bub_ms::above(), tripoint_bub_ms::below()}) {
+                if (!here.obstructed_by_vehicle_rotation(center, pos) && allowed(pos)) {
+                    valid.emplace_back(pos);
                 }
             }
         }
     }
 
 
-    const bool auto_select = get_option<bool>( "AUTOSELECT_SINGLE_VALID_TARGET" );
-    if( auto_select ) {
-        if( valid.empty() ) {
-            add_msg( failure_message );
+    const bool auto_select = get_option<bool>("AUTOSELECT_SINGLE_VALID_TARGET");
+    if (auto_select) {
+        if (valid.empty()) {
+            add_msg(failure_message);
             return std::nullopt;
         }
-        if( valid.size() == 1 ) {
-            return valid.back();
-        }
+        if (valid.size() == 1) { return valid.back(); }
     }
 
     uilist lst;
     lst.title = message;
     int i = 0;
-    for( const auto &pos : valid ) {
-        const auto ent = DIR_NAMES.at( pos - center );
+    for (const auto& pos : valid) {
+        const auto ent = DIR_NAMES.at(pos - center);
         std::string text;
-        if( name ) {
-            const auto x = name( pos );
-            if( x.has_value() ) {
-                text = string_format( "%s (%s)", x.value(), ent.short_name );
+        if (name) {
+            const auto x = name(pos);
+            if (x.has_value()) {
+                text = string_format("%s (%s)", x.value(), ent.short_name);
             } else {
                 text = ent.long_name;
             }
         } else {
             text = ent.long_name;
         }
-        lst.addentry( i++, true, ent.inv_key, text );
+        lst.addentry(i++, true, ent.inv_key, text);
     }
 
     lst.query();
-    if( lst.ret < 0 ) {
-        add_msg( failure_message );
+    if (lst.ret < 0) {
+        add_msg(failure_message);
         return std::nullopt;
     }
 
-    return valid.at( lst.ret );
+    return valid.at(lst.ret);
 }
 
-std::optional<std::pair<tripoint_bub_ms, tripoint_bub_ms>> choose_area( const std::string &message,
-        const tripoint_bub_ms &_start_pos, bool allow_vertical )
-{
+std::optional<std::pair<tripoint_bub_ms, tripoint_bub_ms>> choose_area(
+    const std::string& message, const tripoint_bub_ms& _start_pos, bool allow_vertical) {
 
-    auto &u = g->u;
+    auto& u = g->u;
     ui_adaptor ui;
 
-    on_out_of_scope invalidate_current_ui( [&]() { ui.mark_resize(); } );
+    on_out_of_scope invalidate_current_ui([&]() { ui.mark_resize(); });
     ui.mark_resize();
 
     static_popup popup;
-    popup.on_top( true );
-    popup.message( "%s (%s)", message, _( "Select first point." ) );
+    popup.on_top(true);
+    popup.message("%s (%s)", message, _("Select first point."));
 
-    tripoint_bub_ms center = _start_pos == tripoint_bub_ms::zero() ? ( u.bub_pos() + u.view_offset ) :
-                             _start_pos;
+    tripoint_bub_ms center =
+        _start_pos == tripoint_bub_ms::zero() ? (u.bub_pos() + u.view_offset) : _start_pos;
 
     const look_around_mode mode = allow_vertical ? LA_MODE_DEFAULT : LA_MODE_2D;
-    const auto [p0, _] = g->look_around( false, center, center, false, true, false, false,
-                                         tripoint_bub_ms::zero(), mode );
-    if( p0 ) {
-        auto highlight = make_shared_fast<game::draw_callback_t>( [&]() {
+    const auto [p0, _] = g->look_around(
+        false, center, center, false, true, false, false, tripoint_bub_ms::zero(), mode);
+    if (p0) {
+        auto highlight = make_shared_fast<game::draw_callback_t>([&]() {
             zone_draw_options opt;
             opt.start = p0.value();
-            g->draw_zones( opt );
-        } );
-        g->add_draw_callback( highlight );
+            g->draw_zones(opt);
+        });
+        g->add_draw_callback(highlight);
 
-        popup.message( "%s (%s)", message, _( "Select second point." ) );
-        const auto [p1, _] = g->look_around( false, center, p0.value(), true, true, false, false,
-                                             tripoint_bub_ms::zero(), mode );
-        if( p1 ) {
-            auto first =
-                tripoint_bub_ms(
-                    std::min( p0->x(), p1->x() ),
-                    std::min( p0->y(), p1->y() ),
-                    std::min( p0->z(), p1->z() )
-                );
-            auto second =
-                tripoint_bub_ms(
-                    std::max( p0->x(), p1->x() ),
-                    std::max( p0->y(), p1->y() ),
-                    std::max( p0->z(), p1->z() )
-                );
-            return std::pair( first, second );
+        popup.message("%s (%s)", message, _("Select second point."));
+        const auto [p1, _] = g->look_around(
+            false, center, p0.value(), true, true, false, false, tripoint_bub_ms::zero(), mode);
+        if (p1) {
+            auto first = tripoint_bub_ms(
+                std::min(p0->x(), p1->x()), std::min(p0->y(), p1->y()), std::min(p0->z(), p1->z()));
+            auto second = tripoint_bub_ms(
+                std::max(p0->x(), p1->x()), std::max(p0->y(), p1->y()), std::max(p0->z(), p1->z()));
+            return std::pair(first, second);
         }
     }
 
     return std::nullopt;
-
 }

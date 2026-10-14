@@ -11,6 +11,4 @@ class Character;
 /// @return actually healed amount. used for `mod_part_healed_total`
 ///
 /// TODO: merge into `Character::heal`?
-auto heal_adjusted( Character &c, const bodypart_id &bp, const int heal ) -> int;
-
-
+auto heal_adjusted(Character& c, const bodypart_id& bp, const int heal) -> int;

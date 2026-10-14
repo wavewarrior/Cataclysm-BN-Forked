@@ -1,16 +1,5 @@
 #include "driver_view.h"
 
-#include <algorithm>
-#include <cstddef>
-#include <cstdlib>
-#include <map>
-#include <optional>
-#include <string>
-#include <string_view>
-#include <tuple>
-#include <utility>
-#include <vector>
-
 #include "avatar.h"
 #include "coordinates.h"
 #include "creature.h"
@@ -27,11 +16,20 @@
 #include "type_id.h"
 #include "vpart_position.h"
 
-namespace driver_view
-{
+#include <algorithm>
+#include <cstddef>
+#include <cstdlib>
+#include <map>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <utility>
+#include <vector>
 
-namespace
-{
+namespace driver_view {
+
+namespace {
 
 /// Entries one list carries before it is cut. With the byte budget below they keep the whole
 /// response within about 1.5K tokens even when the lean part of it is as long as it can be.
@@ -55,77 +53,51 @@ struct glyph {
     std::string_view meaning;
 };
 
-constexpr glyph you = { '@', "you" };
-constexpr glyph unseen = { '?', "out of sight or off the loaded map" };
-constexpr glyph monster_glyph = { 'M', "monster" };
-constexpr glyph person_glyph = { 'N', "person" };
-constexpr glyph items_glyph = { '*', "items" };
-constexpr glyph vehicle_glyph = { 'V', "vehicle part" };
-constexpr glyph furniture_glyph = { '&', "furniture" };
-constexpr glyph stairs_up = { '<', "stairs up" };
-constexpr glyph stairs_down = { '>', "stairs down" };
-constexpr glyph closed_door = { '+', "closed door or window" };
-constexpr glyph open_door = { '\'', "open door or window" };
-constexpr glyph deep_water = { 'W', "deep water" };
-constexpr glyph shallow_water = { '~', "shallow water" };
-constexpr glyph tree = { 'T', "tree" };
-constexpr glyph shrub = { 's', "shrub" };
-constexpr glyph open_air = { '_', "open air, no floor" };
-constexpr glyph solid = { '#', "wall or solid obstacle" };
-constexpr glyph see_through = { '=', "obstacle that can be seen past" };
-constexpr glyph ground = { '.', "ground or floor" };
+constexpr glyph you = {'@', "you"};
+constexpr glyph unseen = {'?', "out of sight or off the loaded map"};
+constexpr glyph monster_glyph = {'M', "monster"};
+constexpr glyph person_glyph = {'N', "person"};
+constexpr glyph items_glyph = {'*', "items"};
+constexpr glyph vehicle_glyph = {'V', "vehicle part"};
+constexpr glyph furniture_glyph = {'&', "furniture"};
+constexpr glyph stairs_up = {'<', "stairs up"};
+constexpr glyph stairs_down = {'>', "stairs down"};
+constexpr glyph closed_door = {'+', "closed door or window"};
+constexpr glyph open_door = {'\'', "open door or window"};
+constexpr glyph deep_water = {'W', "deep water"};
+constexpr glyph shallow_water = {'~', "shallow water"};
+constexpr glyph tree = {'T', "tree"};
+constexpr glyph shrub = {'s', "shrub"};
+constexpr glyph open_air = {'_', "open air, no floor"};
+constexpr glyph solid = {'#', "wall or solid obstacle"};
+constexpr glyph see_through = {'=', "obstacle that can be seen past"};
+constexpr glyph ground = {'.', "ground or floor"};
 
 /// What the terrain of a tile is, apart from anything standing or lying on it.
-auto terrain_glyph( const map &here, const tripoint_bub_ms &pos ) -> glyph
-{
-    const ter_t &terrain = here.ter( pos ).obj();
+auto terrain_glyph(const map& here, const tripoint_bub_ms& pos) -> glyph {
+    const ter_t& terrain = here.ter(pos).obj();
     // Deep water lets the avatar dive down, so it carries the stairs flag too: water comes first.
-    if( terrain.has_flag( TFLAG_DEEP_WATER ) ) {
-        return deep_water;
-    }
-    if( terrain.has_flag( TFLAG_SWIMMABLE ) || terrain.has_flag( TFLAG_LIQUID ) ) {
+    if (terrain.has_flag(TFLAG_DEEP_WATER)) { return deep_water; }
+    if (terrain.has_flag(TFLAG_SWIMMABLE) || terrain.has_flag(TFLAG_LIQUID)) {
         return shallow_water;
     }
-    if( terrain.has_flag( TFLAG_GOES_UP ) ) {
-        return stairs_up;
-    }
-    if( terrain.has_flag( TFLAG_GOES_DOWN ) ) {
-        return stairs_down;
-    }
-    if( terrain.has_flag( TFLAG_TREE ) ) {
-        return tree;
-    }
-    if( terrain.has_flag( TFLAG_SHRUB ) ) {
-        return shrub;
-    }
-    if( terrain.has_flag( TFLAG_NO_FLOOR ) ) {
-        return open_air;
-    }
-    if( !terrain.open.is_null() ) {
-        return closed_door;
-    }
-    if( !terrain.close.is_null() ) {
-        return open_door;
-    }
-    if( here.impassable( pos ) ) {
-        return here.is_transparent( pos ) ? see_through : solid;
-    }
+    if (terrain.has_flag(TFLAG_GOES_UP)) { return stairs_up; }
+    if (terrain.has_flag(TFLAG_GOES_DOWN)) { return stairs_down; }
+    if (terrain.has_flag(TFLAG_TREE)) { return tree; }
+    if (terrain.has_flag(TFLAG_SHRUB)) { return shrub; }
+    if (terrain.has_flag(TFLAG_NO_FLOOR)) { return open_air; }
+    if (!terrain.open.is_null()) { return closed_door; }
+    if (!terrain.close.is_null()) { return open_door; }
+    if (here.impassable(pos)) { return here.is_transparent(pos) ? see_through : solid; }
     return ground;
 }
 
 /// What a tile with nothing alive on it looks like: items, a vehicle, furniture, then terrain.
-auto tile_glyph( const map &here, const tripoint_bub_ms &pos, bool has_items ) -> glyph
-{
-    if( has_items ) {
-        return items_glyph;
-    }
-    if( here.veh_at( pos ) ) {
-        return vehicle_glyph;
-    }
-    if( here.has_furn( pos ) ) {
-        return furniture_glyph;
-    }
-    return terrain_glyph( here, pos );
+auto tile_glyph(const map& here, const tripoint_bub_ms& pos, bool has_items) -> glyph {
+    if (has_items) { return items_glyph; }
+    if (here.veh_at(pos)) { return vehicle_glyph; }
+    if (here.has_furn(pos)) { return furniture_glyph; }
+    return terrain_glyph(here, pos);
 }
 
 /// A creature or item in view, where it is from the avatar and what the driver calls it. An
@@ -133,25 +105,24 @@ auto tile_glyph( const map &here, const tripoint_bub_ms &pos, bool has_items ) -
 struct visible_entity {
     int dx = 0;
     int dy = 0;
-    item *source = nullptr;
+    item* source = nullptr;
     std::string id;
     std::string name;
     bool hostile = false;
 };
 
 /// Nearest first, as the game measures distance, then north to south, west to east.
-auto nearer( const visible_entity &a, const visible_entity &b ) -> bool
-{
-    const auto key = []( const visible_entity & at ) {
-        return std::tuple( std::max( std::abs( at.dx ), std::abs( at.dy ) ), at.dy, at.dx );
+auto nearer(const visible_entity& a, const visible_entity& b) -> bool {
+    const auto key = [](const visible_entity& at) {
+        return std::tuple(std::max(std::abs(at.dx), std::abs(at.dy)), at.dy, at.dx);
     };
-    return key( a ) < key( b );
+    return key(a) < key(b);
 }
 
 /// What to look for on one tile: who is looking, the tile, and its offset from the avatar.
 struct creature_probe {
-    const avatar &u;
-    const tripoint_bub_ms &pos;
+    const avatar& u;
+    const tripoint_bub_ms& pos;
     int dx = 0;
     int dy = 0;
 };
@@ -163,23 +134,28 @@ struct creature_seen {
 };
 
 /// How a creature on a tile looks to the avatar, if it sees one there.
-auto creature_entry( const creature_probe &asked ) -> std::optional<creature_seen>
-{
-    Creature *const critter = g->critter_at( asked.pos, true );
-    if( critter == nullptr || !asked.u.sees( *critter ) ) {
-        return std::nullopt;
+auto creature_entry(const creature_probe& asked) -> std::optional<creature_seen> {
+    Creature* const critter = g->critter_at(asked.pos, true);
+    if (critter == nullptr || !asked.u.sees(*critter)) { return std::nullopt; }
+    if (const monster* const mon = dynamic_cast<const monster*>(critter)) {
+        return creature_seen{
+            .shown = monster_glyph,
+            .entry = visible_entity{
+                .dx = asked.dx,
+                .dy = asked.dy,
+                .id = mon->type->id.str(),
+                .name = driver_items::truncate_name(mon->name()),
+                .hostile = mon->attitude(&asked.u) == MATT_ATTACK}};
     }
-    if( const monster *const mon = dynamic_cast<const monster *>( critter ) ) {
-        return creature_seen{ .shown = monster_glyph, .entry = visible_entity{
-                .dx = asked.dx, .dy = asked.dy, .id = mon->type->id.str(),
-                .name = driver_items::truncate_name( mon->name() ),
-                .hostile = mon->attitude( &asked.u ) == MATT_ATTACK } };
-    }
-    if( const npc *const person = dynamic_cast<const npc *>( critter ) ) {
-        return creature_seen{ .shown = person_glyph, .entry = visible_entity{
-                .dx = asked.dx, .dy = asked.dy, .id = "npc",
-                .name = driver_items::truncate_name( person->name ),
-                .hostile = person->is_enemy() } };
+    if (const npc* const person = dynamic_cast<const npc*>(critter)) {
+        return creature_seen{
+            .shown = person_glyph,
+            .entry = visible_entity{
+                .dx = asked.dx,
+                .dy = asked.dy,
+                .id = "npc",
+                .name = driver_items::truncate_name(person->name),
+                .hostile = person->is_enemy()}};
     }
     return std::nullopt;
 }
@@ -195,47 +171,43 @@ struct window {
     /// What `radius`, the grid and the legend take as text, at most.
     auto fixed_bytes() const -> size_t {
         size_t bytes = framing_bytes;
-        for( const std::string &row : grid ) {
-            bytes += row.size() + row_framing_bytes;
-        }
-        for( const auto &[symbol, meaning] : legend ) {
+        for (const std::string& row : grid) { bytes += row.size() + row_framing_bytes; }
+        for (const auto& [symbol, meaning] : legend) {
             bytes += meaning.size() + legend_framing_bytes;
         }
         return bytes;
     }
 };
 
-auto look_around( int radius ) -> window
-{
-    auto &u = get_avatar();
-    auto &here = get_map();
+auto look_around(int radius) -> window {
+    auto& u = get_avatar();
+    auto& here = get_map();
     const auto centre = u.bub_pos();
 
-    window seen{ .radius = radius };
-    for( int dy = -radius; dy <= radius; ++dy ) {
+    window seen{.radius = radius};
+    for (int dy = -radius; dy <= radius; ++dy) {
         std::string row;
-        for( int dx = -radius; dx <= radius; ++dx ) {
-            const auto pos = centre + tripoint_rel_ms( dx, dy, 0 );
+        for (int dx = -radius; dx <= radius; ++dx) {
+            const auto pos = centre + tripoint_rel_ms(dx, dy, 0);
             const auto own_tile = dx == 0 && dy == 0;
             glyph shown = unseen;
-            if( own_tile || ( here.inbounds( pos ) && u.sees( pos ) ) ) {
-                const auto lying = driver_items::items_at( pos );
-                for( item *it : lying ) {
-                    seen.items.push_back( { .dx = dx, .dy = dy, .source = it } );
-                }
-                if( own_tile ) {
+            if (own_tile || (here.inbounds(pos) && u.sees(pos))) {
+                const auto lying = driver_items::items_at(pos);
+                for (item* it : lying) { seen.items.push_back({.dx = dx, .dy = dy, .source = it}); }
+                if (own_tile) {
                     shown = you;
-                } else if( auto creature = creature_entry( { .u = u, .pos = pos, .dx = dx, .dy = dy } ) ) {
+                } else if (
+                    auto creature = creature_entry({.u = u, .pos = pos, .dx = dx, .dy = dy})) {
                     shown = creature->shown;
-                    seen.creatures.push_back( std::move( creature->entry ) );
+                    seen.creatures.push_back(std::move(creature->entry));
                 } else {
-                    shown = tile_glyph( here, pos, !lying.empty() );
+                    shown = tile_glyph(here, pos, !lying.empty());
                 }
             }
-            seen.legend.emplace( shown.symbol, shown.meaning );
-            row.push_back( shown.symbol );
+            seen.legend.emplace(shown.symbol, shown.meaning);
+            row.push_back(shown.symbol);
         }
-        seen.grid.push_back( std::move( row ) );
+        seen.grid.push_back(std::move(row));
     }
     return seen;
 }
@@ -250,46 +222,41 @@ struct list_spec {
 
 /// Writes lists into a response, until their shared byte budget is used up.
 struct list_writer {
-    JsonOut &jo;
+    JsonOut& jo;
     size_t budget = 0;
 
     /// Writes the nearest of `entries` that fit the spec's limit and what is left of the
     /// budget. Returns true when some were left out.
-    auto write( const list_spec &spec, std::vector<visible_entity> entries ) -> bool;
+    auto write(const list_spec& spec, std::vector<visible_entity> entries) -> bool;
 };
 
 /// What an entry is called: an item's name is read from the item now.
-auto name_of( const visible_entity &entry ) -> std::string
-{
-    return entry.source != nullptr ? driver_items::truncate_name( entry.source->display_name() ) :
-           entry.name;
+auto name_of(const visible_entity& entry) -> std::string {
+    return entry.source != nullptr
+             ? driver_items::truncate_name(entry.source->display_name())
+             : entry.name;
 }
 
 // *INDENT-OFF*
-auto list_writer::write( const list_spec &spec, std::vector<visible_entity> entries ) -> bool
-{
-    std::ranges::sort( entries, nearer );
-    jo.member( spec.name );
+auto list_writer::write(const list_spec& spec, std::vector<visible_entity> entries) -> bool {
+    std::ranges::sort(entries, nearer);
+    jo.member(spec.name);
     jo.start_array();
     size_t written = 0;
-    for( const visible_entity &entry : entries ) {
-        const std::string name = name_of( entry );
+    for (const visible_entity& entry : entries) {
+        const std::string name = name_of(entry);
         const size_t id_bytes = entry.source != nullptr ? max_item_id_bytes : entry.id.size();
-        const size_t cost = entry_bytes + id_bytes + name.size() +
-                            ( spec.creatures ? creature_extra_bytes : 0 );
-        if( written == spec.limit || cost > budget ) {
-            break;
-        }
+        const size_t cost =
+            entry_bytes + id_bytes + name.size() + (spec.creatures ? creature_extra_bytes : 0);
+        if (written == spec.limit || cost > budget) { break; }
         budget -= cost;
         ++written;
         jo.start_object();
-        jo.member( "id", entry.source != nullptr ? driver_items::issue_id( *entry.source ) : entry.id );
-        jo.member( "name", name );
-        jo.member( "dx", entry.dx );
-        jo.member( "dy", entry.dy );
-        if( spec.creatures ) {
-            jo.member( "hostile", entry.hostile );
-        }
+        jo.member("id", entry.source != nullptr ? driver_items::issue_id(*entry.source) : entry.id);
+        jo.member("name", name);
+        jo.member("dx", entry.dx);
+        jo.member("dy", entry.dy);
+        if (spec.creatures) { jo.member("hostile", entry.hostile); }
         jo.end_object();
     }
     jo.end_array();
@@ -299,36 +266,35 @@ auto list_writer::write( const list_spec &spec, std::vector<visible_entity> entr
 
 } // namespace
 
-auto write_view( JsonOut &jo, int radius, size_t room ) -> bool
-{
-    window seen = look_around( radius );
+auto write_view(JsonOut& jo, int radius, size_t room) -> bool {
+    window seen = look_around(radius);
     // Too little room for the whole window: look at a smaller one, down to the avatar's neighbours.
     bool shrunk = false;
-    while( seen.radius > 1 && seen.fixed_bytes() > room ) {
-        seen = look_around( seen.radius - 1 );
+    while (seen.radius > 1 && seen.fixed_bytes() > room) {
+        seen = look_around(seen.radius - 1);
         shrunk = true;
     }
     const size_t fixed = seen.fixed_bytes();
 
-    jo.member( "radius", seen.radius );
-    jo.member( "grid" );
+    jo.member("radius", seen.radius);
+    jo.member("grid");
     jo.start_array();
-    for( const std::string &row : seen.grid ) {
-        jo.write( row );
-    }
+    for (const std::string& row : seen.grid) { jo.write(row); }
     jo.end_array();
-    jo.member( "legend" );
+    jo.member("legend");
     jo.start_object();
-    for( const auto &[symbol, meaning] : seen.legend ) {
-        jo.member( std::string( 1, symbol ), std::string( meaning ) );
+    for (const auto& [symbol, meaning] : seen.legend) {
+        jo.member(std::string(1, symbol), std::string(meaning));
     }
     jo.end_object();
 
-    list_writer lists{ .jo = jo, .budget = std::min( max_entity_bytes, room > fixed ? room - fixed : 0 ) };
+    list_writer
+        lists{.jo = jo, .budget = std::min(max_entity_bytes, room > fixed ? room - fixed : 0)};
     bool cut = shrunk;
-    cut |= lists.write( { .name = "creatures", .limit = max_creatures, .creatures = true },
-                        std::move( seen.creatures ) );
-    cut |= lists.write( { .name = "items", .limit = max_items }, std::move( seen.items ) );
+    cut |= lists.write(
+        {.name = "creatures", .limit = max_creatures, .creatures = true},
+        std::move(seen.creatures));
+    cut |= lists.write({.name = "items", .limit = max_items}, std::move(seen.items));
     return cut;
 }
 

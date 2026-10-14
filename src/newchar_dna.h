@@ -12,8 +12,7 @@
 /// vertical axis is therefore not a rotation of anything — it is advancing that shared phase, which
 /// is why nothing here rotates and no transform is involved. Each rung's horizontal positions come
 /// from sin, and which backbone is nearer the viewer comes from cos of the same angle.
-namespace nc_dna
-{
+namespace nc_dna {
 
 /// Rungs drawn. Each is one flex row of the strand column, so they divide whatever height the
 /// column has and the strand rescales with the window without any pixel arithmetic.
@@ -34,8 +33,7 @@ constexpr float spin_turns_per_sec = 0.09F;
 constexpr float travel_dp = 100.0F;
 
 /// Phase for a given elapsed time, in radians.
-inline auto phase_at( float seconds ) -> float
-{
+inline auto phase_at(float seconds) -> float {
     return seconds * spin_turns_per_sec * 2.0F * std::numbers::pi_v<float>;
 }
 
@@ -48,16 +46,15 @@ struct rung {
     bool a_front = true;
 };
 
-inline auto at( int index, float phase ) -> rung
-{
-    const float t = phase + static_cast<float>( index ) * twist_per_rung;
-    const float s = std::sin( t );
+inline auto at(int index, float phase) -> rung {
+    const float t = phase + static_cast<float>(index) * twist_per_rung;
+    const float s = std::sin(t);
     rung r;
     // ONE expression drives both backbones, so they cannot drift out of antiphase. Writing them as
     // two independent sines with a hand-added pi is how that invariant gets broken later.
     r.a = 0.5F + 0.5F * s;
     r.b = 0.5F - 0.5F * s;
-    r.a_front = std::cos( t ) >= 0.0F;
+    r.a_front = std::cos(t) >= 0.0F;
     return r;
 }
 
@@ -71,12 +68,11 @@ struct span {
     bool left_front = true;
 };
 
-inline auto span_of( const rung &r ) -> span
-{
+inline auto span_of(const rung& r) -> span {
     const bool a_is_left = r.a <= r.b;
-    return { .left = a_is_left ? r.a : r.b,
-             .width = std::abs( r.b - r.a ),
-             .left_front = a_is_left ? r.a_front : !r.a_front };
+    return {.left = a_is_left ? r.a : r.b,
+            .width = std::abs(r.b - r.a),
+            .left_front = a_is_left ? r.a_front : !r.a_front};
 }
 
 } // namespace nc_dna

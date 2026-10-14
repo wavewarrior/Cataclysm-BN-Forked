@@ -1,11 +1,11 @@
 #pragma once
 
-#include <optional>
-#include <string>
-
 #include "calendar.h"
 #include "coordinates.h"
 #include "type_id.h"
+
+#include <optional>
+#include <string>
 
 /**
  * Defines the boundaries for a bounded dimension (pocket dimension).
@@ -19,8 +19,8 @@
  */
 struct dimension_bounds {
     // Bounds in absolute submap coordinates
-    tripoint_abs_sm min_bound = { 0, 0, 0 };
-    tripoint_abs_sm max_bound = { 1, 1, 0 };
+    tripoint_abs_sm min_bound = {0, 0, 0};
+    tripoint_abs_sm max_bound = {1, 1, 0};
 
     // What to display for out-of-bounds tiles
     ter_str_id boundary_terrain;
@@ -28,73 +28,65 @@ struct dimension_bounds {
     // What to display for out-of-bounds overmap tiles
     oter_str_id boundary_overmap_terrain;
 
-    bool contains( const tripoint_abs_sm &p ) const {
-        return p.x() >= min_bound.x() && p.x() <= max_bound.x() &&
-               p.y() >= min_bound.y() && p.y() <= max_bound.y() &&
-               p.z() >= min_bound.z() && p.z() <= max_bound.z();
+    bool contains(const tripoint_abs_sm& p) const {
+        return p.x() >= min_bound.x() && p.x() <= max_bound.x() && p.y() >= min_bound.y()
+            && p.y() <= max_bound.y() && p.z() >= min_bound.z() && p.z() <= max_bound.z();
     }
 
-    bool contains( const tripoint_abs_omt &p ) const {
-        return contains( project_to<coords::sm>( p ) );
-    }
+    bool contains(const tripoint_abs_omt& p) const { return contains(project_to<coords::sm>(p)); }
 
-    bool contains( const tripoint_abs_ms &p ) const {
-        return contains( project_to<coords::sm>( p ) );
-    }
+    bool contains(const tripoint_abs_ms& p) const { return contains(project_to<coords::sm>(p)); }
 
-    void serialize( JsonOut &jsout ) const;
-    void deserialize( JsonIn &jsin );
+    void serialize(JsonOut& jsout) const;
+    void deserialize(JsonIn& jsin);
 
-    bool operator==( const dimension_bounds &rhs ) const;
+    bool operator==(const dimension_bounds& rhs) const;
 };
 
 /**
-* Data for items that act as keys to pocket dimensions.
-*/
+ * Data for items that act as keys to pocket dimensions.
+ */
 struct pocket_dimension_data {
     pocket_dimension_data() {}
-    tripoint_abs_ms entry_point = { SEEX, SEEY, 0 };    // Where player spawns on entry, default to center of OMT
+    tripoint_abs_ms entry_point = {SEEX, SEEY, 0}; // Where player spawns on entry, default to
+                                                   // center of OMT
     /**
-    * Currently only one pocket dimension can exist in a given map. If this changes, relative coordinates will
-    * make this easier. That will only be helpful for pocket dimensions that are truely persistent.
-    * Such a system would reduce bloat to some degree for dimensions that are essentially stacks
-    * of pocket dimensions.
-    **/
-    dimension_bounds bounds{};                  // Boundary info struct
-    bool is_initialized = false;                // Has the pocket data been set up?
-    bool terrain_generated = false;             // Has the terrain been generated?
+     * Currently only one pocket dimension can exist in a given map. If this changes, relative
+     * coordinates will make this easier. That will only be helpful for pocket dimensions that are
+     * truely persistent. Such a system would reduce bloat to some degree for dimensions that are
+     * essentially stacks of pocket dimensions.
+     **/
+    dimension_bounds bounds{};      // Boundary info struct
+    bool is_initialized = false;    // Has the pocket data been set up?
+    bool terrain_generated = false; // Has the terrain been generated?
 
     // Return tracking - where to go when exiting this pocket
-    dimension_id return_dimension_id;     // Which dimension to return to (empty = overworld)
-    world_type_id
-    return_world_type;     // World type of the return dimension (may be null for overworld)
-    tripoint_abs_ms return_point;        // Where to place player on exit
+    dimension_id return_dimension_id; // Which dimension to return to (empty = overworld)
+    world_type_id return_world_type;  // World type of the return dimension (may be null for
+                                      // overworld)
+    tripoint_abs_ms return_point;     // Where to place player on exit
     const tripoint_abs_sm get_preload_point() const {
-        return project_to<coords::sm>( return_point ) - point_rel_sm( g_half_mapsize, g_half_mapsize );
+        return project_to<coords::sm>(return_point) - point_rel_sm(g_half_mapsize, g_half_mapsize);
     }
 
     // Temporary pocket lifetime: set by iuse_pocket_dimension from JSON "lifetime_hours".
-    std::optional<time_point> last_player_exit;  // nullopt = player is inside
-    std::optional<time_duration> lifetime;       // nullopt = permanent
+    std::optional<time_point> last_player_exit; // nullopt = player is inside
+    std::optional<time_duration> lifetime;      // nullopt = permanent
 
-    void serialize( JsonOut &jsout ) const;
-    void deserialize( JsonIn &jsin );
+    void serialize(JsonOut& jsout) const;
+    void deserialize(JsonIn& jsin);
 
-    bool operator==( const pocket_dimension_data &rhs ) const;
+    bool operator==(const pocket_dimension_data& rhs) const;
 };
 
 inline auto is_outside_pocket_dimension_bounds(
-    const std::optional<pocket_dimension_data> &pocket_info,
-    const tripoint_abs_sm &p ) -> bool
-{
-    return pocket_info && !pocket_info->bounds.contains( p );
+    const std::optional<pocket_dimension_data>& pocket_info, const tripoint_abs_sm& p) -> bool {
+    return pocket_info && !pocket_info->bounds.contains(p);
 }
 
 inline auto is_outside_pocket_dimension_bounds(
-    const std::optional<pocket_dimension_data> &pocket_info,
-    const tripoint_abs_ms &p ) -> bool
-{
-    return is_outside_pocket_dimension_bounds( pocket_info, project_to<coords::sm>( p ) );
+    const std::optional<pocket_dimension_data>& pocket_info, const tripoint_abs_ms& p) -> bool {
+    return is_outside_pocket_dimension_bounds(pocket_info, project_to<coords::sm>(p));
 }
 
 /**
@@ -123,6 +115,6 @@ struct dimension_info {
     /// dimension extends infinitely in all directions.
     std::optional<pocket_dimension_data> pocket_info;
 
-    void serialize( JsonOut &jsout ) const;
-    void deserialize( JsonIn &jsin );
+    void serialize(JsonOut& jsout) const;
+    void deserialize(JsonIn& jsin);
 };

@@ -1,14 +1,14 @@
 #pragma once
 #ifndef CATA_SRC_FRAME_HISTORY_H
-#define CATA_SRC_FRAME_HISTORY_H
+#    define CATA_SRC_FRAME_HISTORY_H
 
-#include <climits>
-#include <cstdint>
-#include <cstdlib>
-#include <optional>
+#    include "level_cache_freshness.h"
+#    include "lighting/lighting_settings.h"
 
-#include "level_cache_freshness.h"
-#include "lighting/lighting_settings.h"
+#    include <climits>
+#    include <cstdint>
+#    include <cstdlib>
+#    include <optional>
 
 // Previous-frame gate state for the lighting rebuild decision (T2 of the
 // frame-assembly module, ADR decision 1 of #59): the five stamps the gate in
@@ -40,7 +40,7 @@ struct frame_history {
     int last_struct_px = INT_MIN;
     int last_struct_py = INT_MIN;
 
-    auto operator==( const frame_history & ) const -> bool = default;
+    auto operator==(const frame_history&) const -> bool = default;
 };
 
 /// The gate knobs the decision reads. Snapshot semantics, exactly as the gate
@@ -76,12 +76,11 @@ struct rebuild_decision {
 /// Viewer-tile drift past the tolerance since the last structure rebuild. The
 /// sentinel check comes FIRST: without the short-circuit, `px - INT_MIN` is
 /// signed overflow on the first frame.
-inline auto frame_cam_drifted( const frame_history &hist, int px, int py ) -> bool
-{
+inline auto frame_cam_drifted(const frame_history& hist, int px, int py) -> bool {
     constexpr int SDF_CAM_DRIFT_TILES = 4;
     return hist.last_struct_px == INT_MIN
-           || std::abs( px - hist.last_struct_px ) >= SDF_CAM_DRIFT_TILES
-           || std::abs( py - hist.last_struct_py ) >= SDF_CAM_DRIFT_TILES;
+        || std::abs(px - hist.last_struct_px) >= SDF_CAM_DRIFT_TILES
+        || std::abs(py - hist.last_struct_py) >= SDF_CAM_DRIFT_TILES;
 }
 
 /// The lighting rebuild gate, as a pure decision. Transcribes the former
@@ -91,38 +90,33 @@ inline auto frame_cam_drifted( const frame_history &hist, int px, int py ) -> bo
 ///   `SDF_CAM_DRIFT_TILES`;
 /// - vis: panel open, or the viewer pose differs from the last vis rebuild.
 /// The stamp ADVANCES (inside `next`) follow the verdicts, as today.
-inline auto decide_lighting_rebuild( const frame_history &hist,
-                                     const level_cache_freshness::rebuild_plan &plan,
-                                     const rebuild_gate_knobs &knobs ) -> rebuild_decision
-{
+inline auto decide_lighting_rebuild(
+    const frame_history& hist, const level_cache_freshness::rebuild_plan& plan,
+    const rebuild_gate_knobs& knobs) -> rebuild_decision {
     rebuild_decision d;
     d.next = hist;
     const int z = plan.pose.viewer.z();
-    const std::uint64_t gen =
-        plan.occluder[static_cast<std::size_t>( z + OVERMAP_DEPTH )];
+    const std::uint64_t gen = plan.occluder[static_cast<std::size_t>(z + OVERMAP_DEPTH)];
     const int px = plan.pose.viewer.x();
     const int py = plan.pose.viewer.y();
 
-    const bool pose_shifted = !hist.last_struct_pose
-                              || hist.last_struct_pose->bubble_origin != plan.pose.bubble_origin
-                              || hist.last_struct_pose->viewer.z() != plan.pose.viewer.z();
-    d.structure = knobs.devui_visible || knobs.force_every_frame || knobs.force_once
-                  || gen != hist.last_occluder || pose_shifted
-                  || frame_cam_drifted( hist, px, py );
-    d.vis = knobs.devui_visible
-            || !hist.last_vis_pose
-            || hist.last_vis_pose->viewer != plan.pose.viewer;
+    const bool pose_shifted =
+        !hist.last_struct_pose || hist.last_struct_pose->bubble_origin != plan.pose.bubble_origin
+        || hist.last_struct_pose->viewer.z() != plan.pose.viewer.z();
+    d.structure =
+        knobs.devui_visible || knobs.force_every_frame || knobs.force_once
+        || gen != hist.last_occluder || pose_shifted || frame_cam_drifted(hist, px, py);
+    d.vis = knobs.devui_visible || !hist.last_vis_pose
+         || hist.last_vis_pose->viewer != plan.pose.viewer;
 
     d.counted_rebuild = d.structure;
-    if( d.structure ) {
+    if (d.structure) {
         d.next.last_occluder = gen;
         d.next.last_struct_pose = plan.pose;
         d.next.last_struct_px = px;
         d.next.last_struct_py = py;
     }
-    if( d.vis ) {
-        d.next.last_vis_pose = plan.pose;
-    }
+    if (d.vis) { d.next.last_vis_pose = plan.pose; }
     return d;
 }
 
@@ -131,23 +125,20 @@ inline auto decide_lighting_rebuild( const frame_history &hist,
 /// are: the one-shot knob lives in the lighting settings' pulses, and the
 /// rebuild counter is the TU-static behind the `[render][perf]` line.
 struct frame_history_commit_args {
-    frame_history &history;
-    const rebuild_decision &decision;
-    lighting::lighting_pulses &pulses;
-    int &rebuilds_in_window;
+    frame_history& history;
+    const rebuild_decision& decision;
+    lighting::lighting_pulses& pulses;
+    int& rebuilds_in_window;
 };
 
 /// The commit step, run right after planning and before any pass: clears the
 /// force-once knob, bumps the window's rebuild counter and writes the decided
 /// stamps into the live history — in exactly the order the writes happened at
 /// the old :258-294 (one-shot clear, then the counter, then the stamps).
-inline auto commit_frame_history( const frame_history_commit_args &args ) -> void
-{
-    const rebuild_decision &d = args.decision;
+inline auto commit_frame_history(const frame_history_commit_args& args) -> void {
+    const rebuild_decision& d = args.decision;
     args.pulses.take_force_once();
-    if( d.counted_rebuild ) {
-        ++args.rebuilds_in_window;
-    }
+    if (d.counted_rebuild) { ++args.rebuilds_in_window; }
     args.history = d.next;
 }
 
@@ -155,11 +146,11 @@ inline auto commit_frame_history( const frame_history_commit_args &args ) -> voi
 /// operands, so a struct). `knobs` is a snapshot taken BEFORE the commit, so
 /// the decision sees the one-shot knob and the commit clears its storage.
 struct frame_history_gate_args {
-    frame_history &history;
-    const level_cache_freshness::rebuild_plan &plan;
+    frame_history& history;
+    const level_cache_freshness::rebuild_plan& plan;
     rebuild_gate_knobs knobs;
-    lighting::lighting_pulses &pulses;
-    int &rebuilds_in_window;
+    lighting::lighting_pulses& pulses;
+    int& rebuilds_in_window;
 };
 
 /// The shipped order in one call: the pure decision, then the commit step —
@@ -167,11 +158,9 @@ struct frame_history_gate_args {
 /// calls it. Observable consequence of the order: a frame armed with
 /// `force_once` rebuilds AND leaves the knob disarmed; a clear that ran
 /// before the decision would lose the rebuild.
-inline auto gate_and_commit_frame_history( const frame_history_gate_args &args )
--> rebuild_decision   // *NOPAD*
-{
-    const rebuild_decision d = decide_lighting_rebuild( args.history, args.plan, args.knobs );
-    commit_frame_history( { args.history, d, args.pulses, args.rebuilds_in_window } );
+inline auto gate_and_commit_frame_history(const frame_history_gate_args& args) -> rebuild_decision {
+    const rebuild_decision d = decide_lighting_rebuild(args.history, args.plan, args.knobs);
+    commit_frame_history({args.history, d, args.pulses, args.rebuilds_in_window});
     return d;
 }
 

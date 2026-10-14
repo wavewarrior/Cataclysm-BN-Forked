@@ -10,8 +10,7 @@
 /// the same dark gray. They agree now because all three read one `state`, and the branchiness that
 /// produces it lives here where it is tested: taken x locked x mandatory, conflicts x swaps x
 /// has-a-holder, and a budget check at the cap on both signs.
-namespace nc_trait_gate
-{
+namespace nc_trait_gate {
 
 /// What the caller looked up from game state. Deliberately plain data: every field is a question
 /// already answered, so this header never needs a game, and a test can pose any combination —
@@ -50,14 +49,10 @@ struct inputs {
 /// traits were grouped by anything other than point sign. A zero-point trait can never breach
 /// either cap, and must not be reported as breaching the disadvantage cap just because it is not
 /// an advantage.
-constexpr auto over_budget( int points, int num_good, int num_bad, int max_points,
-                            bool freeform ) -> bool
-{
-    if( freeform || points == 0 ) {
-        return false;
-    }
-    return points > 0 ? num_good + points > max_points
-           : num_bad + points < -max_points;
+constexpr auto over_budget(int points, int num_good, int num_bad, int max_points, bool freeform)
+    -> bool {
+    if (freeform || points == 0) { return false; }
+    return points > 0 ? num_good + points > max_points : num_bad + points < -max_points;
 }
 
 /// The resolved answer. Every field is independently meaningful, because the UI reports the FIRST
@@ -80,19 +75,16 @@ struct state {
     /// conjunction: a held trait cares only about whether it may be released, and nothing about
     /// conflicts or budget, since dropping it can only ever free points.
     constexpr auto toggleable() const -> bool {
-        if( taken ) {
-            return !locked && !mandatory;
-        }
-        return !bionic_blocks && !scen_forbids && !prof_forbids && !over_budget &&
-               ( !conflicts || can_swap );
+        if (taken) { return !locked && !mandatory; }
+        return !bionic_blocks && !scen_forbids && !prof_forbids && !over_budget
+            && (!conflicts || can_swap);
     }
 };
 
-constexpr auto evaluate( const inputs &in ) -> state
-{
+constexpr auto evaluate(const inputs& in) -> state {
     state st;
     st.taken = in.taken;
-    if( in.taken ) {
+    if (in.taken) {
         // A held trait is only ever asked whether it can be released. Evaluating conflicts or the
         // budget here would be nonsense: it is already paid for and already compatible.
         st.locked = in.locked;
@@ -106,7 +98,7 @@ constexpr auto evaluate( const inputs &in ) -> state
     st.scen_forbids = in.scen_forbids;
     st.prof_forbids = in.prof_forbids;
     st.bionic_blocks = in.bionic_blocks;
-    st.over_budget = over_budget( in.points, in.num_good, in.num_bad, in.max_points, in.freeform );
+    st.over_budget = over_budget(in.points, in.num_good, in.num_bad, in.max_points, in.freeform);
     return st;
 }
 

@@ -1,11 +1,11 @@
 #pragma once
 #ifndef CATA_SRC_PARTICLE_SYSTEM_H
-#define CATA_SRC_PARTICLE_SYSTEM_H
+#    define CATA_SRC_PARTICLE_SYSTEM_H
 
-#include <string>
-#include <vector>
+#    include "coordinates.h"
 
-#include "coordinates.h"
+#    include <string>
+#    include <vector>
 
 /// How a particle is rasterised.
 enum class particle_style {
@@ -61,20 +61,19 @@ struct particle {
 
 /// Lightweight particle system: emit, update per frame, iterate for rendering.
 /// Owned by cata_tiles. No SDL/render types — the renderer reads state and draws.
-class particle_system
-{
-    public:
-        void emit( particle p );
+class particle_system {
+public:
+    void emit(particle p);
 
-        /// Advance all particles to wall_now; expire completed ones.
-        void update( double wall_now );
+    /// Advance all particles to wall_now; expire completed ones.
+    void update(double wall_now);
 
-        auto idle() const -> bool { return particles_.empty(); }
-        void clear() { particles_.clear(); }
-        auto active() const -> const std::vector<particle> & { return particles_; }
+    auto idle() const -> bool { return particles_.empty(); }
+    void clear() { particles_.clear(); }
+    auto active() const -> const std::vector<particle>& { return particles_; }
 
-    private:
-        std::vector<particle> particles_;
+private:
+    std::vector<particle> particles_;
 };
 
 #endif // CATA_SRC_PARTICLE_SYSTEM_H

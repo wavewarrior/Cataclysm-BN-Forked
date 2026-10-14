@@ -20,7 +20,7 @@ class submap;
  * Uses the half_life formula to compute expected intensity drops rather than
  * simulating each turn individually.
  */
-void batch_turns_field( submap &sm, int n );
+void batch_turns_field(submap& sm, int n);
 
 /**
  * Advance explicit per-turn item countdown counters by @p n turns.
@@ -29,11 +29,11 @@ void batch_turns_field( submap &sm, int n );
  * normal in-bubble process_items() call (not here, to avoid side-effects
  * in out-of-bubble context).
  */
-void batch_turns_items( submap &sm, int n );
+void batch_turns_items(submap& sm, int n);
 
 /**
  * Convenience wrapper: calls batch_turns_field, batch_turns_items, and
  * vehicle::update_time for every vehicle on the submap.  Intended for use
  * immediately before submap actualization.
  */
-void run_submap_batch_turns( submap &sm, int n );
+void run_submap_batch_turns(submap& sm, int n);

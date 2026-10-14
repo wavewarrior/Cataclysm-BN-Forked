@@ -1,15 +1,13 @@
 #pragma once
 
-#include <utility>
+#include "point.h"
 
 #include <array>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "point.h"
-
-namespace catacurses
-{
+namespace catacurses {
 class window;
 
 enum base_color : short;
@@ -20,28 +18,25 @@ enum base_color : short;
  * Don't use it in the game itself, use only function of @ref catacurses.
  * Functions declared here are *not* defined in ncurses builds.
  */
-namespace cata_cursesport
-{
+namespace cata_cursesport {
 using base_color = catacurses::base_color;
 
-//a pair of colors[] indexes, foreground and background
+// a pair of colors[] indexes, foreground and background
 struct pairs {
     base_color FG;
     base_color BG;
 };
 
-//Individual lines, so that we can track changed lines
+// Individual lines, so that we can track changed lines
 struct cursecell {
     std::string ch;
-    base_color FG = static_cast<base_color>( 0 );
-    base_color BG = static_cast<base_color>( 0 );
+    base_color FG = static_cast<base_color>(0);
+    base_color BG = static_cast<base_color>(0);
 
-    cursecell( std::string ch ) : ch( std::move( ch ) ) { }
-    cursecell() : cursecell( std::string( 1, ' ' ) ) { }
+    cursecell(std::string ch): ch(std::move(ch)) {}
+    cursecell(): cursecell(std::string(1, ' ')) {}
 
-    bool operator==( const cursecell &b ) const {
-        return FG == b.FG && BG == b.BG && ch == b.ch;
-    }
+    bool operator==(const cursecell& b) const { return FG == b.FG && BG == b.BG && ch == b.ch; }
 };
 
 struct curseline {
@@ -75,18 +70,18 @@ struct WINDOW {
 // Mark a window so its opaque-black cell backgrounds are not painted, letting
 // the lit-world layer show through (see WINDOW::transparent_backdrop). Tiles
 // build only; implemented in sdltiles.cpp.
-void set_window_transparent_backdrop( const catacurses::window &win, bool transparent );
+void set_window_transparent_backdrop(const catacurses::window& win, bool transparent);
 
 extern std::array<pairs, 100> colorpairs;
-void curses_drawwindow( const catacurses::window &win );
+void curses_drawwindow(const catacurses::window& win);
 
 // Allow extra logic for framebuffer clears
-extern void handle_additional_window_clear( WINDOW *win );
+extern void handle_additional_window_clear(WINDOW* win);
 
 } // namespace cata_cursesport
 
 int projected_window_width();
 int projected_window_height();
-bool handle_resize( int w, int h );
-void resize_term( int cell_w, int cell_h );
+bool handle_resize(int w, int h);
+void resize_term(int cell_w, int cell_h);
 int get_scaling_factor();

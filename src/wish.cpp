@@ -1,25 +1,11 @@
 
-#include <RmlUi/Core.h>
-
-#include "debug_menu.h" // IWYU pragma: associated
-
-#include <algorithm>
-#include <cstddef>
-#include <iterator>
-#include <map>
-#include <memory>
-#include <optional>
-#include <set>
-#include <string>
-#include <vector>
-#include <ranges>
-
 #include "bionics.h"
 #include "calendar.h"
 #include "catacharset.h"
 #include "color.h"
 #include "cursesdef.h"
 #include "debug.h"
+#include "debug_menu.h" // IWYU pragma: associated
 #include "flag.h"
 #include "flat_set.h"
 #include "game.h"
@@ -47,286 +33,276 @@
 #include "units.h"
 #include "units_energy.h"
 
-class wish_mutate_callback: public uilist_callback
-{
-    public:
-        // Last menu entry
-        int lastlen = 0;
-        // Feedback message
-        std::string msg;
-        bool started = false;
-        std::vector<trait_id> vTraits;
-        std::map<trait_id, bool> pTraits;
-        // Traits by mutation category
-        std::unordered_map<mutation_category_id, std::set<mutation_branch>> category_mutations;
-        Character *p;
+#include <RmlUi/Core.h>
+#include <algorithm>
+#include <cstddef>
+#include <iterator>
+#include <map>
+#include <memory>
+#include <optional>
+#include <ranges>
+#include <set>
+#include <string>
+#include <vector>
 
-        nc_color mcolor( const trait_id &m ) {
-            if( pTraits[ m ] ) {
-                return c_green;
+class wish_mutate_callback: public uilist_callback {
+public:
+    // Last menu entry
+    int lastlen = 0;
+    // Feedback message
+    std::string msg;
+    bool started = false;
+    std::vector<trait_id> vTraits;
+    std::map<trait_id, bool> pTraits;
+    // Traits by mutation category
+    std::unordered_map<mutation_category_id, std::set<mutation_branch>> category_mutations;
+    Character* p;
+
+    nc_color mcolor(const trait_id& m) {
+        if (pTraits[m]) { return c_green; }
+        return c_light_gray;
+    }
+
+    wish_mutate_callback() = default;
+    bool key(const input_context&, const input_event& event, int entnum, uilist* menu) override {
+        const int input = event.get_first_input();
+        if (input == 't' && p->has_trait(vTraits[entnum])) {
+            if (p->has_base_trait(vTraits[entnum])) {
+                p->toggle_trait(vTraits[entnum]);
+                p->unset_mutation(vTraits[entnum]);
+
+            } else {
+                p->set_mutation(vTraits[entnum]);
+                p->toggle_trait(vTraits[entnum]);
             }
-            return c_light_gray;
+            uilist_entry& entry = menu->entries[entnum];
+            if (p->has_trait(vTraits[entnum])) {
+                entry.text_color = c_green;
+                entry.override_hilite_color = true;
+            } else {
+                entry.text_color = menu->text_color;
+                entry.override_hilite_color = false;
+            }
+            entry.extratxt.txt = p->has_base_trait(vTraits[entnum]) ? "T" : "";
+            return true;
         }
-
-        wish_mutate_callback() = default;
-        bool key( const input_context &, const input_event &event, int entnum, uilist *menu ) override {
-            const int input = event.get_first_input();
-            if( input == 't' && p->has_trait( vTraits[ entnum ] ) ) {
-                if( p->has_base_trait( vTraits[ entnum ] ) ) {
-                    p->toggle_trait( vTraits[ entnum ] );
-                    p->unset_mutation( vTraits[ entnum ] );
-
-                }
-                else {
-                    p->set_mutation( vTraits[ entnum ] );
-                    p->toggle_trait( vTraits[ entnum ] );
-                }
-                uilist_entry &entry = menu->entries[entnum];
-                if( p->has_trait( vTraits[ entnum ] ) ) {
-                    entry.text_color = c_green;
-                    entry.override_hilite_color = true;
-                }
-                else {
-                    entry.text_color = menu->text_color;
-                    entry.override_hilite_color = false;
-                }
-                entry.extratxt.txt = p->has_base_trait( vTraits[ entnum ] ) ? "T" : "";
-                return true;
-            }
-            if( input == 'c' || input == 'C' ) {
-                // Building menu with mutation category entries (first entry - 'ALL' for cancell purposes)
-                uilist category_menu;
-                // We'll keep vector of values to map it later from user input
-                std::vector<std::pair<const string_id<mutation_category_trait>, std::set<mutation_branch >> * >
+        if (input == 'c' || input == 'C') {
+            // Building menu with mutation category entries (first entry - 'ALL' for cancell
+            // purposes)
+            uilist category_menu;
+            // We'll keep vector of values to map it later from user input
+            std::vector<
+                std::pair<const string_id<mutation_category_trait>, std::set<mutation_branch>>*>
                 entries;
-                int c = 0;
-                auto ch = '0';
-                category_menu.addentry( c, true, ch, "ALL" );
-                for( auto &it : category_mutations ) {
-                    c++;
-                    ch++;
-                    category_menu.addentry( c, true, ch, it.first.str() );
-                    entries.push_back( &it );
-                }
-                // Waiting for user input
-                category_menu.query();
-                int ret = category_menu.ret;
-                if( ret < 0 ) {
-                    return true;
-                }
-                if( ret == 0 ) {
-                    // If 'ALL' chosen - clearing filter
-                    menu->clear_filter();
-                    return true;
-                }
-                ret -= 1;
-                // Extracting selected option & filtering traits on category presence
-                const auto entry = entries[ret];
-                auto predicate = [&]( const int idx ) {
-                    return entry->second.contains( *vTraits[idx] );
-                };
-                menu->filterpredicate( predicate );
+            int c = 0;
+            auto ch = '0';
+            category_menu.addentry(c, true, ch, "ALL");
+            for (auto& it : category_mutations) {
+                c++;
+                ch++;
+                category_menu.addentry(c, true, ch, it.first.str());
+                entries.push_back(&it);
+            }
+            // Waiting for user input
+            category_menu.query();
+            int ret = category_menu.ret;
+            if (ret < 0) { return true; }
+            if (ret == 0) {
+                // If 'ALL' chosen - clearing filter
+                menu->clear_filter();
                 return true;
             }
-            return false;
+            ret -= 1;
+            // Extracting selected option & filtering traits on category presence
+            const auto entry = entries[ret];
+            auto predicate = [&](const int idx) { return entry->second.contains(*vTraits[idx]); };
+            menu->filterpredicate(predicate);
+            return true;
+        }
+        return false;
+    }
+
+    void refresh(uilist* /*menu*/) override {}
+
+    void draw_rml(uilist* menu, Rml::ElementDocument* doc) override {
+        Rml::Element* cb = doc->GetElementById("callback");
+        if (!cb) { return; }
+        if (!started) {
+            started = true;
+            for (auto& traits_iter : mutation_branch::get_all()) {
+                vTraits.push_back(traits_iter.id);
+                pTraits[traits_iter.id] = p->has_trait(traits_iter.id);
+                for (auto& category : traits_iter.category) {
+                    if (!category_mutations.contains(category)) {
+                        category_mutations[category] = std::set<mutation_branch>();
+                    }
+                    category_mutations[category].insert(traits_iter);
+                }
+            }
         }
 
-        void refresh( uilist * /*menu*/ ) override {}
+        std::string rml;
+        rml += "<div class=\"cb-text\">";
+        if (menu->selected >= 0 && static_cast<size_t>(menu->selected) < vTraits.size()) {
+            const mutation_branch& mdata = vTraits[menu->selected].obj();
 
-        void draw_rml( uilist *menu, Rml::ElementDocument *doc ) override {
-            Rml::Element *cb = doc->GetElementById( "callback" );
-            if( !cb ) {
-                return;
+            rml += cata_text_to_rml(
+                colorize(mdata.valid ? _("Valid") : _("Nonvalid"), c_light_gray));
+            rml += "<br/>";
+
+            rml += cata_text_to_rml(colorize(_("Id:"), c_light_gray));
+            rml += " " + cata_text_to_rml(mdata.id.str()) + "<br/>";
+
+            auto list_item = [&](const std::string& label, const auto& items) {
+                if (items.empty()) { return; }
+                rml += cata_text_to_rml(colorize(_(label), c_light_gray));
+                for (const trait_id& id : items) {
+                    rml += "<br/>";
+                    rml += cata_text_to_rml(colorize(mutation_branch::get_name(id), mcolor(id)));
+                }
+            };
+
+            list_item("Prereqs:", mdata.prereqs);
+            list_item("Prereqs, 2d:", mdata.prereqs2);
+
+            if (mdata.threshold_tier != 0) {
+                rml +=
+                    cata_text_to_rml(colorize(
+                        string_format(_("Threshold tier: %d"), mdata.threshold_tier), c_light_gray))
+                    + "<br/>";
             }
-            if( !started ) {
-                started = true;
-                for( auto &traits_iter : mutation_branch::get_all() ) {
-                    vTraits.push_back( traits_iter.id );
-                    pTraits[traits_iter.id] = p->has_trait( traits_iter.id );
-                    for( auto &category : traits_iter.category ) {
-                        if( !category_mutations.contains( category ) ) {
-                            category_mutations[category] = std::set<mutation_branch>();
-                        }
-                        category_mutations[category].insert( traits_iter );
-                    }
+
+            list_item("Cancels:", mdata.cancels);
+            list_item("Becomes:", mdata.replacements);
+            list_item("Add-ons:", mdata.additions);
+
+            if (!mdata.types.empty()) {
+                rml += cata_text_to_rml(colorize(_("Type:"), c_light_gray));
+                for (auto& j : mdata.types) { rml += "<br/>" + cata_text_to_rml(j); }
+            }
+
+            if (!mdata.category.empty()) {
+                rml += cata_text_to_rml(colorize(_("Category:"), c_light_gray));
+                for (const mutation_category_id& j : mdata.category) {
+                    rml += "<br/>" + cata_text_to_rml(j.str());
                 }
             }
 
-            std::string rml;
-            rml += "<div class=\"cb-text\">";
-            if( menu->selected >= 0 && static_cast<size_t>( menu->selected ) < vTraits.size() ) {
-                const mutation_branch &mdata = vTraits[menu->selected].obj();
-
-                rml += cata_text_to_rml( colorize( mdata.valid ? _( "Valid" ) : _( "Nonvalid" ),
-                                                   c_light_gray ) );
-                rml += "<br/>";
-
-                rml += cata_text_to_rml( colorize( _( "Id:" ), c_light_gray ) );
-                rml += " " + cata_text_to_rml( mdata.id.str() ) + "<br/>";
-
-                auto list_item = [&]( const std::string & label, const auto & items ) {
-                    if( items.empty() ) {
-                        return;
-                    }
-                    rml += cata_text_to_rml( colorize( _( label ), c_light_gray ) );
-                    for( const trait_id &id : items ) {
-                        rml += "<br/>";
-                        rml += cata_text_to_rml( colorize( mutation_branch::get_name( id ),
-                                                           mcolor( id ) ) );
-                    }
-                };
-
-                list_item( "Prereqs:", mdata.prereqs );
-                list_item( "Prereqs, 2d:", mdata.prereqs2 );
-
-                if( mdata.threshold_tier != 0 ) {
-                    rml += cata_text_to_rml( colorize(
-                                                 string_format( _( "Threshold tier: %d" ), mdata.threshold_tier ),
-                                                 c_light_gray ) ) + "<br/>";
-                }
-
-                list_item( "Cancels:", mdata.cancels );
-                list_item( "Becomes:", mdata.replacements );
-                list_item( "Add-ons:", mdata.additions );
-
-                if( !mdata.types.empty() ) {
-                    rml += cata_text_to_rml( colorize( _( "Type:" ), c_light_gray ) );
-                    for( auto &j : mdata.types ) {
-                        rml += "<br/>" + cata_text_to_rml( j );
-                    }
-                }
-
-                if( !mdata.category.empty() ) {
-                    rml += cata_text_to_rml( colorize( _( "Category:" ), c_light_gray ) );
-                    for( const mutation_category_id &j : mdata.category ) {
-                        rml += "<br/>" + cata_text_to_rml( j.str() );
-                    }
-                }
-
-                rml += "<br/>";
-                rml += cata_text_to_rml( colorize(
-                                             string_format( _( "pts: %d vis: %d ugly: %d" ),
-                                                 mdata.points, mdata.visibility,
-                                                 mdata.ugliness ), c_light_gray ) );
-                rml += "<br/>";
-                rml += cata_text_to_rml( colorize( mdata.desc(), c_light_gray ) );
-            }
-
-            if( !msg.empty() ) {
-                rml += "<br/>" + cata_text_to_rml( colorize( msg, c_green ) );
-                msg.clear();
-            }
-
-            input_context ctxt( menu->input_category );
-            rml += "<br/>" + cata_text_to_rml( string_format(
-                                                   _( "[%s] find, [%s] quit, [t] toggle base trait, [c] mutation categories menu" ),
-                                                   ctxt.get_desc( "FILTER" ), ctxt.get_desc( "QUIT" ) ) );
-            rml += "</div>";
-            cb->SetInnerRML( rml );
+            rml += "<br/>";
+            rml += cata_text_to_rml(colorize(
+                string_format(
+                    _("pts: %d vis: %d ugly: %d"), mdata.points, mdata.visibility, mdata.ugliness),
+                c_light_gray));
+            rml += "<br/>";
+            rml += cata_text_to_rml(colorize(mdata.desc(), c_light_gray));
         }
 
-        ~wish_mutate_callback() override = default;
+        if (!msg.empty()) {
+            rml += "<br/>" + cata_text_to_rml(colorize(msg, c_green));
+            msg.clear();
+        }
+
+        input_context ctxt(menu->input_category);
+        rml += "<br/>"
+             + cata_text_to_rml(string_format(
+                 _("[%s] find, [%s] quit, [t] toggle base trait, [c] mutation categories menu"),
+                 ctxt.get_desc("FILTER"), ctxt.get_desc("QUIT")));
+        rml += "</div>";
+        cb->SetInnerRML(rml);
+    }
+
+    ~wish_mutate_callback() override = default;
 };
 
-void debug_menu::wishmutate( Character *who )
-{
+void debug_menu::wishmutate(Character* who) {
     uilist wmenu;
     int c = 0;
 
-    for( auto &traits_iter : mutation_branch::get_all() ) {
-        wmenu.addentry( -1, true, -2, traits_iter.name() );
-        wmenu.entries[ c ].extratxt.left = 1;
-        wmenu.entries[ c ].extratxt.txt.clear();
-        wmenu.entries[ c ].extratxt.color = c_light_green;
-        wmenu.entries[ c ].hilite_color = h_light_green;
-        if( who->has_trait( traits_iter.id ) ) {
-            wmenu.entries[ c ].text_color = c_green;
-            wmenu.entries[ c ].override_hilite_color = true;
-            if( who->has_base_trait( traits_iter.id ) ) {
-                wmenu.entries[ c ].extratxt.txt = "T";
-            }
+    for (auto& traits_iter : mutation_branch::get_all()) {
+        wmenu.addentry(-1, true, -2, traits_iter.name());
+        wmenu.entries[c].extratxt.left = 1;
+        wmenu.entries[c].extratxt.txt.clear();
+        wmenu.entries[c].extratxt.color = c_light_green;
+        wmenu.entries[c].hilite_color = h_light_green;
+        if (who->has_trait(traits_iter.id)) {
+            wmenu.entries[c].text_color = c_green;
+            wmenu.entries[c].override_hilite_color = true;
+            if (who->has_base_trait(traits_iter.id)) { wmenu.entries[c].extratxt.txt = "T"; }
         }
         c++;
     }
     wmenu.w_x_setup = 0;
-    wmenu.w_width_setup = []() -> int {
-        return TERMX;
-    };
-    wmenu.pad_right_setup = []() -> int {
-        return TERMX - 40;
-    };
+    wmenu.w_width_setup = []() -> int { return TERMX; };
+    wmenu.pad_right_setup = []() -> int { return TERMX - 40; };
     wmenu.selected = uistate.wishmutate_selected;
     wish_mutate_callback cb;
     cb.p = who;
     wmenu.callback = &cb;
-    wmenu.title = _( "Wish for a mutation" );
-    wmenu.menu_style = "info";   // RmlUi: two-column with mutation detail panel
+    wmenu.title = _("Wish for a mutation");
+    wmenu.menu_style = "info"; // RmlUi: two-column with mutation detail panel
     do {
         wmenu.query();
-        if( wmenu.ret >= 0 ) {
+        if (wmenu.ret >= 0) {
             int rc = 0;
-            const trait_id mstr = cb.vTraits[ wmenu.ret ];
-            const auto &mdata = mstr.obj();
+            const trait_id mstr = cb.vTraits[wmenu.ret];
+            const auto& mdata = mstr.obj();
             const bool threshold = mdata.threshold;
             const bool profession = mdata.profession;
             // Manual override for the threshold-gaining
-            if( threshold || profession ) {
-                if( who->has_trait( mstr ) ) {
+            if (threshold || profession) {
+                if (who->has_trait(mstr)) {
                     do {
-                        who->remove_mutation( mstr );
+                        who->remove_mutation(mstr);
                         rc++;
-                    } while( who->has_trait( mstr ) && rc < 10 );
+                    } while (who->has_trait(mstr) && rc < 10);
                 } else {
                     do {
-                        who->set_mutation( mstr );
+                        who->set_mutation(mstr);
                         rc++;
-                    } while( !who->has_trait( mstr ) && rc < 10 );
+                    } while (!who->has_trait(mstr) && rc < 10);
                 }
-            } else if( who->has_trait( mstr ) ) {
+            } else if (who->has_trait(mstr)) {
                 do {
-                    who->remove_mutation( mstr );
+                    who->remove_mutation(mstr);
                     rc++;
-                } while( who->has_trait( mstr ) && rc < 10 );
+                } while (who->has_trait(mstr) && rc < 10);
             } else {
                 do {
-                    who->mutate_towards( mstr );
+                    who->mutate_towards(mstr);
                     rc++;
-                } while( !who->has_trait( mstr ) && rc < 10 );
+                } while (!who->has_trait(mstr) && rc < 10);
             }
-            cb.msg = string_format( _( "%s Mutation changes: %d" ), mstr.c_str(), rc );
+            cb.msg = string_format(_("%s Mutation changes: %d"), mstr.c_str(), rc);
             uistate.wishmutate_selected = wmenu.selected;
-            if( rc != 0 ) {
-                for( size_t i = 0; i < cb.vTraits.size(); i++ ) {
-                    uilist_entry &entry = wmenu.entries[ i ];
+            if (rc != 0) {
+                for (size_t i = 0; i < cb.vTraits.size(); i++) {
+                    uilist_entry& entry = wmenu.entries[i];
                     entry.extratxt.txt.clear();
-                    if( who->has_trait( cb.vTraits[ i ] ) ) {
+                    if (who->has_trait(cb.vTraits[i])) {
                         entry.text_color = c_green;
                         entry.override_hilite_color = true;
-                        cb.pTraits[ cb.vTraits[ i ] ] = true;
-                        if( who->has_base_trait( cb.vTraits[ i ] ) ) {
-                            entry.extratxt.txt = "T";
-                        }
+                        cb.pTraits[cb.vTraits[i]] = true;
+                        if (who->has_base_trait(cb.vTraits[i])) { entry.extratxt.txt = "T"; }
                     } else {
                         entry.text_color = wmenu.text_color;
                         entry.override_hilite_color = false;
-                        cb.pTraits[ cb.vTraits[ i ] ] = false;
+                        cb.pTraits[cb.vTraits[i]] = false;
                     }
                 }
             }
         }
-    } while( wmenu.ret >= 0 );
+    } while (wmenu.ret >= 0);
 }
 
-void debug_menu::wishbionics( Character &c )
-{
-    std::vector<const itype *> cbm_items = item_controller->find( []( const itype & itm ) -> bool {
-        return itm.can_use( "install_bionic" );
-    } );
-    std::ranges::sort( cbm_items, []( const itype * a, const itype * b ) {
-        return localized_compare( a->nname( 1 ), b->nname( 1 ) );
-    } );
+void debug_menu::wishbionics(Character& c) {
+    std::vector<const itype*> cbm_items = item_controller->find([](const itype& itm) -> bool {
+        return itm.can_use("install_bionic");
+    });
+    std::ranges::sort(cbm_items, [](const itype* a, const itype* b) {
+        return localized_compare(a->nname(1), b->nname(1));
+    });
 
-    while( true ) {
+    while (true) {
         units::energy power_level = c.get_power_level();
         units::energy power_max = c.get_max_power_level();
         size_t num_installed = c.get_bionic_collection().size();
@@ -336,104 +312,100 @@ void debug_menu::wishbionics( Character &c )
 
         uilist smenu;
         smenu.text += string_format(
-                          _( "Current power level: %s\nMax power: %s\nBionics installed: %d" ),
-                          units::display( power_level ),
-                          units::display( power_max ),
-                          num_installed
-                      );
-        smenu.addentry( 0, true, 'i', _( "Install from CBM…" ) );
-        smenu.addentry( 1, can_uninstall, 'u', _( "Uninstall…" ) );
-        smenu.addentry( 2, can_uninstall_all, 'U', _( "Uninstall all" ) );
-        smenu.addentry( 3, true, 'c', _( "Edit power capacity (kJ)" ) );
-        smenu.addentry( 4, true, 'C', _( "Edit power capacity (J)" ) );
-        smenu.addentry( 5, true, 'p', _( "Edit power level (kJ)" ) );
-        smenu.addentry( 6, true, 'P', _( "Edit power level (J)" ) );
+            _("Current power level: %s\nMax power: %s\nBionics installed: %d"),
+            units::display(power_level), units::display(power_max), num_installed);
+        smenu.addentry(0, true, 'i', _("Install from CBM…"));
+        smenu.addentry(1, can_uninstall, 'u', _("Uninstall…"));
+        smenu.addentry(2, can_uninstall_all, 'U', _("Uninstall all"));
+        smenu.addentry(3, true, 'c', _("Edit power capacity (kJ)"));
+        smenu.addentry(4, true, 'C', _("Edit power capacity (J)"));
+        smenu.addentry(5, true, 'p', _("Edit power level (kJ)"));
+        smenu.addentry(6, true, 'P', _("Edit power level (J)"));
         smenu.query();
-        switch( smenu.ret ) {
+        switch (smenu.ret) {
             case 0: {
                 uilist scbms;
-                for( size_t i = 0; i < cbm_items.size(); i++ ) {
-                    bool enabled = !c.has_bionic( cbm_items[i]->bionic->id );
-                    scbms.addentry( i, enabled, MENU_AUTOASSIGN, "%s", cbm_items[i]->nname( 1 ) );
+                for (size_t i = 0; i < cbm_items.size(); i++) {
+                    bool enabled = !c.has_bionic(cbm_items[i]->bionic->id);
+                    scbms.addentry(i, enabled, MENU_AUTOASSIGN, "%s", cbm_items[i]->nname(1));
                 }
                 scbms.query();
-                if( scbms.ret >= 0 ) {
-                    const itype &cbm = *cbm_items[scbms.ret];
-                    const bionic_id &bio = cbm.bionic->id;
+                if (scbms.ret >= 0) {
+                    const itype& cbm = *cbm_items[scbms.ret];
+                    const bionic_id& bio = cbm.bionic->id;
                     constexpr int difficulty = 0;
                     constexpr int success = 1;
                     constexpr int level = 99;
-                    c.perform_install( bio, bio->upgraded_bionic, difficulty, success, level, "DEBUG",
-                                       bio->canceled_mutations );
+                    c.perform_install(bio, bio->upgraded_bionic, difficulty, success, level,
+                                      "DEBUG", bio->canceled_mutations);
                 }
                 break;
             }
             case 1: {
                 std::vector<bionic_id> bionics = c.get_bionics();
                 uilist sbionics;
-                for( size_t i = 0; i < bionics.size(); i++ ) {
-                    sbionics.addentry( i, true, MENU_AUTOASSIGN, "%s", bionics[i]->name.translated() );
+                for (size_t i = 0; i < bionics.size(); i++) {
+                    sbionics
+                        .addentry(i, true, MENU_AUTOASSIGN, "%s", bionics[i]->name.translated());
                 }
                 sbionics.query();
-                if( sbionics.ret >= 0 ) {
-                    c.remove_bionic( bionics[sbionics.ret] );
-                }
+                if (sbionics.ret >= 0) { c.remove_bionic(bionics[sbionics.ret]); }
                 break;
             }
             case 2: {
                 c.clear_bionics();
-                c.set_power_level( units::from_kilojoule( 0 ) );
-                c.set_max_power_level( units::from_kilojoule( 0 ) );
+                c.set_power_level(units::from_kilojoule(0));
+                c.set_max_power_level(units::from_kilojoule(0));
                 break;
             }
             case 3: {
                 string_input_popup popup;
-                const int64_t new_value = popup
-                                          .title( string_format( _( "Set the value to (in kJ)?  Currently: %s" ),
-                                                  units::display( power_max ) ) )
-                                          .only_digits( true )
-                                          .query_int64_t();
-                if( !popup.canceled() ) {
-                    c.set_max_power_level( units::from_kilojoule( new_value ) );
-                    c.set_power_level( c.get_power_level() );
+                const int64_t new_value =
+                    popup
+                        .title(string_format(_("Set the value to (in kJ)?  Currently: %s"),
+                                             units::display(power_max)))
+                        .only_digits(true)
+                        .query_int64_t();
+                if (!popup.canceled()) {
+                    c.set_max_power_level(units::from_kilojoule(new_value));
+                    c.set_power_level(c.get_power_level());
                 }
                 break;
             }
             case 4: {
                 string_input_popup popup;
-                const int64_t new_value = popup
-                                          .title( string_format( _( "Set the value to (in J)?  Currently: %s" ),
-                                                  units::display( power_max ) ) )
-                                          .only_digits( true )
-                                          .query_int64_t();
-                if( !popup.canceled() ) {
-                    c.set_max_power_level( units::from_joule( new_value ) );
-                    c.set_power_level( c.get_power_level() );
+                const int64_t new_value =
+                    popup
+                        .title(string_format(_("Set the value to (in J)?  Currently: %s"),
+                                             units::display(power_max)))
+                        .only_digits(true)
+                        .query_int64_t();
+                if (!popup.canceled()) {
+                    c.set_max_power_level(units::from_joule(new_value));
+                    c.set_power_level(c.get_power_level());
                 }
                 break;
             }
             case 5: {
                 string_input_popup popup;
-                const int64_t new_value = popup
-                                          .title( string_format( _( "Set the value to (in kJ)?  Currently: %s" ),
-                                                  units::display( power_level ) ) )
-                                          .only_digits( true )
-                                          .query_int64_t();
-                if( !popup.canceled() ) {
-                    c.set_power_level( units::from_kilojoule( new_value ) );
-                }
+                const int64_t new_value =
+                    popup
+                        .title(string_format(_("Set the value to (in kJ)?  Currently: %s"),
+                                             units::display(power_level)))
+                        .only_digits(true)
+                        .query_int64_t();
+                if (!popup.canceled()) { c.set_power_level(units::from_kilojoule(new_value)); }
                 break;
             }
             case 6: {
                 string_input_popup popup;
-                const int64_t new_value = popup
-                                          .title( string_format( _( "Set the value to (in J)?  Currently: %s" ),
-                                                  units::display( power_level ) ) )
-                                          .only_digits( true )
-                                          .query_int64_t();
-                if( !popup.canceled() ) {
-                    c.set_power_level( units::from_joule( new_value ) );
-                }
+                const int64_t new_value =
+                    popup
+                        .title(string_format(_("Set the value to (in J)?  Currently: %s"),
+                                             units::display(power_level)))
+                        .only_digits(true)
+                        .query_int64_t();
+                if (!popup.canceled()) { c.set_power_level(units::from_joule(new_value)); }
                 break;
             }
             default: {
@@ -443,425 +415,384 @@ void debug_menu::wishbionics( Character &c )
     }
 }
 
-class wish_monster_callback: public uilist_callback
-{
-    public:
-        // last menu entry
-        int lastent;
-        // feedback message
-        std::string msg;
-        // spawn friendly critter?
-        bool friendly;
-        bool hallucination;
-        // Number of monsters to spawn.
-        int group;
-        // scrap critter for monster::print_info
-        std::unique_ptr<monster> tmp;
-        const std::vector<const mtype *> &mtypes;
+class wish_monster_callback: public uilist_callback {
+public:
+    // last menu entry
+    int lastent;
+    // feedback message
+    std::string msg;
+    // spawn friendly critter?
+    bool friendly;
+    bool hallucination;
+    // Number of monsters to spawn.
+    int group;
+    // scrap critter for monster::print_info
+    std::unique_ptr<monster> tmp;
+    const std::vector<const mtype*>& mtypes;
 
-        wish_monster_callback( const std::vector<const mtype *> &mtypes )
-            : mtypes( mtypes ) {
-            friendly = false;
-            hallucination = false;
-            group = 0;
+    wish_monster_callback(const std::vector<const mtype*>& mtypes): mtypes(mtypes) {
+        friendly = false;
+        hallucination = false;
+        group = 0;
+        lastent = -2;
+    }
+
+    bool key(
+        const input_context&, const input_event& event, int /*entnum*/, uilist* /*menu*/) override {
+        if (event.get_first_input() == 'f') {
+            friendly = !friendly;
+            // Force tmp monster regen
             lastent = -2;
+            // Tell menu we handled keypress
+            return true;
+        } else if (event.get_first_input() == 'i') {
+            group++;
+            return true;
+        } else if (event.get_first_input() == 'h') {
+            hallucination = !hallucination;
+            return true;
+        } else if (event.get_first_input() == 'd' && group != 0) {
+            group--;
+            return true;
+        }
+        return false;
+    }
+
+    void refresh(uilist* /*menu*/) override {}
+
+    void draw_rml(uilist* menu, Rml::ElementDocument* doc) override {
+        Rml::Element* cb = doc->GetElementById("callback");
+        if (!cb) { return; }
+        const int entnum = menu->selected;
+        const bool valid_entnum = entnum >= 0 && static_cast<size_t>(entnum) < mtypes.size();
+        if (entnum != lastent) {
+            lastent = entnum;
+            if (valid_entnum) {
+                tmp = std::make_unique<monster>(mtypes[entnum]->id);
+                if (friendly) { tmp->friendly = -1; }
+            } else {
+                tmp = std::make_unique<monster>();
+            }
         }
 
-        bool key( const input_context &, const input_event &event, int /*entnum*/,
-                  uilist * /*menu*/ ) override {
-            if( event.get_first_input() == 'f' ) {
-                friendly = !friendly;
-                // Force tmp monster regen
-                lastent = -2;
-                // Tell menu we handled keypress
-                return true;
-            } else if( event.get_first_input() == 'i' ) {
-                group++;
-                return true;
-            } else if( event.get_first_input() == 'h' ) {
-                hallucination = !hallucination;
-                return true;
-            } else if( event.get_first_input() == 'd' && group != 0 ) {
-                group--;
-                return true;
-            }
-            return false;
-        }
+        std::string rml;
+        rml += "<div class=\"cb-text\">";
 
-        void refresh( uilist * /*menu*/ ) override {}
+        if (valid_entnum) {
+            std::string header = string_format(
+                "#%d: %s (%d)%s%s", entnum, tmp->type->nname(), group,
+                friendly ? _(" (friendly)") : "", hallucination ? _(" (hallucination)") : "");
+            rml += cata_text_to_rml(colorize(header, c_cyan));
+            rml += "<br/>";
 
-        void draw_rml( uilist *menu, Rml::ElementDocument *doc ) override {
-            Rml::Element *cb = doc->GetElementById( "callback" );
-            if( !cb ) {
-                return;
-            }
-            const int entnum = menu->selected;
-            const bool valid_entnum = entnum >= 0 && static_cast<size_t>( entnum ) < mtypes.size();
-            if( entnum != lastent ) {
-                lastent = entnum;
-                if( valid_entnum ) {
-                    tmp = std::make_unique<monster>( mtypes[entnum]->id );
-                    if( friendly ) {
-                        tmp->friendly = -1;
-                    }
-                } else {
-                    tmp = std::make_unique<monster>();
-                }
-            }
+            // HP bar
+            nc_color hp_color = c_white;
+            std::string bar_str;
+            tmp->get_HP_Bar(hp_color, bar_str);
+            rml += cata_text_to_rml(colorize(bar_str, hp_color));
+            rml += " ";
+            rml += cata_text_to_rml(colorize(tmp->name(), tmp->basic_symbol_color()));
+            rml += " ";
 
-            std::string rml;
-            rml += "<div class=\"cb-text\">";
+            // Attitude
+            const auto att = tmp->get_attitude();
+            rml += cata_text_to_rml(colorize(att.first, att.second));
 
-            if( valid_entnum ) {
-                std::string header = string_format( "#%d: %s (%d)%s%s", entnum, tmp->type->nname(),
-                                                    group, friendly ? _( " (friendly)" ) : "",
-                                                    hallucination ? _( " (hallucination)" ) : "" );
-                rml += cata_text_to_rml( colorize( header, c_cyan ) );
-                rml += "<br/>";
-
-                // HP bar
-                nc_color hp_color = c_white;
-                std::string bar_str;
-                tmp->get_HP_Bar( hp_color, bar_str );
-                rml += cata_text_to_rml( colorize( bar_str, hp_color ) );
+            // Effects
+            std::string eff_str = tmp->get_effect_status();
+            if (!eff_str.empty()) {
                 rml += " ";
-                rml += cata_text_to_rml( colorize( tmp->name(), tmp->basic_symbol_color() ) );
-                rml += " ";
-
-                // Attitude
-                const auto att = tmp->get_attitude();
-                rml += cata_text_to_rml( colorize( att.first, att.second ) );
-
-                // Effects
-                std::string eff_str = tmp->get_effect_status();
-                if( !eff_str.empty() ) {
-                    rml += " ";
-                    rml += cata_text_to_rml( colorize( eff_str, h_white ) );
-                }
-
-                // Difficulty
-                rml += "<br/>";
-                rml += cata_text_to_rml( colorize(
-                                             string_format( _( "Difficulty %d" ), tmp->type->difficulty ),
-                                             c_light_gray ) );
-
-                // Description
-                rml += "<br/>";
-                rml += cata_text_to_rml( colorize( tmp->type->get_description(), c_light_gray ) );
+                rml += cata_text_to_rml(colorize(eff_str, h_white));
             }
 
-            if( !msg.empty() ) {
-                rml += "<br/>" + cata_text_to_rml( colorize( msg, c_green ) );
-                msg.clear();
-            }
-            input_context ctxt( menu->input_category );
-            rml += "<br/>" + cata_text_to_rml( string_format(
-                                                   _( "[%s] find, [f]riendly, [h]allucination, [i]ncrease group, [d]ecrease group, [%s] quit" ),
-                                                   ctxt.get_desc( "FILTER" ), ctxt.get_desc( "QUIT" ) ) );
-            rml += "</div>";
-            cb->SetInnerRML( rml );
+            // Difficulty
+            rml += "<br/>";
+            rml += cata_text_to_rml(
+                colorize(string_format(_("Difficulty %d"), tmp->type->difficulty), c_light_gray));
+
+            // Description
+            rml += "<br/>";
+            rml += cata_text_to_rml(colorize(tmp->type->get_description(), c_light_gray));
         }
 
-        ~wish_monster_callback() override = default;
+        if (!msg.empty()) {
+            rml += "<br/>" + cata_text_to_rml(colorize(msg, c_green));
+            msg.clear();
+        }
+        input_context ctxt(menu->input_category);
+        rml +=
+            "<br/>"
+            + cata_text_to_rml(string_format(
+                _("[%s] find, [f]riendly, [h]allucination, [i]ncrease group, [d]ecrease group, [%s] quit"),
+                ctxt.get_desc("FILTER"), ctxt.get_desc("QUIT")));
+        rml += "</div>";
+        cb->SetInnerRML(rml);
+    }
+
+    ~wish_monster_callback() override = default;
 };
 
-void debug_menu::wishmonster( const std::optional<tripoint_bub_ms> &p )
-{
-    std::vector<const mtype *> mtypes;
+void debug_menu::wishmonster(const std::optional<tripoint_bub_ms>& p) {
+    std::vector<const mtype*> mtypes;
 
     uilist wmenu;
     wmenu.w_x_setup = 0;
-    wmenu.w_width_setup = []() -> int {
-        return TERMX;
-    };
-    wmenu.pad_right_setup = []() -> int {
-        return TERMX - 30;
-    };
+    wmenu.w_width_setup = []() -> int { return TERMX; };
+    wmenu.pad_right_setup = []() -> int { return TERMX - 30; };
     wmenu.selected = uistate.wishmonster_selected;
-    wish_monster_callback cb( mtypes );
+    wish_monster_callback cb(mtypes);
     wmenu.callback = &cb;
-    wmenu.title = _( "Wish for a monster" );
-    wmenu.menu_style = "info";   // RmlUi: two-column with monster info panel
+    wmenu.title = _("Wish for a monster");
+    wmenu.menu_style = "info"; // RmlUi: two-column with monster info panel
 
     int i = 0;
-    for( const mtype &montype : MonsterGenerator::generator().get_all_mtypes() ) {
-        wmenu.addentry( i, true, 0, montype.nname() );
+    for (const mtype& montype : MonsterGenerator::generator().get_all_mtypes()) {
+        wmenu.addentry(i, true, 0, montype.nname());
         wmenu.entries[i].extratxt.txt = montype.sym;
         wmenu.entries[i].extratxt.color = montype.color;
         wmenu.entries[i].extratxt.left = 1;
         ++i;
-        mtypes.push_back( &montype );
+        mtypes.push_back(&montype);
     }
 
     do {
         wmenu.query();
-        if( wmenu.ret >= 0 ) {
-            const mtype_id &mon_type = mtypes[ wmenu.ret ]->id;
-            if( std::optional<tripoint_bub_ms> spawn = p ? p : g->look_around( LA_MODE_3D ) ) {
+        if (wmenu.ret >= 0) {
+            const mtype_id& mon_type = mtypes[wmenu.ret]->id;
+            if (std::optional<tripoint_bub_ms> spawn = p ? p : g->look_around(LA_MODE_3D)) {
                 int num_spawned = 0;
-                for( const tripoint_bub_ms &destination : closest_points_first( *spawn, cb.group ) ) {
-                    monster *const mon = g->place_critter_at( mon_type, destination );
-                    if( !mon ) {
-                        continue;
-                    }
-                    if( cb.friendly ) {
-                        mon->friendly = -1;
-                    }
-                    if( cb.hallucination ) {
-                        mon->hallucination = true;
-                    }
+                for (const tripoint_bub_ms& destination : closest_points_first(*spawn, cb.group)) {
+                    monster* const mon = g->place_critter_at(mon_type, destination);
+                    if (!mon) { continue; }
+                    if (cb.friendly) { mon->friendly = -1; }
+                    if (cb.hallucination) { mon->hallucination = true; }
                     ++num_spawned;
                 }
-                input_context ctxt( wmenu.input_category );
-                cb.msg = string_format( _( "Spawned %d monsters, choose another or [%s] to quit." ),
-                                        num_spawned, ctxt.get_desc( "QUIT" ) );
-                if( num_spawned == 0 ) {
-                    cb.msg += _( "\nTarget location is not suitable for placing this kind of monster.  Choose a different target or [i]ncrease the groups size." );
+                input_context ctxt(wmenu.input_category);
+                cb.msg = string_format(
+                    _("Spawned %d monsters, choose another or [%s] to quit."), num_spawned,
+                    ctxt.get_desc("QUIT"));
+                if (num_spawned == 0) {
+                    cb.msg += _(
+                        "\nTarget location is not suitable for placing this kind of monster.  Choose a different target or [i]ncrease the groups size.");
                 }
                 uistate.wishmonster_selected = wmenu.selected;
             }
         }
-    } while( wmenu.ret >= 0 );
+    } while (wmenu.ret >= 0);
 }
 
-class wish_item_callback: public uilist_callback
-{
-    public:
-        bool incontainer;
-        bool has_flag;
-        bool spawn_everything;
-        std::string msg;
-        std::string flag;
-        const std::vector<const itype *> &standard_itype_ids;
-        wish_item_callback( const std::vector<const itype *> &ids ) :
-            incontainer( false ), has_flag( false ), spawn_everything( false ), standard_itype_ids( ids ) {
+class wish_item_callback: public uilist_callback {
+public:
+    bool incontainer;
+    bool has_flag;
+    bool spawn_everything;
+    std::string msg;
+    std::string flag;
+    const std::vector<const itype*>& standard_itype_ids;
+    wish_item_callback(const std::vector<const itype*>& ids)
+        : incontainer(false),
+          has_flag(false),
+          spawn_everything(false),
+          standard_itype_ids(ids) {}
+
+    void select(uilist* menu) override {
+        if (menu->selected < 0) { return; }
+        incontainer = standard_itype_ids[menu->selected]->phase == phase_id::LIQUID;
+    }
+
+    bool key(
+        const input_context&, const input_event& event, int /*entnum*/, uilist* /*menu*/) override {
+        if (event.get_first_input() == 'f') {
+            incontainer = !incontainer;
+            return true;
+        }
+        if (event.get_first_input() == 'F') {
+            flag =
+                string_input_popup()
+                    .title(_("Add which flag?  Use UPPERCASE letters without quotes"))
+                    .query_string();
+            if (!flag.empty()) { has_flag = true; }
+            return true;
+        }
+        if (event.get_first_input() == 'E') {
+            spawn_everything = !spawn_everything;
+            return true;
+        }
+        return false;
+    }
+
+    void refresh(uilist* /*menu*/) override {}
+
+    void draw_rml(uilist* menu, Rml::ElementDocument* doc) override {
+        Rml::Element* cb = doc->GetElementById("callback");
+        if (!cb) { return; }
+        std::string rml;
+        rml += "<div class=\"cb-text\">";
+        const int entnum = menu->selected;
+        if (entnum >= 0 && static_cast<size_t>(entnum) < standard_itype_ids.size()) {
+            item& tmp = *item::spawn_temporary(standard_itype_ids[entnum], calendar::turn);
+            const std::string header = string_format(
+                "#%d: %s%s%s", entnum, standard_itype_ids[entnum]->get_id().c_str(),
+                incontainer ? _(" (contained)") : "", has_flag ? _(" (flagged)") : "");
+            rml += cata_text_to_rml(colorize(header, c_cyan));
+            rml += "<br/>";
+
+            std::vector<iteminfo> info = tmp.info();
+            std::string info_string = format_item_info(info, {});
+            rml += cata_text_to_rml(info_string);
         }
 
-        void select( uilist *menu ) override {
-            if( menu->selected < 0 ) {
-                return;
-            }
-            incontainer = standard_itype_ids[menu->selected]->phase == phase_id::LIQUID;
+        if (spawn_everything) {
+            rml +=
+                "<br/>"
+                + cata_text_to_rml(
+                    colorize(_("Select any item to spawn everything (ignores filters)."), c_green));
         }
-
-        bool key( const input_context &, const input_event &event, int /*entnum*/,
-                  uilist * /*menu*/ ) override {
-            if( event.get_first_input() == 'f' ) {
-                incontainer = !incontainer;
-                return true;
-            }
-            if( event.get_first_input() == 'F' ) {
-                flag = string_input_popup()
-                       .title( _( "Add which flag?  Use UPPERCASE letters without quotes" ) )
-                       .query_string();
-                if( !flag.empty() ) {
-                    has_flag = true;
-                }
-                return true;
-            }
-            if( event.get_first_input() == 'E' ) {
-                spawn_everything = !spawn_everything;
-                return true;
-            }
-            return false;
+        if (!msg.empty()) {
+            rml += "<br/>" + cata_text_to_rml(colorize(msg, c_green));
+            msg.erase();
         }
-
-        void refresh( uilist * /*menu*/ ) override {}
-
-        void draw_rml( uilist *menu, Rml::ElementDocument *doc ) override {
-            Rml::Element *cb = doc->GetElementById( "callback" );
-            if( !cb ) {
-                return;
-            }
-            std::string rml;
-            rml += "<div class=\"cb-text\">";
-            const int entnum = menu->selected;
-            if( entnum >= 0 && static_cast<size_t>( entnum ) < standard_itype_ids.size() ) {
-                item &tmp = *item::spawn_temporary( standard_itype_ids[entnum], calendar::turn );
-                const std::string header = string_format( "#%d: %s%s%s", entnum,
-                                           standard_itype_ids[entnum]->get_id().c_str(),
-                                           incontainer ? _( " (contained)" ) : "",
-                                           has_flag ? _( " (flagged)" ) : "" );
-                rml += cata_text_to_rml( colorize( header, c_cyan ) );
-                rml += "<br/>";
-
-                std::vector<iteminfo> info = tmp.info();
-                std::string info_string = format_item_info( info, {} );
-                rml += cata_text_to_rml( info_string );
-            }
-
-            if( spawn_everything ) {
-                rml += "<br/>" + cata_text_to_rml( colorize(
-                                                       _( "Select any item to spawn everything (ignores filters)." ), c_green ) );
-            }
-            if( !msg.empty() ) {
-                rml += "<br/>" + cata_text_to_rml( colorize( msg, c_green ) );
-                msg.erase();
-            }
-            input_context ctxt( menu->input_category );
-            rml += "<br/>" + cata_text_to_rml( string_format(
-                                                   _( "[%s] find, [f] container, [F] flag, [E] everything, [%s] quit" ),
-                                                   ctxt.get_desc( "FILTER" ), ctxt.get_desc( "QUIT" ) ) );
-            rml += "</div>";
-            cb->SetInnerRML( rml );
-        }
+        input_context ctxt(menu->input_category);
+        rml += "<br/>"
+             + cata_text_to_rml(string_format(
+                 _("[%s] find, [f] container, [F] flag, [E] everything, [%s] quit"),
+                 ctxt.get_desc("FILTER"), ctxt.get_desc("QUIT")));
+        rml += "</div>";
+        cb->SetInnerRML(rml);
+    }
 };
 
-void debug_menu::wishitem( Character *who )
-{
-    wishitem( who, tripoint_bub_ms( -1, -1, -1 ) );
-}
+void debug_menu::wishitem(Character* who) { wishitem(who, tripoint_bub_ms(-1, -1, -1)); }
 
-void debug_menu::wishitem( Character *who, const tripoint_bub_ms &pos )
-{
-    if( who == nullptr && pos.x() <= 0 ) {
-        debugmsg( "game::wishitem(): invalid parameters" );
+void debug_menu::wishitem(Character* who, const tripoint_bub_ms& pos) {
+    if (who == nullptr && pos.x() <= 0) {
+        debugmsg("game::wishitem(): invalid parameters");
         return;
     }
-    std::vector<std::pair<std::string, const itype *>> opts;
-    for( const itype *i : item_controller->all() ) {
-        //TODO!: push up
-        auto it = item::spawn_temporary( i, calendar::turn );
-        if( it->has_flag( flag_VARSIZE ) ) {
-            it->set_flag( flag_FIT );
-        }
-        opts.emplace_back( it->tname( 1, false ), i );
+    std::vector<std::pair<std::string, const itype*>> opts;
+    for (const itype* i : item_controller->all()) {
+        // TODO!: push up
+        auto it = item::spawn_temporary(i, calendar::turn);
+        if (it->has_flag(flag_VARSIZE)) { it->set_flag(flag_FIT); }
+        opts.emplace_back(it->tname(1, false), i);
     }
-    std::ranges::sort( opts, localized_compare );
-    std::vector<const itype *> itypes;
-    std::ranges::transform( opts, std::back_inserter( itypes ),
-    []( const auto & pair ) {
+    std::ranges::sort(opts, localized_compare);
+    std::vector<const itype*> itypes;
+    std::ranges::transform(opts, std::back_inserter(itypes), [](const auto& pair) {
         return pair.second;
-    } );
+    });
 
     int prev_amount = 1;
     int amount = 1;
     uilist wmenu;
     wmenu.w_x_setup = 0;
-    wmenu.w_width_setup = []() -> int {
-        return TERMX;
-    };
-    wmenu.pad_right_setup = []() -> int {
-        return std::max( TERMX / 2, TERMX - 50 );
-    };
+    wmenu.w_width_setup = []() -> int { return TERMX; };
+    wmenu.pad_right_setup = []() -> int { return std::max(TERMX / 2, TERMX - 50); };
     wmenu.selected = uistate.wishitem_selected;
-    wish_item_callback cb( itypes );
+    wish_item_callback cb(itypes);
     wmenu.callback = &cb;
-    wmenu.title = _( "Wish for an item" );
-    wmenu.menu_style = "info";   // RmlUi: two-column with item detail panel
+    wmenu.title = _("Wish for an item");
+    wmenu.menu_style = "info"; // RmlUi: two-column with item detail panel
 
-    for( size_t i = 0; i < opts.size(); i++ ) {
-        //TODO!: push up
-        item &ity = *item::spawn_temporary( opts[i].second, calendar::start_of_cataclysm );
-        wmenu.addentry( i, true, 0, opts[i].first );
-        mvwzstr &entry_extra_text = wmenu.entries[i].extratxt;
+    for (size_t i = 0; i < opts.size(); i++) {
+        // TODO!: push up
+        item& ity = *item::spawn_temporary(opts[i].second, calendar::start_of_cataclysm);
+        wmenu.addentry(i, true, 0, opts[i].first);
+        mvwzstr& entry_extra_text = wmenu.entries[i].extratxt;
         entry_extra_text.txt = ity.symbol();
         entry_extra_text.color = ity.color();
         entry_extra_text.left = 1;
     }
     do {
         wmenu.query();
-        if( cb.spawn_everything && wmenu.ret != UILIST_CANCEL ) {
-            wmenu.ret = opts.size() - 1;
-        }
+        if (cb.spawn_everything && wmenu.ret != UILIST_CANCEL) { wmenu.ret = opts.size() - 1; }
         bool did_amount_prompt = false;
-        while( wmenu.ret >= 0 ) {
-            detached_ptr<item> granted = item::spawn( opts[wmenu.ret].second );
-            if( granted->has_flag( flag_VARSIZE ) ) {
-                granted->set_flag( flag_FIT );
-            }
-            if( cb.incontainer ) {
-                granted = item::in_its_container( std::move( granted ) );
-            }
-            if( cb.has_flag ) {
-                granted->set_flag( flag_id( cb.flag ) );
-            }
+        while (wmenu.ret >= 0) {
+            detached_ptr<item> granted = item::spawn(opts[wmenu.ret].second);
+            if (granted->has_flag(flag_VARSIZE)) { granted->set_flag(flag_FIT); }
+            if (cb.incontainer) { granted = item::in_its_container(std::move(granted)); }
+            if (cb.has_flag) { granted->set_flag(flag_id(cb.flag)); }
             // If the item has an ammunition, this loads it to capacity, including magazines.
-            if( !granted->ammo_default().is_null() ) {
-                granted->ammo_set( granted->ammo_default(), -1 );
+            if (!granted->ammo_default().is_null()) {
+                granted->ammo_set(granted->ammo_default(), -1);
             }
 
-            granted->set_birthday( calendar::turn );
+            granted->set_birthday(calendar::turn);
             prev_amount = amount;
             bool canceled = false;
-            if( who != nullptr && !did_amount_prompt ) {
+            if (who != nullptr && !did_amount_prompt) {
                 string_input_popup popup;
-                if( cb.spawn_everything ) {
-                    popup.title( _( "How many of each?" ) );
-                    if( cb.incontainer ) {
-                        popup.description( "Spawning items in containers." );
+                if (cb.spawn_everything) {
+                    popup.title(_("How many of each?"));
+                    if (cb.incontainer) {
+                        popup.description("Spawning items in containers.");
                     } else {
-                        popup.description( "Spawning items without containers." );
+                        popup.description("Spawning items without containers.");
                     }
                 } else {
-                    popup
-                    .title( _( "How many?" ) )
-                    .description( granted->tname() );
+                    popup.title(_("How many?")).description(granted->tname());
                 }
-                popup.width( 20 )
-                     .edit( amount );
+                popup.width(20).edit(amount);
                 canceled = popup.canceled();
             }
-            if( !canceled ) {
+            if (!canceled) {
                 did_amount_prompt = true;
-                if( who != nullptr ) {
-                    if( granted->count_by_charges() ) {
-                        if( amount > 0 ) {
+                if (who != nullptr) {
+                    if (granted->count_by_charges()) {
+                        if (amount > 0) {
                             granted->charges = amount;
-                            who->i_add_or_drop( item::spawn( *granted ) );
+                            who->i_add_or_drop(item::spawn(*granted));
                         }
                     } else {
-                        for( int i = 0; i < amount; i++ ) {
-                            who->i_add_or_drop( item::spawn( *granted ) );
+                        for (int i = 0; i < amount; i++) {
+                            who->i_add_or_drop(item::spawn(*granted));
                         }
                     }
                     who->invalidate_crafting_inventory();
-                } else if( pos.x() >= 0 && pos.y() >= 0 ) {
-                    g->m.add_item_or_charges( pos, item::spawn( *granted ) );
+                } else if (pos.x() >= 0 && pos.y() >= 0) {
+                    g->m.add_item_or_charges(pos, item::spawn(*granted));
                     wmenu.ret = -1;
                 }
-                if( amount > 0 ) {
-                    input_context ctxt( wmenu.input_category );
-                    cb.msg = string_format( _( "Wish granted.  Wish for more or hit [%s] to quit." ),
-                                            ctxt.get_desc( "QUIT" ) );
+                if (amount > 0) {
+                    input_context ctxt(wmenu.input_category);
+                    cb.msg = string_format(
+                        _("Wish granted.  Wish for more or hit [%s] to quit."),
+                        ctxt.get_desc("QUIT"));
                 }
             }
             uistate.wishitem_selected = wmenu.selected;
-            if( canceled || amount <= 0 ) {
-                amount = prev_amount;
-            }
-            if( cb.spawn_everything ) {
+            if (canceled || amount <= 0) { amount = prev_amount; }
+            if (cb.spawn_everything) {
                 wmenu.ret--;
             } else {
                 break;
             }
         }
-    } while( wmenu.ret >= 0 );
+    } while (wmenu.ret >= 0);
 }
 
 /*
  * Set skill on any player object; player character or NPC
  */
-void debug_menu::wishskill( Character *who )
-{
+void debug_menu::wishskill(Character* who) {
     const int skoffset = 1;
     uilist skmenu;
-    skmenu.text = _( "Select a skill to modify" );
+    skmenu.text = _("Select a skill to modify");
     skmenu.allow_anykey = true;
-    skmenu.addentry( 0, true, '1', _( "Modify all skills…" ) );
+    skmenu.addentry(0, true, '1', _("Modify all skills…"));
 
-    auto sorted_skills = Skill::get_skills_sorted_by( []( const Skill & a, const Skill & b ) {
-        return localized_compare( a.name(), b.name() );
-    } );
+    auto sorted_skills = Skill::get_skills_sorted_by([](const Skill& a, const Skill& b) {
+        return localized_compare(a.name(), b.name());
+    });
 
     std::vector<int> origskills;
-    origskills.reserve( sorted_skills.size() );
+    origskills.reserve(sorted_skills.size());
 
-    for( const auto &s : sorted_skills ) {
-        const int level = who->get_skill_level( s->ident() );
-        skmenu.addentry( origskills.size() + skoffset, true, -2, _( "@ %d: %s  " ), level,
-                         s->name() );
-        origskills.push_back( level );
+    for (const auto& s : sorted_skills) {
+        const int level = who->get_skill_level(s->ident());
+        skmenu.addentry(origskills.size() + skoffset, true, -2, _("@ %d: %s  "), level, s->name());
+        origskills.push_back(level);
     }
 
     shared_ptr_fast<ui_adaptor> skmenu_ui = skmenu.create_or_get_ui_adaptor();
@@ -871,75 +802,76 @@ void debug_menu::wishskill( Character *who )
         int skill_id = -1;
         int skset = -1;
         const int sksel = skmenu.selected - skoffset;
-        if( skmenu.ret == UILIST_UNBOUND && ( skmenu.keypress == KEY_LEFT ||
-                                              skmenu.keypress == KEY_RIGHT ) ) {
-            if( sksel >= 0 && sksel < static_cast<int>( sorted_skills.size() ) ) {
+        if (skmenu.ret == UILIST_UNBOUND
+            && (skmenu.keypress == KEY_LEFT || skmenu.keypress == KEY_RIGHT)) {
+            if (sksel >= 0 && sksel < static_cast<int>(sorted_skills.size())) {
                 skill_id = sksel;
-                skset = who->get_skill_level( sorted_skills[skill_id]->ident() ) +
-                        ( skmenu.keypress == KEY_LEFT ? -1 : 1 );
+                skset = who->get_skill_level(sorted_skills[skill_id]->ident())
+                      + (skmenu.keypress == KEY_LEFT ? -1 : 1);
             }
-        } else if( skmenu.ret >= 0 && sksel >= 0 &&
-                   sksel < static_cast<int>( sorted_skills.size() ) ) {
+        } else if (skmenu.ret >= 0 && sksel >= 0 && sksel < static_cast<int>(sorted_skills.size())) {
             skill_id = sksel;
-            const Skill &skill = *sorted_skills[skill_id];
+            const Skill& skill = *sorted_skills[skill_id];
             const int NUM_SKILL_LVL = 21;
             uilist sksetmenu;
             sksetmenu.w_height_setup = NUM_SKILL_LVL + 4;
-            sksetmenu.w_x_setup = [&]( int ) -> int {
-                return skmenu.w_x + skmenu.w_width + 1;
+            sksetmenu.w_x_setup = [&](int) -> int { return skmenu.w_x + skmenu.w_width + 1; };
+            sksetmenu.w_y_setup = [&](const int height) {
+                return std::max(0, skmenu.w_y + (skmenu.w_height - height) / 2);
             };
-            sksetmenu.w_y_setup = [&]( const int height ) {
-                return std::max( 0, skmenu.w_y + ( skmenu.w_height - height ) / 2 );
-            };
-            sksetmenu.settext( string_format( _( "Set '%s' to…" ), skill.name() ) );
-            const int skcur = who->get_skill_level( skill.ident() );
+            sksetmenu.settext(string_format(_("Set '%s' to…"), skill.name()));
+            const int skcur = who->get_skill_level(skill.ident());
             sksetmenu.selected = skcur;
-            for( int i = 0; i < NUM_SKILL_LVL; i++ ) {
-                sksetmenu.addentry( i, true, i + 48, "%d%s", i, skcur == i ? _( " (current)" ) : "" );
+            for (int i = 0; i < NUM_SKILL_LVL; i++) {
+                sksetmenu.addentry(i, true, i + 48, "%d%s", i, skcur == i ? _(" (current)") : "");
             }
             sksetmenu.query();
             skset = sksetmenu.ret;
         }
 
-        if( skill_id >= 0 && skset >= 0 ) {
-            const Skill &skill = *sorted_skills[skill_id];
-            who->set_skill_level( skill.ident(), skset );
-            skmenu.textformatted[0] = string_format( _( "%s set to %d             " ),
-                                      skill.name(),
-                                      who->get_skill_level( skill.ident() ) ).substr( 0, skmenu.w_width - 4 );
-            skmenu.entries[skill_id + skoffset].txt = string_format( _( "@ %d: %s  " ),
-                who->get_skill_level( skill.ident() ),
-                skill.name() );
+        if (skill_id >= 0 && skset >= 0) {
+            const Skill& skill = *sorted_skills[skill_id];
+            who->set_skill_level(skill.ident(), skset);
+            skmenu.textformatted[0] =
+                string_format(_("%s set to %d             "), skill.name(),
+                              who->get_skill_level(skill.ident()))
+                    .substr(0, skmenu.w_width - 4);
+            skmenu.entries[skill_id + skoffset].txt =
+                string_format(_("@ %d: %s  "), who->get_skill_level(skill.ident()), skill.name());
             skmenu.entries[skill_id + skoffset].text_color =
-                who->get_skill_level( skill.ident() ) == origskills[skill_id] ?
-                skmenu.text_color : c_yellow;
-        } else if( skmenu.ret == 0 && sksel == -1 ) {
-            const int ret = uilist( _( "Alter all skill values" ), {
-                _( "Add 3" ), _( "Add 1" ),
-                _( "Subtract 1" ), _( "Subtract 3" ), _( "Set to 0" ),
-                _( "Set to 5" ), _( "Set to 10" ), _( "(Reset changes)" )
-            } );
-            if( ret >= 0 ) {
+                who->get_skill_level(skill.ident()) == origskills[skill_id]
+                    ? skmenu.text_color
+                    : c_yellow;
+        } else if (skmenu.ret == 0 && sksel == -1) {
+            const int ret = uilist(
+                _("Alter all skill values"),
+                {_("Add 3"), _("Add 1"), _("Subtract 1"), _("Subtract 3"), _("Set to 0"),
+                 _("Set to 5"), _("Set to 10"), _("(Reset changes)")});
+            if (ret >= 0) {
                 int skmod = 0;
                 int skset = -1;
-                if( ret < 4 ) {
+                if (ret < 4) {
                     skmod = 3 - ret * 2;
-                } else if( ret < 7 ) {
-                    skset = ( ret - 4 ) * 5;
+                } else if (ret < 7) {
+                    skset = (ret - 4) * 5;
                 }
-                for( size_t skill_id = 0; skill_id < sorted_skills.size(); skill_id++ ) {
-                    const Skill &skill = *sorted_skills[skill_id];
-                    int changeto = skmod != 0 ? who->get_skill_level( skill.ident() ) + skmod :
-                                   skset != -1 ? skset : origskills[skill_id];
-                    who->set_skill_level( skill.ident(), std::max( 0, changeto ) );
-                    skmenu.entries[skill_id + skoffset].txt = string_format( _( "@ %d: %s  " ),
-                        who->get_skill_level( skill.ident() ),
-                        skill.name() );
-                    who->get_skill_level_object( skill.ident() ).practice();
+                for (size_t skill_id = 0; skill_id < sorted_skills.size(); skill_id++) {
+                    const Skill& skill = *sorted_skills[skill_id];
+                    int changeto =
+                        skmod != 0 ? who->get_skill_level(skill.ident()) + skmod
+                        : skset != -1
+                            ? skset
+                            : origskills[skill_id];
+                    who->set_skill_level(skill.ident(), std::max(0, changeto));
+                    skmenu.entries[skill_id + skoffset].txt = string_format(
+                        _("@ %d: %s  "), who->get_skill_level(skill.ident()), skill.name());
+                    who->get_skill_level_object(skill.ident()).practice();
                     skmenu.entries[skill_id + skoffset].text_color =
-                        who->get_skill_level( skill.ident() ) == origskills[skill_id] ? skmenu.text_color : c_yellow;
+                        who->get_skill_level(skill.ident()) == origskills[skill_id]
+                            ? skmenu.text_color
+                            : c_yellow;
                 }
             }
         }
-    } while( skmenu.ret != UILIST_CANCEL );
+    } while (skmenu.ret != UILIST_CANCEL);
 }

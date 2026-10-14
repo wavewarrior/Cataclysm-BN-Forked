@@ -1,14 +1,14 @@
 #pragma once
 
-#include <map>
-#include <optional>
-#include <set>
-#include <string>
-
 #include "calendar.h"
 #include "catalua_type_operators.h"
 #include "translations.h"
 #include "type_id.h"
+
+#include <map>
+#include <optional>
+#include <set>
+#include <string>
 
 class JsonObject;
 
@@ -24,64 +24,51 @@ struct mending_method {
     std::optional<fault_id> also_mends;
 };
 
-class fault
-{
-    public:
-        fault() : id_( fault_id::NULL_ID() ) {}
+class fault {
+public:
+    fault(): id_(fault_id::NULL_ID()) {}
 
-        const fault_id &id() const {
-            return id_;
+    const fault_id& id() const { return id_; }
+
+    bool is_null() const { return id_ == fault_id::NULL_ID(); }
+
+    std::string name() const { return name_.translated(); }
+
+    std::string description() const { return description_.translated(); }
+
+    const std::map<std::string, mending_method>& mending_methods() const {
+        return mending_methods_;
+    }
+
+    const mending_method* find_mending_method(const std::string& id) const {
+        if (mending_methods_.find(id) != mending_methods_.end()) {
+            return &mending_methods_.at(id);
+        } else {
+            return nullptr;
         }
+    }
 
-        bool is_null() const {
-            return id_ == fault_id::NULL_ID();
-        }
+    bool has_flag(const std::string& flag) const { return flags.contains(flag); }
 
-        std::string name() const {
-            return name_.translated();
-        }
+    /** Load fault from JSON definition */
+    static void load_fault(const JsonObject& jo);
 
-        std::string description() const {
-            return description_.translated();
-        }
+    /** Get all currently loaded faults */
+    static const std::map<fault_id, fault>& all();
 
-        const std::map<std::string, mending_method> &mending_methods() const {
-            return mending_methods_;
-        }
+    /** Clear all loaded faults (invalidating any pointers) */
+    static void reset();
 
-        const mending_method *find_mending_method( const std::string &id ) const {
-            if( mending_methods_.find( id ) != mending_methods_.end() ) {
-                return &mending_methods_.at( id );
-            } else {
-                return nullptr;
-            }
-        }
+    /** Checks all loaded from JSON are valid */
+    static void check_consistency();
 
-        bool has_flag( const std::string &flag ) const {
-            return flags.contains( flag );
-        }
+private:
+    fault_id id_;
+    translation name_;
+    translation description_;
+    std::map<std::string, mending_method> mending_methods_;
+    std::set<std::string> flags;
 
-        /** Load fault from JSON definition */
-        static void load_fault( const JsonObject &jo );
-
-        /** Get all currently loaded faults */
-        static const std::map<fault_id, fault> &all();
-
-        /** Clear all loaded faults (invalidating any pointers) */
-        static void reset();
-
-        /** Checks all loaded from JSON are valid */
-        static void check_consistency();
-
-    private:
-        fault_id id_;
-        translation name_;
-        translation description_;
-        std::map<std::string, mending_method> mending_methods_;
-        std::set<std::string> flags;
-
-    public:
-        LUA_TYPE_OPS( fault, id_ );
+public:
+    LUA_TYPE_OPS(fault, id_);
 };
-
-

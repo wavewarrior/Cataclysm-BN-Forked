@@ -5,6 +5,7 @@
 #include "line.h"
 #include "output.h"
 #include "point.h"
+
 #include <string>
 
 class Creature;
@@ -66,15 +67,15 @@ struct combat_feedback_options {
 /// This is the centralized helper that encapsulates all SCT spawn logic:
 /// position jitter calculation, color mapping, size scaling, and flag setting.
 /// Callers pass high-level info and the helper handles everything else.
-void spawn_combat_feedback( const Creature &target, const combat_feedback_options &opts );
+void spawn_combat_feedback(const Creature& target, const combat_feedback_options& opts);
 
 /// Convenience overload for spawning damage numbers with HP bar secondary text.
 /// Used by melee and ranged attack code paths.
-void spawn_damage_number( const Creature &target, int damage, direction dir,
-                          bool is_critical = false, bool is_triple_crit = false,
-                          int dt = 0, bool is_graze = false );
+void spawn_damage_number(
+    const Creature& target, int damage, direction dir, bool is_critical = false,
+    bool is_triple_crit = false, int dt = 0, bool is_graze = false);
 
 /// Convenience overload for armor feedback (damage or destruction).
-void spawn_armor_feedback( const Creature &target, const std::string &armor_name,
-                           const std::string &verb_or_status, game_message_type verb_color,
-                           bool is_destroyed = false );
+void spawn_armor_feedback(
+    const Creature& target, const std::string& armor_name, const std::string& verb_or_status,
+    game_message_type verb_color, bool is_destroyed = false);

@@ -15,16 +15,16 @@ struct coop_transport {
     virtual ~coop_transport() = default;
 
     coop_transport() = default;
-    coop_transport( const coop_transport & ) = delete;
-    coop_transport &operator=( const coop_transport & ) = delete;
+    coop_transport(const coop_transport&) = delete;
+    coop_transport& operator=(const coop_transport&) = delete;
 
     /// Send a complete framed payload.  Returns false on socket error.
-    virtual auto send( const std::string& payload ) -> bool = 0;
+    virtual auto send(const std::string& payload) -> bool = 0;
 
     /// Blocking receive of one framed payload.
     /// timeout_ms < 0 = block indefinitely; 0 = non-blocking peek.
     /// Returns false on disconnect or malformed frame.
-    virtual auto recv( std::string& buf, int timeout_ms = 5000 ) -> bool = 0;
+    virtual auto recv(std::string& buf, int timeout_ms = 5000) -> bool = 0;
 
     /// Non-blocking check: true if at least one byte is waiting.
     virtual auto poll() -> bool = 0;
@@ -34,4 +34,3 @@ struct coop_transport {
     /// Default implementation is a no-op; override in coop_net_transport.
     virtual auto close_abruptly() -> void {}
 };
-

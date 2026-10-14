@@ -101,7 +101,7 @@ struct field2 {
           w(width),
           h(height) {}
 
-    auto ref(int x, int y) -> float& { return v[y * w + x]; } // *NOPAD*
+    auto ref(int x, int y) -> float& { return v[y * w + x]; }
     /// Edge-clamped read. Every filter below pads by clamping, as the prototype did.
     auto clamped(int x, int y) const -> float {
         return v[std::clamp(y, 0, h - 1) * w + std::clamp(x, 0, w - 1)];
@@ -197,8 +197,8 @@ public:
     }
     surface_lock(const surface_lock&) = delete;
     surface_lock(surface_lock&&) = delete;
-    auto operator=(const surface_lock&) -> surface_lock& = delete; // *NOPAD*
-    auto operator=(surface_lock&&) -> surface_lock& = delete;      // *NOPAD*
+    auto operator=(const surface_lock&) -> surface_lock& = delete;
+    auto operator=(surface_lock&&) -> surface_lock& = delete;
 
     auto ok() const -> bool { return ok_; }
 

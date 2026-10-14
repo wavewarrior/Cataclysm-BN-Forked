@@ -2,87 +2,84 @@
 
 class monster;
 
-namespace mdeath
-{
+namespace mdeath {
 // Drop a body
-void normal( monster &z );
+void normal(monster& z);
 // Overkill splatter (also part of normal under conditions)
-void splatter( monster &z );
+void splatter(monster& z);
 // Acid instead of a body
-void acid( monster &z );
+void acid(monster& z);
 // Explodes in vomit :3
-void boomer( monster &z );
+void boomer(monster& z);
 // Explodes in vomit :3
-void boomer_glow( monster &z );
+void boomer_glow(monster& z);
 // Kill all nearby vines
-void kill_vines( monster &z );
+void kill_vines(monster& z);
 // Kill adjacent vine if it's cut
-void vine_cut( monster &z );
+void vine_cut(monster& z);
 // Destroy all roots
-void triffid_heart( monster &z );
+void triffid_heart(monster& z);
 // Explodes in spores D:
-void fungus( monster &z );
+void fungus(monster& z);
 // Falls apart
-void disintegrate( monster &z );
+void disintegrate(monster& z);
 // Screams loudly
-void shriek( monster &z );
+void shriek(monster& z);
 // Wolf's howling
-void howl( monster &z );
+void howl(monster& z);
 // Rattles like a rattlesnake
-void rattle( monster &z );
+void rattle(monster& z);
 // Spawns 2 half-worms
-void worm( monster &z );
+void worm(monster& z);
 // Hallucination disappears
-void disappear( monster &z );
+void disappear(monster& z);
 // Morale penalty
-void guilt( monster &z );
+void guilt(monster& z);
 // Frees blobs, redirects to blobsplit
-void brainblob( monster &z );
+void brainblob(monster& z);
 // Creates more blobs
-void blobsplit( monster &z );
+void blobsplit(monster& z);
 // Reverts dancers
-void jackson( monster &z );
+void jackson(monster& z);
 // Normal death, but melts
-void melt( monster &z );
+void melt(monster& z);
 // Removes hypnosis if last one
-void amigara( monster &z );
+void amigara(monster& z);
 // Turn into a full thing
-void thing( monster &z );
+void thing(monster& z);
 // Damaging explosion
-void explode( monster &z );
+void explode(monster& z);
 // Blinding ray
-void focused_beam( monster &z );
+void focused_beam(monster& z);
 // Broken robot drop
-void broken( monster &z );
+void broken(monster& z);
 // Cure verminitis
-void ratking( monster &z );
+void ratking(monster& z);
 // Sight returns to normal
-void darkman( monster &z );
+void darkman(monster& z);
 // Explodes in toxic gas
-void gas( monster &z );
+void gas(monster& z);
 // All breathers die
-void kill_breathers( monster &z );
+void kill_breathers(monster& z);
 // Explode like a huge smoke bomb.
-void smokeburst( monster &z );
+void smokeburst(monster& z);
 // Explode releasing fungal haze.
-void fungalburst( monster &z );
+void fungalburst(monster& z);
 // Snicker-snack!
-void jabberwock( monster &z );
+void jabberwock(monster& z);
 // Take the enemy with you
-void detonate( monster &z );
+void detonate(monster& z);
 // Breaks ammo and then itself
-void broken_ammo( monster &z );
+void broken_ammo(monster& z);
 // Spawns 1-3 roach nymphs
-void preg_roach( monster &z );
+void preg_roach(monster& z);
 // Explodes in fire
-void fireball( monster &z );
+void fireball(monster& z);
 // Similar to above but bigger and guaranteed.
-void conflagration( monster &z );
+void conflagration(monster& z);
 
 // Game over!  Defense mode
-void gameover( monster &z );
-} //namespace mdeath
+void gameover(monster& z);
+} // namespace mdeath
 
-void make_mon_corpse( monster &z, int damageLvl );
-
-
+void make_mon_corpse(monster& z, int damageLvl);

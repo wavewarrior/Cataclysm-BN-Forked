@@ -8,8 +8,7 @@ class JsonOut;
 /// The agent driver's `view`: the avatar's surroundings as an ASCII terrain grid with a legend,
 /// and the creatures and items in sight as a structured list, so an oracle never parses the grid.
 /// Reads the world only; it takes no game time and never changes what a later query reports.
-namespace driver_view
-{
+namespace driver_view {
 
 /// The radius a `view` request gets when it names none, and the widest one the driver answers.
 constexpr int default_radius = 5;
@@ -31,6 +30,6 @@ constexpr size_t unlimited = std::numeric_limits<size_t>::max();
 /// window itself would take more than `room` bytes it is made smaller first, down to a radius
 /// of 1, and `radius` then says how far it looks. Assigns an id to every item it lists.
 /// Returns true when it shrank the window or cut a list. `radius` is within 1 to `max_radius`.
-auto write_view( JsonOut &jo, int radius, size_t room = unlimited ) -> bool;
+auto write_view(JsonOut& jo, int radius, size_t room = unlimited) -> bool;
 
 } // namespace driver_view

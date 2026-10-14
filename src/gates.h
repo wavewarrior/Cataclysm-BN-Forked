@@ -1,37 +1,33 @@
 #pragma once
 
-#include <string>
-
 #include "coordinates.h"
+
+#include <string>
 
 class JsonObject;
 class player;
 class map;
 class Character;
 
-namespace gates
-{
+namespace gates {
 
-void load( const JsonObject &jo, const std::string &src );
+void load(const JsonObject& jo, const std::string& src);
 void check();
 void reset();
 
 /** opens/closes the gate via player's activity */
-void toggle_gate( const tripoint_bub_ms &pos, Character &who );
+void toggle_gate(const tripoint_bub_ms& pos, Character& who);
 /** opens/closes the gate immediately */
-void toggle_gate( const tripoint_bub_ms &pos );
+void toggle_gate(const tripoint_bub_ms& pos);
 
 } // namespace gates
 
-namespace doors
-{
+namespace doors {
 
 /**
  * Handles deducting moves, printing messages (only non-NPCs cause messages), actually closing it,
  * checking if it can be closed, etc.
-*/
-void close_door( map &m, Character &who, const tripoint_bub_ms &closep );
+ */
+void close_door(map& m, Character& who, const tripoint_bub_ms& closep);
 
 } // namespace doors
-
-

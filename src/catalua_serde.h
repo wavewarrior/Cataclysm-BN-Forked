@@ -5,12 +5,9 @@
 class JsonObject;
 class JsonOut;
 
-namespace cata
-{
+namespace cata {
 
-void serialize_lua_table( const sol::table &t, JsonOut &jsout );
-void deserialize_lua_table( sol::table t, JsonObject &obj );
+void serialize_lua_table(const sol::table& t, JsonOut& jsout);
+void deserialize_lua_table(sol::table t, JsonObject& obj);
 
 } // namespace cata
-
-

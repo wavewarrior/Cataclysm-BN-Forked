@@ -1,5 +1,9 @@
 #pragma once
 
+#include "coordinates.h"
+#include "units_angle.h"
+#include "units_probability.h"
+
 #include <array>
 #include <functional>
 #include <iosfwd>
@@ -7,14 +11,9 @@
 #include <random>
 #include <type_traits>
 
-#include "coordinates.h"
-#include "units_angle.h"
-#include "units_probability.h"
-
 class map;
 class time_duration;
-template<typename Tripoint>
-class tripoint_range;
+template <typename Tripoint> class tripoint_range;
 struct tripoint;
 
 // All PRNG functions use an engine, see the C++11 <random> header
@@ -24,10 +23,10 @@ struct tripoint;
 // Global seed accessor for network distribution
 extern unsigned int g_main_rng_seed;
 unsigned int rng_get_current_seed();
-void rng_set_engine_seed( unsigned int seed );
+void rng_set_engine_seed(unsigned int seed);
 
 using cata_default_random_engine = std::minstd_rand0;
-cata_default_random_engine &rng_get_engine();
+cata_default_random_engine& rng_get_engine();
 unsigned int rng_bits();
 
 /**
@@ -41,52 +40,41 @@ unsigned int rng_bits();
  * The main thread must never call rng_set_worker_seed(); it always uses the
  * global engine returned by rng_get_engine().
  */
-void rng_set_worker_seed( unsigned int seed );
+void rng_set_worker_seed(unsigned int seed);
 
-int rng( int lo, int hi );
-double rng_float( double lo, double hi );
+int rng(int lo, int hi);
+double rng_float(double lo, double hi);
 
-template<typename U>
-units::quantity<double, U> rng_float( units::quantity<double, U> lo,
-                                      units::quantity<double, U> hi )
-{
-    return { rng_float( lo.value(), hi.value() ), U{} };
+template <typename U>
+units::quantity<double, U> rng_float(units::quantity<double, U> lo, units::quantity<double, U> hi) {
+    return {rng_float(lo.value(), hi.value()), U{}};
 }
 
 units::angle random_direction();
 
-bool one_in( int chance );
-bool one_turn_in( const time_duration &duration );
-bool x_in_y( double x, double y );
-bool check( units::probability p );
-int dice( int number, int sides );
+bool one_in(int chance);
+bool one_turn_in(const time_duration& duration);
+bool x_in_y(double x, double y);
+bool check(units::probability p);
+int dice(int number, int sides);
 
 // Returns x + x_in_y( x-int(x), 1 )
-int roll_remainder( double value );
-inline int roll_remainder( float value )
-{
-    return roll_remainder( static_cast<double>( value ) );
-}
+int roll_remainder(double value);
+inline int roll_remainder(float value) { return roll_remainder(static_cast<double>(value)); }
 
-int djb2_hash( const unsigned char *input );
+int djb2_hash(const unsigned char* input);
 
-double rng_normal( double lo, double hi );
+double rng_normal(double lo, double hi);
 
-inline double rng_normal( double hi )
-{
-    return rng_normal( 0.0, hi );
-}
+inline double rng_normal(double hi) { return rng_normal(0.0, hi); }
 
-double normal_roll( double mean, double stddev );
+double normal_roll(double mean, double stddev);
 
-double rng_exponential( double min, double mean );
+double rng_exponential(double min, double mean);
 
-inline double rng_exponential( double mean )
-{
-    return rng_exponential( 0.0, mean );
-}
+inline double rng_exponential(double mean) { return rng_exponential(0.0, mean); }
 
-double exponential_roll( double lambda );
+double exponential_roll(double lambda);
 
 /**
  * Returns a random entry in the container.
@@ -99,14 +87,11 @@ double exponential_roll( double lambda );
  * a temporary object that is not valid after this function has left:
  * \code random_entry( vect, std::string("default") ); \endcode
  */
-template<typename C, typename D, typename V = typename C::value_type>
-inline V random_entry( const C &container, D default_value )
-{
-    if( container.empty() ) {
-        return default_value;
-    }
+template <typename C, typename D, typename V = typename C::value_type>
+inline V random_entry(const C& container, D default_value) {
+    if (container.empty()) { return default_value; }
     auto iter = container.begin();
-    std::advance( iter, rng( 0, container.size() - 1 ) );
+    std::advance(iter, rng(0, container.size() - 1));
     return *iter;
 }
 /**
@@ -115,105 +100,84 @@ inline V random_entry( const C &container, D default_value )
  * This function handles empty containers without requiring an instance of the
  * contained type when container is empty.
  */
-template<typename C>
-inline auto random_entry_opt( C &container ) ->
-std::optional<decltype( std::ref( *container.begin() ) )>
-{
-    if( container.empty() ) {
-        return std::nullopt;
-    }
+template <typename C>
+inline auto random_entry_opt(C& container)
+    -> std::optional<decltype(std::ref(*container.begin()))> {
+    if (container.empty()) { return std::nullopt; }
     auto iter = container.begin();
-    std::advance( iter, rng( 0, container.size() - 1 ) );
-    return std::ref( *iter );
+    std::advance(iter, rng(0, container.size() - 1));
+    return std::ref(*iter);
 }
 /**
  * Same as above, but returns a default constructed value if the container
  * is empty.
  */
-template<typename C, typename V = typename C::value_type>
-inline V random_entry( const C &container )
-{
-    if( container.empty() ) {
-        return V();
-    }
+template <typename C, typename V = typename C::value_type>
+inline V random_entry(const C& container) {
+    if (container.empty()) { return V(); }
     auto iter = container.begin();
-    std::advance( iter, rng( 0, container.size() - 1 ) );
+    std::advance(iter, rng(0, container.size() - 1));
     return *iter;
 }
 
-template<typename ...T>
-class is_std_array_helper : public std::false_type
-{
-};
-template<typename T, std::size_t N>
-class is_std_array_helper<std::array<T, N>> : public std::true_type
-{
-};
-template<typename T>
-class is_std_array : public is_std_array_helper<std::decay_t<T>> {
-};
+template <typename... T> class is_std_array_helper: public std::false_type {};
+template <typename T, std::size_t N>
+class is_std_array_helper<std::array<T, N>>: public std::true_type {};
+template <typename T> class is_std_array: public is_std_array_helper<std::decay_t<T>> {};
 
 /**
  * Same as above, but with a statically allocated default value (using the default
  * constructor). This allows to return a reference, either into the given container
  * or to the default value.
  */
-template<typename C, typename V = typename C::value_type>
-inline typename std::enable_if < !is_std_array<C>::value,
-       const V & >::type random_entry_ref( const C &container )
-{
-    if( container.empty() ) {
+template <typename C, typename V = typename C::value_type>
+inline typename std::enable_if<!is_std_array<C>::value, const V&>::type random_entry_ref(
+    const C& container) {
+    if (container.empty()) {
         static const V default_value = V();
         return default_value;
     }
     auto iter = container.begin();
-    std::advance( iter, rng( 0, container.size() - 1 ) );
+    std::advance(iter, rng(0, container.size() - 1));
     return *iter;
 }
-template<typename V, std::size_t N>
-inline const V &random_entry_ref( const std::array<V, N> &container )
-{
-    static_assert( N > 0, "Need a non-empty array to get a random value from it" );
-    return container[rng( 0, N - 1 )];
+template <typename V, std::size_t N>
+inline const V& random_entry_ref(const std::array<V, N>& container) {
+    static_assert(N > 0, "Need a non-empty array to get a random value from it");
+    return container[rng(0, N - 1)];
 }
 /**
  * Returns a random entry in the container and removes it from the container.
  * The container must not be empty!
  */
-template<typename C, typename V = typename C::value_type>
-inline V random_entry_removed( C &container )
-{
+template <typename C, typename V = typename C::value_type>
+inline V random_entry_removed(C& container) {
     auto iter = container.begin();
-    std::advance( iter, rng( 0, container.size() - 1 ) );
-    const V result = std::move( *iter ); // Copy because the original is removed and thereby destroyed
-    container.erase( iter );
+    std::advance(iter, rng(0, container.size() - 1));
+    const V result = std::move(*iter); // Copy because the original is removed and thereby destroyed
+    container.erase(iter);
     return result;
 }
 
 
-template<typename T>
-class detached_ptr;
-template<typename T>
-class location_vector;
+template <typename T> class detached_ptr;
+template <typename T> class location_vector;
 
-template<typename C>
-inline detached_ptr<C> random_entry_detached( location_vector<C> &container )
-{
+template <typename C> inline detached_ptr<C> random_entry_detached(location_vector<C>& container) {
     auto iter = container.begin();
-    std::advance( iter, rng( 0, container.size() - 1 ) );
+    std::advance(iter, rng(0, container.size() - 1));
     detached_ptr<C> ret;
-    container.erase( iter, &ret );
+    container.erase(iter, &ret);
     return ret;
 }
 
 
 /// Returns a range enclosing all valid points of the map.
-tripoint_range<tripoint_bub_ms> points_in_range( const map &m );
+tripoint_range<tripoint_bub_ms> points_in_range(const map& m);
 /// Returns a random point in the given range that satisfies the given predicate ( if any ).
-std::optional<tripoint_bub_ms> random_point( const tripoint_range<tripoint_bub_ms> &range,
-        const std::function<bool( const tripoint_bub_ms & )> &predicate );
+std::optional<tripoint_bub_ms> random_point(
+    const tripoint_range<tripoint_bub_ms>& range,
+    const std::function<bool(const tripoint_bub_ms&)>& predicate);
 /// Same as other random_point with a range enclosing all valid points of the map.
-std::optional<tripoint_bub_ms> random_point( const map &m,
-        const std::function<bool( const tripoint_bub_ms & )> &predicate );
-
-
+std::optional<tripoint_bub_ms> random_point(
+    const map& m, const std::function<bool(const tripoint_bub_ms&)>& predicate);

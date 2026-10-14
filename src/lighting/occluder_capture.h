@@ -54,7 +54,7 @@ struct occluder_page {
     SDL_GPUTexture* tex = nullptr;
     int atlas_w = 0;
     int atlas_h = 0;
-    auto operator<=>(const occluder_page&) const = default; // *NOPAD*
+    auto operator<=>(const occluder_page&) const = default;
 };
 
 /// Per-frame accumulator. Cleared by begin(), filled from cata_tiles' terrain/
@@ -67,14 +67,14 @@ public:
     /// Record one footprint and mark its tile as captured. Out-of-range tiles and
     /// quads with no GPU atlas page are dropped.
     auto push(const occluder_quad& q, const occluder_page& page) -> void;
-    auto quads() const -> const std::vector<occluder_quad>& { return quads_; } // *NOPAD*
+    auto quads() const -> const std::vector<occluder_quad>& { return quads_; }
     /// Parallel to quads(): the atlas page each quad samples.
-    auto pages() const -> const std::vector<occluder_page>& { return pages_; } // *NOPAD*
+    auto pages() const -> const std::vector<occluder_page>& { return pages_; }
     /// Tile-res mask: 1 where at least one quad was captured, else 0. x-major
     /// (mask[x * h + y]), matching the TransBuf / SdfBuf layout. occ_base.comp
     /// uses it to fall back to the tile-square seed for tiles nothing drew —
     /// that is what keeps off-camera walls casting their shadows into view.
-    auto captured_mask() const -> const std::vector<std::uint8_t>& { return captured_; } // *NOPAD*
+    auto captured_mask() const -> const std::vector<std::uint8_t>& { return captured_; }
     auto resize(int w, int h) -> void;
     auto width() const -> int { return w_; }
     auto height() const -> int { return h_; }

@@ -1,29 +1,15 @@
 #include "ballistics.h"
 
-#include <algorithm>
-#include <cmath>
-#include <cstddef>
-#include <memory>
-#include <optional>
-#include <set>
-#include <ranges>
-#include <array>
-#include <string>
-#include <utility>
-#include <vector>
-
 #include "animation.h"
 #include "avatar.h"
 #include "bodypart.h"
 #include "calendar.h"
-#   include "cata_tiles.h"
-#   include "sdltiles.h"
+#include "cata_tiles.h"
 #include "cata_utility.h" // for normal_cdf
 #include "character.h"
 #include "creature.h"
 #include "damage.h"
 #include "debug.h"
-#include "sound_visualization.h"
 #include "dispersion.h"
 #include "enums.h"
 #include "explosion_queue.h"
@@ -37,8 +23,13 @@
 #include "monster.h"
 #include "mtype.h"
 #include "options.h"
+#include "physics/filter_bits.h"
+#include "physics/physics_world.h"
+#include "physics/vehicle_shape.h" // TILE_M
 #include "projectile.h"
 #include "rng.h"
+#include "sdltiles.h"
+#include "sound_visualization.h"
 #include "sounds.h"
 #include "translations.h"
 #include "trap.h"
@@ -46,85 +37,84 @@
 #include "units.h"
 #include "visitable.h"
 #include "vpart_position.h"
+
+#include <algorithm>
+#include <array>
 #include <box2d/box2d.h>
-#include "physics/physics_world.h"
-#include "physics/filter_bits.h"
-#include "physics/vehicle_shape.h" // TILE_M
+#include <cmath>
+#include <cstddef>
+#include <memory>
+#include <optional>
+#include <ranges>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
-static const ammo_effect_str_id ammo_effect_ACT_ON_RANGED_HIT( "ACT_ON_RANGED_HIT" );
-static const ammo_effect_str_id ammo_effect_BOUNCE( "BOUNCE" );
-static const ammo_effect_str_id ammo_effect_BURST( "BURST" );
-static const ammo_effect_str_id ammo_effect_DRAW_AS_LINE( "DRAW_AS_LINE" );
-static const ammo_effect_str_id ammo_effect_HEAVY_HIT( "HEAVY_HIT" );
-static const ammo_effect_str_id ammo_effect_JET( "JET" );
-static const ammo_effect_str_id ammo_effect_NET_TANGLE( "NET_TANGLE" );
-static const ammo_effect_str_id ammo_effect_MUZZLE_SMOKE( "MUZZLE_SMOKE" );
-static const ammo_effect_str_id ammo_effect_NO_EMBED( "NO_EMBED" );
-static const ammo_effect_str_id ammo_effect_NO_ITEM_DAMAGE( "NO_ITEM_DAMAGE" );
-static const ammo_effect_str_id ammo_effect_NO_OVERSHOOT( "NO_OVERSHOOT" );
-static const ammo_effect_str_id ammo_effect_NO_PENETRATE_OBSTACLES( "NO_PENETRATE_OBSTACLES" );
-static const auto ammo_effect_NO_DAMAGE = ammo_effect_str_id( "NO_DAMAGE" );
-static const ammo_effect_str_id ammo_effect_NULL_SOURCE( "NULL_SOURCE" );
-static const ammo_effect_str_id ammo_effect_SHATTER_SELF( "SHATTER_SELF" );
-static const ammo_effect_str_id ammo_effect_STREAM( "STREAM" );
-static const ammo_effect_str_id ammo_effect_STREAM_BIG( "STREAM_BIG" );
-static const ammo_effect_str_id ammo_effect_TANGLE( "TANGLE" );
-static const ammo_effect_str_id ammo_effect_THROWN( "THROWN" );
+static const ammo_effect_str_id ammo_effect_ACT_ON_RANGED_HIT("ACT_ON_RANGED_HIT");
+static const ammo_effect_str_id ammo_effect_BOUNCE("BOUNCE");
+static const ammo_effect_str_id ammo_effect_BURST("BURST");
+static const ammo_effect_str_id ammo_effect_DRAW_AS_LINE("DRAW_AS_LINE");
+static const ammo_effect_str_id ammo_effect_HEAVY_HIT("HEAVY_HIT");
+static const ammo_effect_str_id ammo_effect_JET("JET");
+static const ammo_effect_str_id ammo_effect_NET_TANGLE("NET_TANGLE");
+static const ammo_effect_str_id ammo_effect_MUZZLE_SMOKE("MUZZLE_SMOKE");
+static const ammo_effect_str_id ammo_effect_NO_EMBED("NO_EMBED");
+static const ammo_effect_str_id ammo_effect_NO_ITEM_DAMAGE("NO_ITEM_DAMAGE");
+static const ammo_effect_str_id ammo_effect_NO_OVERSHOOT("NO_OVERSHOOT");
+static const ammo_effect_str_id ammo_effect_NO_PENETRATE_OBSTACLES("NO_PENETRATE_OBSTACLES");
+static const auto ammo_effect_NO_DAMAGE = ammo_effect_str_id("NO_DAMAGE");
+static const ammo_effect_str_id ammo_effect_NULL_SOURCE("NULL_SOURCE");
+static const ammo_effect_str_id ammo_effect_SHATTER_SELF("SHATTER_SELF");
+static const ammo_effect_str_id ammo_effect_STREAM("STREAM");
+static const ammo_effect_str_id ammo_effect_STREAM_BIG("STREAM_BIG");
+static const ammo_effect_str_id ammo_effect_TANGLE("TANGLE");
+static const ammo_effect_str_id ammo_effect_THROWN("THROWN");
 
-static const efftype_id effect_tied( "tied" );
+static const efftype_id effect_tied("tied");
 
-static const efftype_id effect_bounced( "bounced" );
+static const efftype_id effect_bounced("bounced");
 
-static const efftype_id effect_poison( "poison" );
-static const efftype_id effect_badpoison( "badpoison" );
-static const efftype_id effect_bleed( "bleed" );
+static const efftype_id effect_poison("poison");
+static const efftype_id effect_badpoison("badpoison");
+static const efftype_id effect_bleed("bleed");
 
-static const std::string flag_LIQUID( "LIQUID" );
-static const std::string flag_THIN_OBSTACLE( "THIN_OBSTACLE" );
+static const std::string flag_LIQUID("LIQUID");
+static const std::string flag_THIN_OBSTACLE("THIN_OBSTACLE");
 
-static const flag_id flag_FLY_STRAIGHT( "FLY_STRAIGHT" );
+static const flag_id flag_FLY_STRAIGHT("FLY_STRAIGHT");
 
-static const trait_id trait_MUT_HEMORRHAGE( "MUT_HEMORRHAGE" );
-static const trait_id trait_MUT_TOXIC_SECRETION( "MUT_TOXIC_SECRETION" );
-static const trait_id trait_MUT_VENOM_GLAND( "MUT_VENOM_GLAND" );
+static const trait_id trait_MUT_HEMORRHAGE("MUT_HEMORRHAGE");
+static const trait_id trait_MUT_TOXIC_SECRETION("MUT_TOXIC_SECRETION");
+static const trait_id trait_MUT_VENOM_GLAND("MUT_VENOM_GLAND");
 
 thread_local int projectile_animation_suppression_depth = 0;
 
-scoped_projectile_animation_suppression::scoped_projectile_animation_suppression()
-{
+scoped_projectile_animation_suppression::scoped_projectile_animation_suppression() {
     projectile_animation_suppression_depth++;
 }
 
-scoped_projectile_animation_suppression::~scoped_projectile_animation_suppression()
-{
+scoped_projectile_animation_suppression::~scoped_projectile_animation_suppression() {
     projectile_animation_suppression_depth--;
 }
 
-namespace
-{
+namespace {
 
-void drop_or_embed_projectile( dealt_projectile_attack &attack )
-{
-    auto &proj = attack.proj;
+void drop_or_embed_projectile(dealt_projectile_attack& attack) {
+    auto& proj = attack.proj;
     detached_ptr<item> drop = proj.unset_drop();
-    if( !drop ) {
-        return;
-    }
-    item &drop_item = *drop;
-    if( drop_item.is_null() ) {
-        return;
-    }
+    if (!drop) { return; }
+    item& drop_item = *drop;
+    if (drop_item.is_null()) { return; }
 
-    const auto &pt = attack.end_point;
+    const auto& pt = attack.end_point;
 
-    if( proj.has_effect( ammo_effect_SHATTER_SELF ) ) {
+    if (proj.has_effect(ammo_effect_SHATTER_SELF)) {
         // Drop the contents, not the thrown item
-        if( g->u.sees( pt ) ) {
-            add_msg( _( "The %s shatters!" ), drop_item.tname() );
-        }
+        if (g->u.sees(pt)) { add_msg(_("The %s shatters!"), drop_item.tname()); }
 
         // copies the drop item to spill the contents
-        drop_item.spill_contents( pt );
+        drop_item.spill_contents(pt);
 
         // TODO: Non-glass breaking
         // TODO: Wine glass breaking vs. entire sheet of glass breaking
@@ -132,68 +122,67 @@ void drop_or_embed_projectile( dealt_projectile_attack &attack )
         se.origin = pt;
         se.volume = 75;
         se.category = sounds::sound_t::combat;
-        se.description = _( "glass breaking!" );
+        se.description = _("glass breaking!");
         se.id = "bullet_hit";
         se.variant = "hit_glass";
-        sounds::sound( se );
+        sounds::sound(se);
         return;
     }
 
-    if( proj.has_effect( ammo_effect_BURST ) ) {
+    if (proj.has_effect(ammo_effect_BURST)) {
         // Drop the contents, not the thrown item
-        if( g->u.sees( pt ) ) {
-            add_msg( _( "The %s bursts!" ), drop_item.tname() );
-        }
+        if (g->u.sees(pt)) { add_msg(_("The %s bursts!"), drop_item.tname()); }
 
         // copies the drop item to spill the contents
-        drop_item.spill_contents( pt );
+        drop_item.spill_contents(pt);
 
         // TODO: Sound
         return;
     }
 
-    auto *mon = dynamic_cast<monster *>( attack.hit_critter );
+    auto* mon = dynamic_cast<monster*>(attack.hit_critter);
 
     // We can only embed in monsters
     const bool mon_there = mon != nullptr && !mon->is_dead_state();
     // And if we actually want to embed
-    bool embed = mon_there && !proj.has_effect( ammo_effect_NO_EMBED ) &&
-                 !proj.has_effect( ammo_effect_TANGLE );
+    bool embed =
+        mon_there && !proj.has_effect(ammo_effect_NO_EMBED) && !proj.has_effect(ammo_effect_TANGLE);
     // Don't embed in small creatures
-    if( embed ) {
+    if (embed) {
         const creature_size critter_size = mon->get_size();
         const units::volume vol = drop_item.volume();
-        embed = embed && ( critter_size > creature_size::tiny || vol < 250_ml );
-        embed = embed && ( critter_size > creature_size::small || vol < 500_ml );
+        embed = embed && (critter_size > creature_size::tiny || vol < 250_ml);
+        embed = embed && (critter_size > creature_size::small || vol < 500_ml);
         // And if we deal enough damage
         // Item volume bumps up the required damage too
-        embed = embed &&
-                ( attack.dealt_dam.type_damage( DT_CUT ) / 2 ) +
-                attack.dealt_dam.type_damage( DT_STAB ) >
-                attack.dealt_dam.type_damage( DT_BASH ) +
-                vol * 3 / 250_ml + rng( 0, 5 );
+        embed = embed
+             && (attack.dealt_dam.type_damage(DT_CUT) / 2) + attack.dealt_dam.type_damage(DT_STAB)
+                    > attack.dealt_dam.type_damage(DT_BASH) + vol * 3 / 250_ml + rng(0, 5);
     }
 
-    if( embed ) {
-        mon->add_item( std::move( drop ) );
-        if( g->u.sees( *mon ) ) {
-            add_msg( _( "The %1$s embeds in %2$s!" ), drop_item.tname(), mon->disp_name() );
+    if (embed) {
+        mon->add_item(std::move(drop));
+        if (g->u.sees(*mon)) {
+            add_msg(_("The %1$s embeds in %2$s!"), drop_item.tname(), mon->disp_name());
         }
-        avatar *ch = g->u.attitude_to( *mon ) == Attitude::A_FRIENDLY ? &g->u : nullptr;
-        if( ch && ( attack.dealt_dam.type_damage( DT_CUT ) > 0 ||
-                    attack.dealt_dam.type_damage( DT_STAB ) > 0 ) ) {
-            if( ch->has_trait( trait_MUT_TOXIC_SECRETION ) && one_in( 3 ) ) {
-                ch->add_msg_if_player( m_good, _( "Your toxic secretion corrodes %s!" ), mon->disp_name() );
-                mon->add_effect( effect_poison, 4_turns );
-                mon->apply_damage( ch, bodypart_id( "torso" ), 2 );
+        avatar* ch = g->u.attitude_to(*mon) == Attitude::A_FRIENDLY ? &g->u : nullptr;
+        if (ch
+            && (attack.dealt_dam.type_damage(DT_CUT) > 0
+                || attack.dealt_dam.type_damage(DT_STAB) > 0)) {
+            if (ch->has_trait(trait_MUT_TOXIC_SECRETION) && one_in(3)) {
+                ch->add_msg_if_player(
+                    m_good, _("Your toxic secretion corrodes %s!"), mon->disp_name());
+                mon->add_effect(effect_poison, 4_turns);
+                mon->apply_damage(ch, bodypart_id("torso"), 2);
             }
-            if( ch->has_trait( trait_MUT_VENOM_GLAND ) && one_in( 4 ) ) {
-                ch->add_msg_if_player( m_good, _( "Your venom glands coat the wound!" ), mon->disp_name() );
-                mon->add_effect( effect_poison, 4_turns );
+            if (ch->has_trait(trait_MUT_VENOM_GLAND) && one_in(4)) {
+                ch->add_msg_if_player(
+                    m_good, _("Your venom glands coat the wound!"), mon->disp_name());
+                mon->add_effect(effect_poison, 4_turns);
             }
-            if( ch->has_trait( trait_MUT_HEMORRHAGE ) && one_in( 3 ) ) {
-                ch->add_msg_if_player( m_good, _( "The wound bleeds heavily!" ), mon->disp_name() );
-                mon->add_effect( effect_bleed, 3_turns );
+            if (ch->has_trait(trait_MUT_HEMORRHAGE) && one_in(3)) {
+                ch->add_msg_if_player(m_good, _("The wound bleeds heavily!"), mon->disp_name());
+                mon->add_effect(effect_bleed, 3_turns);
             }
         }
     } else {
@@ -203,129 +192,114 @@ void drop_or_embed_projectile( dealt_projectile_attack &attack )
         // if they aren't friendly they will try and break out of the net/bolas/lasso
         // players and NPCs just get the downed effect, and item is dropped.
         // TODO: storing the item on player until they recover from downed
-        if( ( proj.has_effect( ammo_effect_TANGLE ) || proj.has_effect( ammo_effect_NET_TANGLE ) ) &&
-            mon_there ) {
+        if ((proj.has_effect(ammo_effect_TANGLE) || proj.has_effect(ammo_effect_NET_TANGLE))
+            && mon_there) {
             do_drop = false;
         }
-        if( proj.has_effect( ammo_effect_ACT_ON_RANGED_HIT ) ) {
+        if (proj.has_effect(ammo_effect_ACT_ON_RANGED_HIT)) {
             // Don't drop if it exploded
-            drop = item::process( std::move( drop ), nullptr, attack.end_point, true, 1 );
+            drop = item::process(std::move(drop), nullptr, attack.end_point, true, 1);
         }
 
-        map &here = get_map();
-        if( drop && do_drop ) {
-            here.add_item_or_charges( attack.end_point, std::move( drop ) );
-        }
+        map& here = get_map();
+        if (drop && do_drop) { here.add_item_or_charges(attack.end_point, std::move(drop)); }
 
-        if( proj.has_effect( ammo_effect_HEAVY_HIT ) ) {
+        if (proj.has_effect(ammo_effect_HEAVY_HIT)) {
             sound_event se;
             se.origin = pt;
             se.category = sounds::sound_t::combat;
             se.id = "bullet_hit";
             se.variant = "hit_wall";
-            if( here.has_flag( flag_LIQUID, pt ) ) {
-                se.description = _( "splash!" );
+            if (here.has_flag(flag_LIQUID, pt)) {
+                se.description = _("splash!");
                 se.volume = 60;
-                sounds::sound( se );
+                sounds::sound(se);
             } else {
-                se.description = _( "thud." );
+                se.description = _("thud.");
                 se.volume = 70;
-                sounds::sound( se );
+                sounds::sound(se);
             }
-            const trap &tr = here.tr_at( pt );
-            if( tr.triggered_by_item( drop_item ) ) {
-                tr.trigger( pt, nullptr, &drop_item );
-            }
+            const trap& tr = here.tr_at(pt);
+            if (tr.triggered_by_item(drop_item)) { tr.trigger(pt, nullptr, &drop_item); }
         }
-        if( mon && attack.dealt_dam.total_damage() > 0 &&
-            g->u.attitude_to( *mon ) == Attitude::A_FRIENDLY ) {
-            if( g->u.has_trait( trait_MUT_TOXIC_SECRETION ) && one_in( 3 ) ) {
-                g->u.add_msg_if_player( m_good, _( "Your toxic secretion corrodes %s!" ), mon->disp_name() );
-                mon->add_effect( effect_poison, 4_turns );
-                mon->apply_damage( &g->u, bodypart_id( "torso" ), 2 );
+        if (mon && attack.dealt_dam.total_damage() > 0
+            && g->u.attitude_to(*mon) == Attitude::A_FRIENDLY) {
+            if (g->u.has_trait(trait_MUT_TOXIC_SECRETION) && one_in(3)) {
+                g->u.add_msg_if_player(
+                    m_good, _("Your toxic secretion corrodes %s!"), mon->disp_name());
+                mon->add_effect(effect_poison, 4_turns);
+                mon->apply_damage(&g->u, bodypart_id("torso"), 2);
             }
-            if( g->u.has_trait( trait_MUT_VENOM_GLAND ) && one_in( 4 ) ) {
-                g->u.add_msg_if_player( m_good, _( "Your venom glands coat the wound!" ), mon->disp_name() );
-                mon->add_effect( effect_poison, 4_turns );
+            if (g->u.has_trait(trait_MUT_VENOM_GLAND) && one_in(4)) {
+                g->u.add_msg_if_player(
+                    m_good, _("Your venom glands coat the wound!"), mon->disp_name());
+                mon->add_effect(effect_poison, 4_turns);
             }
-            if( g->u.has_trait( trait_MUT_HEMORRHAGE ) && one_in( 3 ) ) {
-                g->u.add_msg_if_player( m_good, _( "The wound bleeds heavily!" ), mon->disp_name() );
-                mon->add_effect( effect_bleed, 3_turns );
+            if (g->u.has_trait(trait_MUT_HEMORRHAGE) && one_in(3)) {
+                g->u.add_msg_if_player(m_good, _("The wound bleeds heavily!"), mon->disp_name());
+                mon->add_effect(effect_bleed, 3_turns);
             }
         }
     }
 }
 
-auto blood_trail_len( int damage ) -> size_t
-{
-    if( damage > 50 ) {
+auto blood_trail_len(int damage) -> size_t {
+    if (damage > 50) {
         return 3;
-    } else if( damage > 20 ) {
+    } else if (damage > 20) {
         return 2;
-    } else if( damage > 0 ) {
+    } else if (damage > 0) {
         return 1;
     }
     return 0;
 }
 
-static bool can_be_tangled_by_net( const monster &z )
-{
-    static const species_id species_fish( "FISH" );
-    static const species_id species_mollusk( "MOLLUSK" );
-    static const species_id species_robot( "ROBOT" );
-    static const bodytype_id bodytype_snake( "snake" );
-    static const bodytype_id bodytype_blob( "blob" );
-    return !( z.type->in_species( species_fish ) || z.type->in_species( species_mollusk ) ||
-              z.type->in_species( species_robot ) || z.type->bodytype == bodytype_snake ||
-              z.type->bodytype == bodytype_blob );
+static bool can_be_tangled_by_net(const monster& z) {
+    static const species_id species_fish("FISH");
+    static const species_id species_mollusk("MOLLUSK");
+    static const species_id species_robot("ROBOT");
+    static const bodytype_id bodytype_snake("snake");
+    static const bodytype_id bodytype_blob("blob");
+    return !(
+        z.type->in_species(species_fish) || z.type->in_species(species_mollusk)
+        || z.type->in_species(species_robot) || z.type->bodytype == bodytype_snake
+        || z.type->bodytype == bodytype_blob);
 }
 
-static void tie_monster_with_net( monster &z )
-{
-    if( z.has_effect( effect_tied ) || !can_be_tangled_by_net( z ) ) {
-        return;
-    }
-    detached_ptr<item> net_drop = item::spawn( itype_id( "net" ), calendar::turn, 1 );
-    if( !net_drop ) {
-        return;
-    }
-    z.add_effect( effect_tied, 1_turns );
-    z.set_tied_item( std::move( net_drop ) );
+static void tie_monster_with_net(monster& z) {
+    if (z.has_effect(effect_tied) || !can_be_tangled_by_net(z)) { return; }
+    detached_ptr<item> net_drop = item::spawn(itype_id("net"), calendar::turn, 1);
+    if (!net_drop) { return; }
+    z.add_effect(effect_tied, 1_turns);
+    z.set_tied_item(std::move(net_drop));
 }
 
-static void apply_net_tangle_aoe( const tripoint_bub_ms &center )
-{
-    map &here = get_map();
-    static constexpr std::array<tripoint, 9> net_offsets = {
-        tripoint_zero,
-        tripoint_west,
-        tripoint_east,
-        tripoint_north,
-        tripoint_south,
-        tripoint_west + tripoint_north,
-        tripoint_west + tripoint_south,
-        tripoint_east + tripoint_north,
-        tripoint_east + tripoint_south
-    };
+static void apply_net_tangle_aoe(const tripoint_bub_ms& center) {
+    map& here = get_map();
+    static constexpr std::array<tripoint, 9> net_offsets =
+        {tripoint_zero,
+         tripoint_west,
+         tripoint_east,
+         tripoint_north,
+         tripoint_south,
+         tripoint_west + tripoint_north,
+         tripoint_west + tripoint_south,
+         tripoint_east + tripoint_north,
+         tripoint_east + tripoint_south};
 
-    std::ranges::for_each( net_offsets, [&]( const tripoint & offset ) {
+    std::ranges::for_each(net_offsets, [&](const tripoint& offset) {
         const auto pt = center + offset;
-        if( !here.inbounds( pt ) ) {
-            return;
+        if (!here.inbounds(pt)) { return; }
+        if (Creature* cre = g->critter_at(pt, true)) {
+            if (monster* mon = dynamic_cast<monster*>(cre)) { tie_monster_with_net(*mon); }
         }
-        if( Creature *cre = g->critter_at( pt, true ) ) {
-            if( monster *mon = dynamic_cast<monster *>( cre ) ) {
-                tie_monster_with_net( *mon );
-            }
-        }
-    } );
+    });
 }
 } // namespace
 
 
-auto projectile_attack_roll( const dispersion_sources &dispersion, double range,
-                             double target_size ) -> projectile_attack_aim
-{
+auto projectile_attack_roll(const dispersion_sources& dispersion, double range, double target_size)
+    -> projectile_attack_aim {
     projectile_attack_aim aim;
 
     // dispersion is a measure of the dispersion of shots due to the gun + shooter characteristics
@@ -337,11 +311,11 @@ auto projectile_attack_roll( const dispersion_sources &dispersion, double range,
     aim.dispersion = dispersion.roll();
 
     // an isosceles triangle is formed by the intended and actual target tiles
-    aim.missed_by_tiles = iso_tangent( range, units::from_arcmin( aim.dispersion ) );
+    aim.missed_by_tiles = iso_tangent(range, units::from_arcmin(aim.dispersion));
 
     // fraction we missed a monster target by (0.0 = perfect hit, 1.0 = miss)
-    if( target_size > 0.0 ) {
-        aim.missed_by = std::min( 1.0, aim.missed_by_tiles / target_size );
+    if (target_size > 0.0) {
+        aim.missed_by = std::min(1.0, aim.missed_by_tiles / target_size);
     } else {
         // Special case 0 size targets, just to be safe from 0.0/0.0 NaNs
         aim.missed_by = 1.0;
@@ -350,26 +324,27 @@ auto projectile_attack_roll( const dispersion_sources &dispersion, double range,
     return aim;
 }
 
-auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &source,
-                        const tripoint_bub_ms &target_arg, const dispersion_sources &dispersion,
-                        Creature *origin, item *source_weapon, const vehicle *in_veh,
-                        const bool suppress_damage_messages ) -> dealt_projectile_attack
-{
-    const bool do_animation = get_option<bool>( "ANIMATION_PROJECTILES" ) &&
-                              projectile_animation_suppression_depth == 0;
+auto projectile_attack(
+    const projectile& proj_arg, const tripoint_bub_ms& source, const tripoint_bub_ms& target_arg,
+    const dispersion_sources& dispersion, Creature* origin, item* source_weapon,
+    const vehicle* in_veh, const bool suppress_damage_messages) -> dealt_projectile_attack {
+    const bool do_animation =
+        get_option<bool>("ANIMATION_PROJECTILES") && projectile_animation_suppression_depth == 0;
 
-    double range = rl_dist( source, target_arg );
+    double range = rl_dist(source, target_arg);
 
-    Creature *target_critter = g->critter_at( target_arg );
-    map &here = get_map();
-    const auto target_size = target_critter != nullptr ?
-                             target_critter->ranged_target_size() :
-                             here.inbounds( target_arg ) ? here.ranged_target_size( target_arg ) : 0.0;
-    projectile_attack_aim const aim = projectile_attack_roll( dispersion, range, target_size );
+    Creature* target_critter = g->critter_at(target_arg);
+    map& here = get_map();
+    const auto target_size =
+        target_critter != nullptr ? target_critter->ranged_target_size()
+        : here.inbounds(target_arg)
+            ? here.ranged_target_size(target_arg)
+            : 0.0;
+    projectile_attack_aim const aim = projectile_attack_roll(dispersion, range, target_size);
 
     // TODO: move to-hit roll back in here
 
-    auto attack = dealt_projectile_attack {
+    auto attack = dealt_projectile_attack{
         .proj = proj_arg,
         .hit_critter = nullptr,
         .dealt_dam = dealt_damage_instance(),
@@ -380,8 +355,8 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
     };
 
     // No suicidal shots
-    if( source == target_arg ) {
-        debugmsg( "Projectile_attack targeted own square." );
+    if (source == target_arg) {
+        debugmsg("Projectile_attack targeted own square.");
         return attack;
     }
 
@@ -392,206 +367,204 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
     // otherwise degenerate to atan2(0, 0) and fire off in an arbitrary
     // horizontal direction instead of stopping. Treat it as an immediate,
     // silent stop rather than deriving a bogus trajectory.
-    if( !here.inbounds_z( target_arg.z() ) ) {
-        return attack;
-    }
+    if (!here.inbounds_z(target_arg.z())) { return attack; }
 
-    projectile &proj = attack.proj;
+    projectile& proj = attack.proj;
 
-    const auto stream = proj.has_effect( ammo_effect_STREAM ) ||
-                        proj.has_effect( ammo_effect_STREAM_BIG ) ||
-                        proj.has_effect( ammo_effect_JET );
-    const auto no_damage = proj.has_effect( ammo_effect_NO_DAMAGE );
+    const auto stream =
+        proj.has_effect(ammo_effect_STREAM) || proj.has_effect(ammo_effect_STREAM_BIG)
+        || proj.has_effect(ammo_effect_JET);
+    const auto no_damage = proj.has_effect(ammo_effect_NO_DAMAGE);
     const char bullet = stream ? '#' : '*';
-    const bool no_item_damage = proj.has_effect( ammo_effect_NO_ITEM_DAMAGE );
-    const bool do_draw_line = proj.has_effect( ammo_effect_DRAW_AS_LINE ) ||
-                              get_option<bool>( "BULLETS_AS_LASERS" );
-    const bool null_source = proj.has_effect( ammo_effect_NULL_SOURCE );
+    const bool no_item_damage = proj.has_effect(ammo_effect_NO_ITEM_DAMAGE);
+    const bool do_draw_line =
+        proj.has_effect(ammo_effect_DRAW_AS_LINE) || get_option<bool>("BULLETS_AS_LASERS");
+    const bool null_source = proj.has_effect(ammo_effect_NULL_SOURCE);
 
-    const auto is_thrown = proj.has_effect( ammo_effect_THROWN );
-    const auto *thrown_item = proj.get_drop();
+    const auto is_thrown = proj.has_effect(ammo_effect_THROWN);
+    const auto* thrown_item = proj.get_drop();
     auto custom_bullet_sprite = std::string{};
-    if( tilecontext && do_animation ) {
-        const auto set_sprite_from_lookup = [&]( const std::string & candidate, TILE_CATEGORY category ) {
-            if( !custom_bullet_sprite.empty() ) { return; }
-            auto lookup = tilecontext->find_tile_looks_like( candidate, category );
-            if( lookup ) { custom_bullet_sprite = lookup->id(); }
-        };
+    if (tilecontext && do_animation) {
+        const auto set_sprite_from_lookup =
+            [&](const std::string& candidate, TILE_CATEGORY category) {
+                if (!custom_bullet_sprite.empty()) { return; }
+                auto lookup = tilecontext->find_tile_looks_like(candidate, category);
+                if (lookup) { custom_bullet_sprite = lookup->id(); }
+            };
 
-        const auto set_sprite_from_item = [&]( const item & it, const bool allow_item_fallback ) {
+        const auto set_sprite_from_item = [&](const item& it, const bool allow_item_fallback) {
             const auto id = it.typeId().str();
-            set_sprite_from_lookup( "animation_bullet_" + id, C_BULLET );
-            if( allow_item_fallback ) { set_sprite_from_lookup( id, C_ITEM ); }
+            set_sprite_from_lookup("animation_bullet_" + id, C_BULLET);
+            if (allow_item_fallback) { set_sprite_from_lookup(id, C_ITEM); }
         };
 
-        if( thrown_item ) { set_sprite_from_item( *thrown_item, is_thrown ); }
+        if (thrown_item) { set_sprite_from_item(*thrown_item, is_thrown); }
 
-        if( custom_bullet_sprite.empty() && source_weapon ) {
+        if (custom_bullet_sprite.empty() && source_weapon) {
             const auto ammo_type = source_weapon->ammo_current();
-            if( !ammo_type.is_null() ) {
-                set_sprite_from_lookup( "animation_bullet_" + ammo_type.str(), C_BULLET );
+            if (!ammo_type.is_null()) {
+                set_sprite_from_lookup("animation_bullet_" + ammo_type.str(), C_BULLET);
             }
         }
     }
 
     // If we were targetting a tile rather than a monster, don't overshoot
     // Unless the target was a wall, then we are aiming high enough to overshoot
-    const bool no_overshoot = proj.has_effect( ammo_effect_NO_OVERSHOOT ) ||
-                              ( g->critter_at( target_arg ) == nullptr && here.passable( target_arg ) );
+    const bool no_overshoot =
+        proj.has_effect(ammo_effect_NO_OVERSHOOT)
+        || (g->critter_at(target_arg) == nullptr && here.passable(target_arg));
 
     double extend_to_range = no_overshoot ? range : proj_arg.range;
 
     // Float DDA trajectory: dispersion deflects the aim angle; bullet travels
     // along the exact deflected angle rather than a Bresenham walk.
     const auto base_angle = units::atan2(
-                                static_cast<double>( target_arg.y() - source.y() ),
-                                static_cast<double>( target_arg.x() - source.x() ) );
-    const auto deflect_angle =
-        std::min( units::from_arcmin( aim.dispersion ), 30_degrees );
-    const auto actual_angle = base_angle + rng_float( -deflect_angle, deflect_angle );
+        static_cast<double>(target_arg.y() - source.y()),
+        static_cast<double>(target_arg.x() - source.x()));
+    const auto deflect_angle = std::min(units::from_arcmin(aim.dispersion), 30_degrees);
+    const auto actual_angle = base_angle + rng_float(-deflect_angle, deflect_angle);
 
     // Play miss-sound when the shot deviates >= 1 tile laterally (unchanged threshold)
-    if( aim.missed_by_tiles >= 1.0 ) {
-        // Take the volume of bullet impacts on walls at 90dB. Loud, but comparatively completely drowned out by the gun firing them.
-        sfx::play_variant_sound( "bullet_hit", "hit_wall",
-                                 sfx::get_heard_volume( target_arg, 90 ),
-                                 sfx::get_heard_angle( target_arg ),
-                                 sfx::get_heard_distance( target_arg ) );
+    if (aim.missed_by_tiles >= 1.0) {
+        // Take the volume of bullet impacts on walls at 90dB. Loud, but comparatively completely
+        // drowned out by the gun firing them.
+        sfx::play_variant_sound(
+            "bullet_hit", "hit_wall", sfx::get_heard_volume(target_arg, 90),
+            sfx::get_heard_angle(target_arg), sfx::get_heard_distance(target_arg));
     }
 
-    const auto dda_max_range =
-        static_cast<int>( no_overshoot ? range : extend_to_range );
-    auto trajectory = here.ray_cast_angle(
-                          source, units::to_radians( actual_angle ), dda_max_range );
+    const auto dda_max_range = static_cast<int>(no_overshoot ? range : extend_to_range);
+    auto trajectory = here.ray_cast_angle(source, units::to_radians(actual_angle), dda_max_range);
     std::vector<std::pair<monster, const dealt_projectile_attack>> hit_monsters;
 
 
     // Trace the trajectory, doing damage in order
-    auto &tp = attack.end_point;
+    auto& tp = attack.end_point;
     auto prev_point = source;
 
     // Add the first point to the trajectory
-    trajectory.insert( trajectory.begin(), source );
+    trajectory.insert(trajectory.begin(), source);
 
-    static const emit_id muzzle_smoke( "emit_smaller_smoke_plume" );
-    if( proj.has_effect( ammo_effect_MUZZLE_SMOKE ) ) {
-        here.emit_field( trajectory.front(), muzzle_smoke );
+    static const emit_id muzzle_smoke("emit_smaller_smoke_plume");
+    if (proj.has_effect(ammo_effect_MUZZLE_SMOKE)) {
+        here.emit_field(trajectory.front(), muzzle_smoke);
     }
 
     // Range can be 0
     size_t traj_len = trajectory.size();
-    while( traj_len > 0 && rl_dist( source, trajectory[traj_len - 1] ) > proj_arg.range ) {
+    while (traj_len > 0 && rl_dist(source, trajectory[traj_len - 1]) > proj_arg.range) {
         --traj_len;
     }
 
     // Non-ballistic physical projectiles lose range if they overpenetrate.
     const bool is_projectile_modify_overpenetration =
-        proj.impact.type_damage( DT_BASH ) > 0 ||
-        proj.impact.type_damage( DT_CUT ) > 0 ||
-        proj.impact.type_damage( DT_STAB ) > 0;
+        proj.impact.type_damage(DT_BASH) > 0 || proj.impact.type_damage(DT_CUT) > 0
+        || proj.impact.type_damage(DT_STAB) > 0;
 
     // Arrow, sling or the like; 0.75x or 0.5x penalty depending on which damagetype was highest.
     const float projectile_overpenetration_modifier =
-        ( proj.impact.type_damage( DT_CUT ) + proj.impact.type_damage( DT_STAB )
-          >= proj.impact.type_damage( DT_BASH ) ) ? 0.75f : 0.5f;
+        (proj.impact.type_damage(DT_CUT) + proj.impact.type_damage(DT_STAB)
+         >= proj.impact.type_damage(DT_BASH))
+            ? 0.75f
+            : 0.5f;
 
     // Bullets, lasers, or other projectiles; 0.9x range penalty but no additional damage penalty.
-    const float overpenetration_modifier = is_projectile_modify_overpenetration
-                                           ? projectile_overpenetration_modifier
-                                           : 0.9f;
+    const float overpenetration_modifier =
+        is_projectile_modify_overpenetration ? projectile_overpenetration_modifier : 0.9f;
 
     constexpr float projectile_skip_multiplier = 0.1f;
 
     // Randomize the skip so that bursts look nicer
     int projectile_skip_calculation = range * projectile_skip_multiplier;
-    int projectile_skip_current_frame = rng( 0, projectile_skip_calculation );
+    int projectile_skip_current_frame = rng(0, projectile_skip_calculation);
     bool has_momentum = true;
 
     // ── Box2D raycast: collect creature hits along the trajectory ──────────
     struct ray_creature_hit {
-        Creature *critter;
+        Creature* critter;
         float fraction;
-        b2Vec2 center;   // body center position (physics meters), resolved in callback
-        float radius;    // circle shape radius (physics meters), resolved in callback
+        b2Vec2 center; // body center position (physics meters), resolved in callback
+        float radius;  // circle shape radius (physics meters), resolved in callback
     };
-    auto creature_ray_hits = std::vector<ray_creature_hit> {};
-    auto ray_origin_m = b2Vec2{ 0.f, 0.f };
-    auto ray_translation = b2Vec2{ 0.f, 0.f };
-    if( traj_len > 1 ) {
-        if( auto *pw = here.get_physics_world() ) {
+    auto creature_ray_hits = std::vector<ray_creature_hit>{};
+    auto ray_origin_m = b2Vec2{0.f, 0.f};
+    auto ray_translation = b2Vec2{0.f, 0.f};
+    if (traj_len > 1) {
+        if (auto* pw = here.get_physics_world()) {
             struct ray_ctx {
                 std::vector<ray_creature_hit> hits;
-                const Creature *shooter;
+                const Creature* shooter;
             };
-            ray_ctx ctx{ {}, origin };
+            ray_ctx ctx{{}, origin};
 
             ray_origin_m = b2Vec2{
-                static_cast<float>( source.x() ) * TILE_M,
-                static_cast<float>( source.y() ) * TILE_M };
-            const auto &ray_end = trajectory[traj_len - 1];
-            ray_translation = b2Vec2{
-                static_cast<float>( ray_end.x() - source.x() ) * TILE_M,
-                static_cast<float>( ray_end.y() - source.y() ) * TILE_M };
+                static_cast<float>(source.x()) * TILE_M, static_cast<float>(source.y()) * TILE_M};
+            const auto& ray_end = trajectory[traj_len - 1];
+            ray_translation =
+                b2Vec2{static_cast<float>(ray_end.x() - source.x()) * TILE_M,
+                       static_cast<float>(ray_end.y() - source.y()) * TILE_M};
 
             auto filter = b2DefaultQueryFilter();
-            filter.categoryBits = physics::z_category_bit( source.z() );
-            filter.maskBits     = physics::z_category_bit( source.z() );
+            filter.categoryBits = physics::z_category_bit(source.z());
+            filter.maskBits = physics::z_category_bit(source.z());
 
-            b2World_CastRay( pw->world_id(), ray_origin_m, ray_translation, filter,
-                             []( b2ShapeId shape, b2Vec2 point, b2Vec2 /*normal*/, float fraction,
-            void *raw_ctx ) -> float {
-                if( !b2Shape_IsSensor( shape ) ) { return 1.0f; }
-                auto *rctx = static_cast<ray_ctx *>( raw_ctx );
-                const auto body = b2Shape_GetBody( shape );
-                auto *udata = static_cast<Creature *>( b2Body_GetUserData( body ) );
-                if( !udata || udata == rctx->shooter ) { return 1.0f; }
-                // Resolve geometry NOW while shape ID is guaranteed valid.
-                const auto center = b2Body_GetPosition( body );
-                const auto radius = b2Shape_GetCircle( shape ).radius;
-                rctx->hits.push_back( { udata, fraction, center, radius } );
-                return 1.0f;
-            }, &ctx );
+            b2World_CastRay(
+                pw->world_id(), ray_origin_m, ray_translation, filter,
+                [](b2ShapeId shape, b2Vec2 point, b2Vec2 /*normal*/, float fraction,
+                   void* raw_ctx) -> float {
+                    if (!b2Shape_IsSensor(shape)) { return 1.0f; }
+                    auto* rctx = static_cast<ray_ctx*>(raw_ctx);
+                    const auto body = b2Shape_GetBody(shape);
+                    auto* udata = static_cast<Creature*>(b2Body_GetUserData(body));
+                    if (!udata || udata == rctx->shooter) { return 1.0f; }
+                    // Resolve geometry NOW while shape ID is guaranteed valid.
+                    const auto center = b2Body_GetPosition(body);
+                    const auto radius = b2Shape_GetCircle(shape).radius;
+                    rctx->hits.push_back({udata, fraction, center, radius});
+                    return 1.0f;
+                },
+                &ctx);
 
-            creature_ray_hits = std::move( ctx.hits );
-            std::ranges::sort( creature_ray_hits, {}, &ray_creature_hit::fraction );
+            creature_ray_hits = std::move(ctx.hits);
+            std::ranges::sort(creature_ray_hits, {}, &ray_creature_hit::fraction);
         }
     }
     size_t ray_hit_idx = 0;
     // Penalize damage and/or range on overpenetration. Hoisted above the
     // per-tile loop so the closure is materialised once, not per iteration.
-    auto apply_overpenetration_penalty = [&]( bool modify_damage ) {
+    auto apply_overpenetration_penalty = [&](bool modify_damage) {
         traj_len *= overpenetration_modifier;
-        if( modify_damage ) {
-            proj.impact.mult_damage( overpenetration_modifier );
-            add_msg( m_debug, "Projectile damage and range *= %.1f", overpenetration_modifier );
+        if (modify_damage) {
+            proj.impact.mult_damage(overpenetration_modifier);
+            add_msg(m_debug, "Projectile damage and range *= %.1f", overpenetration_modifier);
         } else {
-            add_msg( m_debug, "Projectile range *= %.1f", overpenetration_modifier );
+            add_msg(m_debug, "Projectile range *= %.1f", overpenetration_modifier);
         }
     };
 
-    auto *last_hit_critter = static_cast<Creature *>( nullptr );
-    for( size_t i = 1; i < traj_len && ( has_momentum || stream ); ++i ) {
+    auto* last_hit_critter = static_cast<Creature*>(nullptr);
+    for (size_t i = 1; i < traj_len && (has_momentum || stream); ++i) {
         prev_point = tp;
         tp = trajectory[i];
 
-        if( !here.inbounds( tp ) ) {
+        if (!here.inbounds(tp)) {
             traj_len = i;
             tp = prev_point;
             break;
         }
 
-        if( tp.z() != prev_point.z() ) {
+        if (tp.z() != prev_point.z()) {
             auto floor1 = prev_point;
             auto floor2 = tp;
 
-            if( floor1.z() < floor2.z() ) {
+            if (floor1.z() < floor2.z()) {
                 floor1.z()++;
             } else {
                 floor2.z()++;
             }
             // We only stop the bullet if there are two floors in a row
             // this allow the shooter to shoot adjacent enemies from rooftops.
-            if( here.has_floor( floor1 ) && here.has_floor( floor2 ) ) {
+            if (here.has_floor(floor1) && here.has_floor(floor2)) {
                 // Currently strictly no shooting through floor
                 // TODO: Bash the floor
                 tp = prev_point;
@@ -602,22 +575,22 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
 
         // Drawing the bullet uses player g->u, and not player p, because it's drawn
         // relative to YOUR position, which may not be the gunman's position.
-        if( do_animation && !do_draw_line ) {
+        if (do_animation && !do_draw_line) {
             // TODO: Make this draw thrown item/launched grenade/arrow
-            if( projectile_skip_current_frame >= projectile_skip_calculation ) {
-                g->draw_bullet( tp, static_cast<int>( i ), trajectory, bullet, custom_bullet_sprite );
+            if (projectile_skip_current_frame >= projectile_skip_calculation) {
+                g->draw_bullet(tp, static_cast<int>(i), trajectory, bullet, custom_bullet_sprite);
                 projectile_skip_current_frame = 0;
                 // If we missed recalculate the skip factor so they spread out.
                 projectile_skip_calculation =
-                    std::max( static_cast<size_t>( range ), i ) * projectile_skip_multiplier;
+                    std::max(static_cast<size_t>(range), i) * projectile_skip_multiplier;
             } else {
                 projectile_skip_current_frame++;
             }
         }
 
-        if( in_veh != nullptr ) {
-            const optional_vpart_position other = here.veh_at( tp );
-            if( in_veh == veh_pointer_or_null( other ) && other->is_inside() ) {
+        if (in_veh != nullptr) {
+            const optional_vpart_position other = here.veh_at(tp);
+            if (in_veh == veh_pointer_or_null(other) && other->is_inside()) {
                 // Turret is on the roof and can't hit anything inside
                 continue;
             }
@@ -625,66 +598,68 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
 
         // ── Box2D raycast creature detection ──────────────────────────────────
         // Pop all creature hits whose ray fraction falls within this DDA step.
-        Creature *critter = nullptr;
-        monster *mon = nullptr;
+        Creature* critter = nullptr;
+        monster* mon = nullptr;
         auto cur_missed_by = aim.missed_by;
         {
             // Bucket hits by trajectory index: step i covers fractions
             // [(i-1)/(traj_len-1), i/(traj_len-1)].
-            const auto traj_segs = static_cast<double>( traj_len - 1 );
-            const auto step_frac_hi = traj_segs > 0.0
-                                      ? static_cast<double>( i ) / traj_segs : 1.0;
+            const auto traj_segs = static_cast<double>(traj_len - 1);
+            const auto step_frac_hi = traj_segs > 0.0 ? static_cast<double>(i) / traj_segs : 1.0;
 
-            while( ray_hit_idx < creature_ray_hits.size() &&
-                   creature_ray_hits[ray_hit_idx].fraction <= step_frac_hi ) {
-                auto &hit = creature_ray_hits[ray_hit_idx++];
-                auto *c = hit.critter;
-                if( c == origin ) { continue; }
+            while (ray_hit_idx < creature_ray_hits.size()
+                   && creature_ray_hits[ray_hit_idx].fraction <= step_frac_hi) {
+                auto& hit = creature_ray_hits[ray_hit_idx++];
+                auto* c = hit.critter;
+                if (c == origin) { continue; }
                 // Skip friendly within 1 tile of shooter
-                if( c != nullptr && origin != nullptr &&
-                    origin->attitude_to( *c ) == Attitude::A_FRIENDLY &&
-                    rl_dist( source, c->bub_pos() ) <= 1 ) {
+                if (c != nullptr && origin != nullptr
+                    && origin->attitude_to(*c) == Attitude::A_FRIENDLY
+                    && rl_dist(source, c->bub_pos()) <= 1) {
                     continue;
                 }
-                auto *m = dynamic_cast<monster *>( c );
-                if( m != nullptr && m->digging() && rl_dist( source, c->bub_pos() ) > 1 ) {
-                    continue;
-                }
+                auto* m = dynamic_cast<monster*>(c);
+                if (m != nullptr && m->digging() && rl_dist(source, c->bub_pos()) > 1) { continue; }
                 // Perpendicular distance from ray to creature body center.
-                const auto ray_len = std::hypot( ray_translation.x, ray_translation.y );
-                const auto perp = ray_len > 0.f
-                                  ? std::abs( ray_translation.x * ( hit.center.y - ray_origin_m.y )
-                                              - ray_translation.y * ( hit.center.x - ray_origin_m.x ) ) / ray_len
-                                  : 0.f;
-                cur_missed_by = hit.radius > 0.f
-                                ? std::clamp( static_cast<double>( perp / hit.radius ), 0.0, 0.99 )
-                                : 0.0;
+                const auto ray_len = std::hypot(ray_translation.x, ray_translation.y);
+                const auto perp =
+                    ray_len > 0.f
+                        ? std::abs(ray_translation.x * (hit.center.y - ray_origin_m.y)
+                                   - ray_translation.y * (hit.center.x - ray_origin_m.x))
+                              / ray_len
+                        : 0.f;
+                cur_missed_by =
+                    hit.radius > 0.f
+                        ? std::clamp(static_cast<double>(perp / hit.radius), 0.0, 0.99)
+                        : 0.0;
                 critter = c;
                 mon = m;
                 tp = c->bub_pos(); // snap DDA tile to the creature's actual tile
-                break; // process one creature per DDA step
+                break;             // process one creature per DDA step
             }
         }
 
         // Reset hit critter from the last iteration.
         attack.hit_critter = nullptr;
-        if( here.obstructed_by_vehicle_rotation( prev_point, tp ) ) {
-            //We're firing through an impassible gap in a rotated vehicle, randomly hit one of the two walls
+        if (here.obstructed_by_vehicle_rotation(prev_point, tp)) {
+            // We're firing through an impassible gap in a rotated vehicle, randomly hit one of the
+            // two walls
             auto rand = tp;
-            if( one_in( 2 ) ) {
+            if (one_in(2)) {
                 rand.x() = prev_point.x();
             } else {
                 rand.y() = prev_point.y();
             }
-            if( in_veh == nullptr || veh_pointer_or_null( here.veh_at( rand ) ) != in_veh ) {
+            if (in_veh == nullptr || veh_pointer_or_null(here.veh_at(rand)) != in_veh) {
                 const float dmg_before_penetration = proj.impact.total_damage();
-                here.shoot( source, rand, proj, false );
+                here.shoot(source, rand, proj, false);
                 const float dmg_after_penetration = proj.impact.total_damage();
-                if( dmg_before_penetration > dmg_after_penetration ) {
-                    apply_overpenetration_penalty( is_projectile_modify_overpenetration );
+                if (dmg_before_penetration > dmg_after_penetration) {
+                    apply_overpenetration_penalty(is_projectile_modify_overpenetration);
                 }
-                if( proj.impact.total_damage() <= 0 ) {
-                    //If the projectile stops here move it back a square so it doesn't end up inside the vehicle
+                if (proj.impact.total_damage() <= 0) {
+                    // If the projectile stops here move it back a square so it doesn't end up
+                    // inside the vehicle
                     traj_len = i - 1;
                     tp = prev_point;
                     break;
@@ -692,165 +667,154 @@ auto projectile_attack( const projectile &proj_arg, const tripoint_bub_ms &sourc
             }
         }
 
-        // If the target's in a vehicle and we're at a different height, hit the vehicle instead, unless you're firing down into a roof-less vehicle.
-        const bool z_level_vehicle = here.veh_at( tp ) && ( source.z() < tp.z() || ( source.z() > tp.z() &&
-                                     here.veh_at( tp )->part_with_feature( "ROOF", true ) ) );
+        // If the target's in a vehicle and we're at a different height, hit the vehicle instead,
+        // unless you're firing down into a roof-less vehicle.
+        const bool z_level_vehicle =
+            here.veh_at(tp)
+            && (source.z() < tp.z()
+                || (source.z() > tp.z() && here.veh_at(tp)->part_with_feature("ROOF", true)));
 
-        if( critter != nullptr && cur_missed_by < 1.0 && !z_level_vehicle ) {
-            if( in_veh != nullptr && veh_pointer_or_null( here.veh_at( tp ) ) == in_veh &&
-                critter->is_player() ) {
+        if (critter != nullptr && cur_missed_by < 1.0 && !z_level_vehicle) {
+            if (in_veh != nullptr && veh_pointer_or_null(here.veh_at(tp)) == in_veh
+                && critter->is_player()) {
                 // Turret either was aimed by the player (who is now ducking) and shoots from above
-                // Or was just IFFing, giving lots of warnings and time to get out of the line of fire
+                // Or was just IFFing, giving lots of warnings and time to get out of the line of
+                // fire
                 continue;
             }
             attack.missed_by = cur_missed_by;
-            if( mon != nullptr ) {
-                mon->deal_projectile_attack( null_source ? nullptr : origin, source_weapon, attack, true );
+            if (mon != nullptr) {
+                mon->deal_projectile_attack(
+                    null_source ? nullptr : origin, source_weapon, attack, true);
             } else {
-                critter->deal_projectile_attack( null_source ? nullptr : origin, source_weapon, attack );
+                critter
+                    ->deal_projectile_attack(null_source ? nullptr : origin, source_weapon, attack);
             }
             // Critter can still dodge the projectile
             // In this case hit_critter won't be set
-            if( attack.hit_critter != nullptr ) {
+            if (attack.hit_critter != nullptr) {
                 last_hit_critter = attack.hit_critter;
-                if( mon != nullptr ) {
-                    hit_monsters.push_back( std::make_pair( *mon, attack ) );
+                if (mon != nullptr) { hit_monsters.push_back(std::make_pair(*mon, attack)); }
+                const size_t bt_len = blood_trail_len(attack.dealt_dam.total_damage());
+                if (bt_len > 0) {
+                    const tripoint_bub_ms& dest = move_along_line(tp, trajectory, bt_len);
+                    here.add_splatter_trail(critter->bloodType(), tp, dest);
                 }
-                const size_t bt_len = blood_trail_len( attack.dealt_dam.total_damage() );
-                if( bt_len > 0 ) {
-                    const tripoint_bub_ms &dest = move_along_line( tp, trajectory, bt_len );
-                    here.add_splatter_trail( critter->bloodType(), tp, dest );
-                }
-                sfx::do_projectile_hit( *attack.hit_critter );
-                sfx::emit_sound_pulse( tp, 10.0f );
-                if( do_animation ) {
-                    emit_impact_particle( tp, critter->bloodType() != fd_null );
-                }
-                has_momentum = proj.impact.total_damage() > 0 &&
-                               !proj.has_effect( ammo_effect_NO_PENETRATE_OBSTACLES );
+                sfx::do_projectile_hit(*attack.hit_critter);
+                sfx::emit_sound_pulse(tp, 10.0f);
+                if (do_animation) { emit_impact_particle(tp, critter->bloodType() != fd_null); }
+                has_momentum =
+                    proj.impact.total_damage() > 0
+                    && !proj.has_effect(ammo_effect_NO_PENETRATE_OBSTACLES);
 
-                apply_overpenetration_penalty( is_projectile_modify_overpenetration );
+                apply_overpenetration_penalty(is_projectile_modify_overpenetration);
                 // Force embed based on damage after overpenetration penalties
-                if( thrown_item != &null_item_reference() && rng( 1, 100 ) > proj.impact.total_damage() ) {
+                if (thrown_item != &null_item_reference()
+                    && rng(1, 100) > proj.impact.total_damage()) {
                     has_momentum = false;
                 }
             } else {
                 attack.missed_by = aim.missed_by;
             }
-        } else if( in_veh != nullptr && veh_pointer_or_null( here.veh_at( tp ) ) == in_veh ) {
+        } else if (in_veh != nullptr && veh_pointer_or_null(here.veh_at(tp)) == in_veh) {
             // Don't do anything, especially don't call map::shoot as this would damage the vehicle
         } else {
             // Track damage before processing so we'll know if we actually hit any cover.
             const float dmg_before_penetration = proj.impact.total_damage();
-            here.shoot( source, tp, proj, !no_item_damage && tp == target_arg );
+            here.shoot(source, tp, proj, !no_item_damage && tp == target_arg);
             const float dmg_after_penetration = proj.impact.total_damage();
-            has_momentum = dmg_after_penetration > 0 || ( no_damage && here.passable( tp ) );
+            has_momentum = dmg_after_penetration > 0 || (no_damage && here.passable(tp));
             // We lost momentum from hitting something, penalize range.
-            if( dmg_before_penetration > dmg_after_penetration ) {
-                apply_overpenetration_penalty( is_projectile_modify_overpenetration );
+            if (dmg_before_penetration > dmg_after_penetration) {
+                apply_overpenetration_penalty(is_projectile_modify_overpenetration);
             }
         }
-        if( !has_momentum && here.impassable( tp ) &&
-            !here.has_flag( flag_THIN_OBSTACLE, tp ) ) {
+        if (!has_momentum && here.impassable(tp) && !here.has_flag(flag_THIN_OBSTACLE, tp)) {
             // Flamethrowers go through bars but not wall
-            if( do_animation ) {
-                emit_impact_particle( tp, false );
-            }
+            if (do_animation) { emit_impact_particle(tp, false); }
             traj_len = i;
             break;
         }
     }
     attack.hit_critter = last_hit_critter;
-    attack.trajectory.assign( trajectory.begin(), trajectory.begin() + traj_len );
+    attack.trajectory.assign(trajectory.begin(), trajectory.begin() + traj_len);
 
-    if( do_animation && do_draw_line && traj_len > 2 ) {
-        trajectory.erase( trajectory.begin() );
-        trajectory.resize( traj_len-- );
-        const auto should_rotate = is_thrown && thrown_item &&
-                                   !thrown_item->has_flag( flag_FLY_STRAIGHT );
-        draw_line_of( {
+    if (do_animation && do_draw_line && traj_len > 2) {
+        trajectory.erase(trajectory.begin());
+        trajectory.resize(traj_len--);
+        const auto should_rotate =
+            is_thrown && thrown_item && !thrown_item->has_flag(flag_FLY_STRAIGHT);
+        draw_line_of({
             .p = tp,
             .points = trajectory,
             .sprite = custom_bullet_sprite,
             .rotate = should_rotate,
             .thrown = is_thrown,
-        } );
+        });
     }
 
-    if( here.impassable( tp ) ) {
-        tp = prev_point;
-    }
+    if (here.impassable(tp)) { tp = prev_point; }
 
-    drop_or_embed_projectile( attack );
+    drop_or_embed_projectile(attack);
 
-    if( proj.has_effect( ammo_effect_NET_TANGLE ) ) {
-        apply_net_tangle_aoe( tp );
-    }
+    if (proj.has_effect(ammo_effect_NET_TANGLE)) { apply_net_tangle_aoe(tp); }
 
-    apply_ammo_effects( tp, proj.get_ammo_effects(), origin );
-    const auto &expl = proj.get_custom_explosion();
-    if( expl ) {
-        explosion_handler::explosion( tp, expl, origin );
-    }
+    apply_ammo_effects(tp, proj.get_ammo_effects(), origin);
+    const auto& expl = proj.get_custom_explosion();
+    if (expl) { explosion_handler::explosion(tp, expl, origin); }
 
     // TODO: Move this outside now that we have hit point in return values?
-    if( proj.has_effect( ammo_effect_BOUNCE ) ) {
+    if (proj.has_effect(ammo_effect_BOUNCE)) {
         // Add effect so the shooter is not targeted itself.
-        if( origin && !origin->has_effect( effect_bounced ) ) {
-            origin->add_effect( effect_bounced, 1_turns );
+        if (origin && !origin->has_effect(effect_bounced)) {
+            origin->add_effect(effect_bounced, 1_turns);
         }
-        Creature *mon_ptr = g->get_creature_if( [&]( const Creature & z ) {
+        Creature* mon_ptr = g->get_creature_if([&](const Creature& z) {
             // search for creatures in radius 4 around impact site
-            if( rl_dist( z.bub_pos(), tp ) <= 4 &&
-                here.sees( z.bub_pos(), tp, -1 ) ) {
+            if (rl_dist(z.bub_pos(), tp) <= 4 && here.sees(z.bub_pos(), tp, -1)) {
                 // don't hit targets that have already been hit
-                if( !z.has_effect( effect_bounced ) ) {
-                    return true;
-                }
+                if (!z.has_effect(effect_bounced)) { return true; }
             }
             return false;
-        } );
-        if( mon_ptr ) {
-            Creature &z = *mon_ptr;
-            add_msg( _( "The attack bounced to %s!" ), z.get_name() );
-            z.add_effect( effect_bounced, 1_turns );
-            projectile_attack( proj, tp, z.bub_pos(), dispersion, origin, source_weapon, in_veh );
+        });
+        if (mon_ptr) {
+            Creature& z = *mon_ptr;
+            add_msg(_("The attack bounced to %s!"), z.get_name());
+            z.add_effect(effect_bounced, 1_turns);
+            projectile_attack(proj, tp, z.bub_pos(), dispersion, origin, source_weapon, in_veh);
             // Take the volume of a bio lightening impact at 70dB
-            sfx::play_variant_sound( "fire_gun", "bio_lightning_tail",
-                                     sfx::get_heard_volume( z.bub_pos(), 70 ), sfx::get_heard_angle( z.bub_pos() ),
-                                     sfx::get_heard_distance( z.bub_pos() ) );
+            sfx::play_variant_sound(
+                "fire_gun", "bio_lightning_tail", sfx::get_heard_volume(z.bub_pos(), 70),
+                sfx::get_heard_angle(z.bub_pos()), sfx::get_heard_distance(z.bub_pos()));
         }
     }
     explosion_handler::get_explosion_queue().execute();
     const size_t num_hit = hit_monsters.size();
-    for( size_t i = 0; i < num_hit; ++i ) {
+    for (size_t i = 0; i < num_hit; ++i) {
         auto nextattack = hit_monsters[i];
         monster attackedmon = nextattack.first;
         const dealt_projectile_attack attacked_proj = nextattack.second;
         // Copy from monster::on_hit
-        attackedmon.type->sp_defense( attackedmon, origin, &attacked_proj );
+        attackedmon.type->sp_defense(attackedmon, origin, &attacked_proj);
     }
     return attack;
 }
 
-namespace ranged
-{
+namespace ranged {
 
-auto hit_chance( const dispersion_sources &dispersion, double range, double target_size,
-                 double missed_by ) -> double
-{
-    if( range <= 0 ) {
-        return 1.0;
-    }
+auto hit_chance(
+    const dispersion_sources& dispersion, double range, double target_size, double missed_by)
+    -> double {
+    if (range <= 0) { return 1.0; }
 
     const double missed_by_tiles = missed_by * target_size;
 
     //          T = (2*D**2 * (1 - cos V)) ** 0.5   (from iso_tangent)
     //      cos V = 1 - T**2 / (2*D**2)
-    const double cosV = 1 - missed_by_tiles * missed_by_tiles / ( 2 * range * range );
-    const double needed_dispersion = ( cosV < -1.0 ? M_PI : acos( cosV ) ) * 180 * 60 / M_PI;
+    const double cosV = 1 - missed_by_tiles * missed_by_tiles / (2 * range * range);
+    const double needed_dispersion = (cosV < -1.0 ? M_PI : acos(cosV)) * 180 * 60 / M_PI;
 
-    return normal_cdf( needed_dispersion, dispersion.avg(), dispersion.avg() / 2 );
+    return normal_cdf(needed_dispersion, dispersion.avg(), dispersion.avg() / 2);
 }
 
 } // namespace ranged

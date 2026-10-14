@@ -5,8 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace lighting
-{
+namespace lighting {
 
 struct gpu_emitter;
 
@@ -81,9 +80,9 @@ extern float g_dust_size;
 extern float g_dust_drift;
 // Decorative emitter glow overlay (emitter_glow_pass): per-fire/torch glow sprite.
 extern bool g_glow_enable;
-extern float g_glow_intensity;   // × core peak brightness
-extern float g_glow_radius;      // × emitter-radius fraction the gradient spans
-extern float g_glow_saturation;  // >1 pushes the tint back after additive whitening
+extern float g_glow_intensity;  // × core peak brightness
+extern float g_glow_radius;     // × emitter-radius fraction the gradient spans
+extern float g_glow_saturation; // >1 pushes the tint back after additive whitening
 // High-fidelity rain effect controls.
 extern bool g_rain_enable;
 extern float g_rain_intensity;
@@ -149,31 +148,31 @@ extern float g_outline_col_neutral[4];
 extern float g_outline_col_friendly[4];
 extern float g_outline_col_self[4];
 // Hover tile highlight and dotted line (CPU-side; see hover-tile-effect-plan.md).
-extern bool   g_hover_highlight_enable;
-extern float  g_hover_highlight_color[4];
-extern float  g_hover_highlight_thickness;
-extern float  g_hover_highlight_corner_len;
-extern bool   g_hover_highlight_pulse;
-extern float  g_hover_highlight_pulse_speed;
-extern bool   g_hover_line_enable;
-extern float  g_hover_line_color[4];
-extern float  g_hover_line_dot_size;
-extern float  g_hover_line_dot_spacing;
-extern bool   g_hover_line_fade_ends;
+extern bool g_hover_highlight_enable;
+extern float g_hover_highlight_color[4];
+extern float g_hover_highlight_thickness;
+extern float g_hover_highlight_corner_len;
+extern bool g_hover_highlight_pulse;
+extern float g_hover_highlight_pulse_speed;
+extern bool g_hover_line_enable;
+extern float g_hover_line_color[4];
+extern float g_hover_line_dot_size;
+extern float g_hover_line_dot_spacing;
+extern bool g_hover_line_fade_ends;
 // Depth extrude (DitW) global multipliers.
 extern float g_depth_lean_str;
 extern float g_depth_dark_str;
 // Sound wavefront ring tuning.
-extern float g_sound_wave_speed;       // tiles/sec expansion rate, default 12.0
+extern float g_sound_wave_speed;      // tiles/sec expansion rate, default 12.0
 extern float g_sound_wave_min_radius; // min tile radius, default 6.0
-extern float g_sound_wave_max_radius;  // max tile radius, default 48.0
+extern float g_sound_wave_max_radius; // max tile radius, default 48.0
 
 // GI compute pass tuning. Static global (NOT debug_params): the DebugParams
 // cbuffer is wire-stable with the sprite shader, so new GI knobs ride here
 // like the sound-wave knobs. Stage 7 (gpu-daylight black-scene plan) retired
 // g_gi_temporal/g_gi_bounce2 (the old EMA-bounce knobs) when the bounce
 // became Radiance Cascades, which has no temporal filter to tune.
-extern float g_gi_albedo;   // albedo-bleed mix (0=off): field *= lerp(1, albedo, k)
+extern float g_gi_albedo; // albedo-bleed mix (0=off): field *= lerp(1, albedo, k)
 // Multi-bounce radiance feedback (default 0.3): re-injects last rebuild's
 // fully cascaded GI as an extra surface-radiance source in gi_field.comp,
 // so daylight through a window keeps walking deeper into a room across
@@ -185,8 +184,7 @@ extern float g_gi_feedback;
 extern bool g_seen_force_full_rebuild;
 
 // Main-menu decorative-emitter tuning.
-namespace menu_emitter_tuning
-{
+namespace menu_emitter_tuning {
 
 extern float radius_input;
 extern float pos_x;
@@ -197,8 +195,7 @@ extern bool blue_backdrop;
 } // namespace menu_emitter_tuning
 
 // Dev cursor light (F4 panel).
-namespace cursor_light_emitter
-{
+namespace cursor_light_emitter {
 
 extern bool enabled;
 extern float radius;
@@ -207,13 +204,12 @@ extern float wx, wy, wz;
 
 } // namespace cursor_light_emitter
 
-namespace sdl_lighting_devui
-{
+namespace sdl_lighting_devui {
 
 // F4 opens the RmlUi dev panel (devui.rml). devui_visible() is the F4 toggle
 // (sdl_input writes it); rml_tick() opens/syncs/closes the doc to match it each
 // frame (called from refresh_display).
-bool &devui_visible();
+bool& devui_visible();
 
 /// True when the animated sound-pulse wavefront VFX (dev_test_lights::sound_pulses
 /// — footsteps/melee/gunfire/ballistics, or an F4-panel test spawn) should be
@@ -222,10 +218,10 @@ bool &devui_visible();
 /// An open F4 dev panel bypasses it so debug-spawned test pulses stay visible;
 /// the "spawn sounds on click" checkbox deliberately does not, because it is a
 /// click-to-place debug toggle with no bearing on what the player should see.
-auto sound_pulses_visible( bool player_in_stealth ) -> bool;
+auto sound_pulses_visible(bool player_in_stealth) -> bool;
 /// Mutable ref to the "spawn sounds on click" checkbox state (default off — it
 /// swallows world left-clicks and queues real, monster-audible sounds).
-auto sound_place_mode() -> bool &; // *NOPAD*
+auto sound_place_mode() -> bool&;
 void rml_tick();
 
 // Place a static dev test light at the hovered world tile. Returns true if it placed
@@ -242,6 +238,6 @@ bool place_test_sound();
 // JSON, paired with the frame dump so the raw data matches the dumped frame
 // exactly. Fires on CATA_MAP_DUMP="<frame>:<path>" or on the same frame a
 // CATA_FRAME_DUMP / F13 / /tmp/cata_dump_trigger frame dump was written.
-void maybe_dump_map( std::uint64_t frame, std::uint64_t last_dump_frame );
+void maybe_dump_map(std::uint64_t frame, std::uint64_t last_dump_frame);
 
 } // namespace sdl_lighting_devui

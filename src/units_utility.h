@@ -8,21 +8,17 @@
  * Type of object that a measurement is taken on.  Used, for example, to display wind speed in m/s
  * while displaying vehicle speed in km/h.
  */
-enum units_type {
-    VU_VEHICLE,
-    VU_WIND
-};
+enum units_type { VU_VEHICLE, VU_WIND };
 
 /** Divide @p num by @p den, rounding up
  *
  * @p num must be non-negative, @p den must be positive, and @c num+den must not overflow.
  */
-template<typename T, typename U>
-T divide_round_up( units::quantity<T, U> num, units::quantity<T, U> den )
-{
+template <typename T, typename U>
+T divide_round_up(units::quantity<T, U> num, units::quantity<T, U> den) {
     T n = num.value();
     T d = den.value();
-    return ( n + d - 1 ) / d;
+    return (n + d - 1) / d;
 }
 
 /** Given an angle, add or subtract multiples of 360_degrees until it's in the
@@ -30,12 +26,13 @@ T divide_round_up( units::quantity<T, U> num, units::quantity<T, U> den )
  *
  * With a second argument, can use a different maximum.
  */
-units::angle normalize( units::angle, units::angle mod = 360_degrees );
+units::angle normalize(units::angle, units::angle mod = 360_degrees);
 
-template<typename T, typename U>
-units::quantity<T, U> round_to_multiple_of( units::quantity<T, U> val, units::quantity<T, U> of )
-requires std::is_floating_point_v<T> {
-    int multiple = std::lround( val / of );
+template <typename T, typename U>
+units::quantity<T, U> round_to_multiple_of(units::quantity<T, U> val, units::quantity<T, U> of)
+    requires std::is_floating_point_v<T>
+{
+    int multiple = std::lround(val / of);
     return multiple * of;
 }
 
@@ -50,7 +47,7 @@ requires std::is_floating_point_v<T> {
  *
  * @return name of unit.
  */
-const char *velocity_units( units_type vel_units );
+const char* velocity_units(units_type vel_units);
 
 /**
  * Create a units label for a weight value.
@@ -60,7 +57,7 @@ const char *velocity_units( units_type vel_units );
  *
  * @return name of unit
  */
-const char *weight_units();
+const char* weight_units();
 
 /**
  * Create an abbreviated units label for a volume value.
@@ -70,7 +67,7 @@ const char *weight_units();
  *
  * @return name of unit.
  */
-const char *volume_units_abbr();
+const char* volume_units_abbr();
 
 /**
  * Create a units label for a volume value.
@@ -80,7 +77,7 @@ const char *volume_units_abbr();
  *
  * @return name of unit.
  */
-const char *volume_units_long();
+const char* volume_units_long();
 
 /**
  * Convert internal velocity units to units defined by user.
@@ -91,7 +88,7 @@ const char *volume_units_long();
  * @returns Velocity in the user selected measurement system and in appropriate
  *          units for the object being measured.
  */
-double convert_velocity( int velocity, units_type vel_units );
+double convert_velocity(int velocity, units_type vel_units);
 
 /**
  * Convert weight in grams to units defined by user (kg or lbs)
@@ -100,17 +97,15 @@ double convert_velocity( int velocity, units_type vel_units );
  *
  * @returns Weight converted to user selected unit
  */
-double convert_weight( const units::mass &weight );
+double convert_weight(const units::mass& weight);
 
 /**
  * Convert volume from ml to units defined by user.
  */
-double convert_volume( int volume );
+double convert_volume(int volume);
 
 /**
  * Convert volume from ml to units defined by user,
  * optionally returning the units preferred scale.
  */
-double convert_volume( int volume, int *out_scale );
-
-
+double convert_volume(int volume, int* out_scale);

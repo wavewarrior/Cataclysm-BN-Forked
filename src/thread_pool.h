@@ -38,80 +38,73 @@
  *     mark_for_destruction() can overlap cleanup(), which drains outside the lock.
  *
  * In practice:
- *   • Submaps must not be destroyed on worker threads.  Use mapbuffer::drain_pending_submap_destroy()
- *     on the main thread after joining all preload_omt() futures.
- *   • Submap deserialisation IS safe from workers because
- *     active_item_cache constructs cache_reference objects, which are now mutex-guarded.
- *   • save_omt() serialisation IS safe from workers: safe_reference::serialize() only
- *     writes to next_id (atomic) and to per-item records that are never shared across omts.
- *   • overmapbuffer::add_extra() and add_note() ARE safe from generation workers:
- *     both acquire extras_mutex_ (a per-overmapbuffer std::mutex) after get_om_global() returns.
- *   • Auto-note discovery (auto_note_settings) and Lua spawn hooks in place_npc() are
- *     main-thread-only and are skipped on worker threads via is_pool_worker_thread().
+ *   • Submaps must not be destroyed on worker threads.  Use
+ * mapbuffer::drain_pending_submap_destroy() on the main thread after joining all preload_omt()
+ * futures. • Submap deserialisation IS safe from workers because active_item_cache constructs
+ * cache_reference objects, which are now mutex-guarded. • save_omt() serialisation IS safe from
+ * workers: safe_reference::serialize() only writes to next_id (atomic) and to per-item records that
+ * are never shared across omts. • overmapbuffer::add_extra() and add_note() ARE safe from
+ * generation workers: both acquire extras_mutex_ (a per-overmapbuffer std::mutex) after
+ * get_om_global() returns. • Auto-note discovery (auto_note_settings) and Lua spawn hooks in
+ * place_npc() are main-thread-only and are skipped on worker threads via is_pool_worker_thread().
  */
-class cata_thread_pool
-{
-    public:
-        explicit cata_thread_pool( unsigned int num_workers );
-        ~cata_thread_pool();
+class cata_thread_pool {
+public:
+    explicit cata_thread_pool(unsigned int num_workers);
+    ~cata_thread_pool();
 
-        cata_thread_pool( const cata_thread_pool & ) = delete;
-        cata_thread_pool &operator=( const cata_thread_pool & ) = delete;
+    cata_thread_pool(const cata_thread_pool&) = delete;
+    cata_thread_pool& operator=(const cata_thread_pool&) = delete;
 
-        unsigned int num_workers() const {
-            return static_cast<unsigned int>( workers_.size() );
+    unsigned int num_workers() const { return static_cast<unsigned int>(workers_.size()); }
+
+    size_t queue_size() const {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return queue_.size();
+    }
+
+    /** Enqueue a callable for execution on a worker thread. */
+    void submit(std::function<void()> task);
+
+    /**
+     * Enqueue a callable that returns a value and get a future for its result.
+     *
+     * std::packaged_task is move-only, so it is wrapped in a shared_ptr to satisfy
+     * the copyability requirement of std::function<void()>.
+     *
+     * Usage:
+     *   std::future<int> f = pool.submit_returning( []() { return 42; } );
+     *   int result = f.get();
+     */
+    template <typename F, typename... Args>
+    auto submit_returning(F&& f, Args&&... args)
+        -> std::future<std::invoke_result_t<std::decay_t<F>, std::decay_t<Args>...>> {
+        using R = std::invoke_result_t<std::decay_t<F>, std::decay_t<Args>...>;
+        auto task = std::make_shared<std::packaged_task<R()>>(
+            std::bind(std::forward<F>(f), std::forward<Args>(args)...));
+        std::future<R> fut = task->get_future();
+        if (num_workers() == 0) {
+            // Single-core fallback: execute synchronously on the calling thread
+            // to avoid enqueuing work that would never be processed by a worker.
+            (*task)();
+        } else {
+            submit([task]() { (*task)(); });
         }
+        return fut;
+    }
 
-        size_t queue_size() const {
-            std::lock_guard<std::mutex> lk( mutex_ );
-            return queue_.size();
-        }
+private:
+    void worker_loop();
 
-        /** Enqueue a callable for execution on a worker thread. */
-        void submit( std::function<void()> task );
-
-        /**
-         * Enqueue a callable that returns a value and get a future for its result.
-         *
-         * std::packaged_task is move-only, so it is wrapped in a shared_ptr to satisfy
-         * the copyability requirement of std::function<void()>.
-         *
-         * Usage:
-         *   std::future<int> f = pool.submit_returning( []() { return 42; } );
-         *   int result = f.get();
-         */
-        template<typename F, typename... Args>
-        auto submit_returning( F &&f, Args &&...args )
-        -> std::future<std::invoke_result_t<std::decay_t<F>, std::decay_t<Args>... >> {
-            using R = std::invoke_result_t<std::decay_t<F>, std::decay_t<Args>... >;
-            auto task = std::make_shared<std::packaged_task<R()>>(
-                            std::bind( std::forward<F>( f ), std::forward<Args>( args )... )
-                        );
-            std::future<R> fut = task->get_future();
-            if( num_workers() == 0 ) {
-                // Single-core fallback: execute synchronously on the calling thread
-                // to avoid enqueuing work that would never be processed by a worker.
-                ( *task )();
-            } else {
-                submit( [task]() {
-                    ( *task )();
-                } );
-            }
-            return fut;
-        }
-
-    private:
-        void worker_loop();
-
-        std::vector<std::thread> workers_;
-        std::deque<std::function<void()>> queue_;
-        mutable std::mutex mutex_;
-        std::condition_variable cv_;
-        bool stop_ = false;
+    std::vector<std::thread> workers_;
+    std::deque<std::function<void()>> queue_;
+    mutable std::mutex mutex_;
+    std::condition_variable cv_;
+    bool stop_ = false;
 };
 
 /** Returns the process-lifetime thread pool (lazy-initialized, thread-safe). */
-cata_thread_pool &get_thread_pool();
+cata_thread_pool& get_thread_pool();
 
 /**
  * Returns true when the calling thread is a pool worker thread.
@@ -155,58 +148,46 @@ struct worker_thread_guard {
  *
  * F must be callable as  void F(int index)
  */
-template<typename F>
-void parallel_for( int begin, int end, F &&f )
-{
+template <typename F> void parallel_for(int begin, int end, F&& f) {
     const int n = end - begin;
-    if( n <= 0 ) {
-        return;
-    }
+    if (n <= 0) { return; }
 
     // Short-circuit: single item — run directly with no dispatch overhead.
-    if( n == 1 ) {
-        f( begin );
+    if (n == 1) {
+        f(begin);
         return;
     }
 
-    cata_thread_pool &pool = get_thread_pool();
-    const int nw = static_cast<int>( pool.num_workers() );
+    cata_thread_pool& pool = get_thread_pool();
+    const int nw = static_cast<int>(pool.num_workers());
 
     // Serial fallback on single-core machines.
-    if( nw == 0 ) {
-        for( int i = begin; i < end; ++i ) {
-            f( i );
-        }
+    if (nw == 0) {
+        for (int i = begin; i < end; ++i) { f(i); }
         return;
     }
 
-    const int chunks = std::min( n, nw );
-    std::latch latch( chunks );
+    const int chunks = std::min(n, nw);
+    std::latch latch(chunks);
     std::exception_ptr first_ex;
-    std::mutex         ex_mutex;
+    std::mutex ex_mutex;
 
-    for( int c = 0; c < chunks; ++c ) {
-        const int chunk_begin = begin + ( n * c / chunks );
-        const int chunk_end   = begin + ( n * ( c + 1 ) / chunks );
-        pool.submit( [&latch, &f, &first_ex, &ex_mutex, chunk_begin, chunk_end]() {
+    for (int c = 0; c < chunks; ++c) {
+        const int chunk_begin = begin + (n * c / chunks);
+        const int chunk_end = begin + (n * (c + 1) / chunks);
+        pool.submit([&latch, &f, &first_ex, &ex_mutex, chunk_begin, chunk_end]() {
             try {
-                for( int i = chunk_begin; i < chunk_end; ++i ) {
-                    f( i );
-                }
-            } catch( ... ) {
-                std::lock_guard<std::mutex> lock( ex_mutex );
-                if( !first_ex ) {
-                    first_ex = std::current_exception();
-                }
+                for (int i = chunk_begin; i < chunk_end; ++i) { f(i); }
+            } catch (...) {
+                std::lock_guard<std::mutex> lock(ex_mutex);
+                if (!first_ex) { first_ex = std::current_exception(); }
             }
             latch.count_down();
-        } );
+        });
     }
 
     latch.wait();
-    if( first_ex ) {
-        std::rethrow_exception( first_ex );
-    }
+    if (first_ex) { std::rethrow_exception(first_ex); }
 }
 
 /**
@@ -218,50 +199,38 @@ void parallel_for( int begin, int end, F &&f )
  *
  * F must be callable as  void F(int index)
  */
-template<typename F>
-void parallel_for_chunked( int begin, int end, int chunk_size, F &&f )
-{
-    if( end <= begin || chunk_size <= 0 ) {
-        return;
-    }
+template <typename F> void parallel_for_chunked(int begin, int end, int chunk_size, F&& f) {
+    if (end <= begin || chunk_size <= 0) { return; }
 
-    cata_thread_pool &pool = get_thread_pool();
-    const int nw = static_cast<int>( pool.num_workers() );
+    cata_thread_pool& pool = get_thread_pool();
+    const int nw = static_cast<int>(pool.num_workers());
 
     const int n = end - begin;
-    const int num_chunks = ( n + chunk_size - 1 ) / chunk_size;
+    const int num_chunks = (n + chunk_size - 1) / chunk_size;
 
-    if( nw == 0 || num_chunks <= 1 ) {
-        for( int i = begin; i < end; ++i ) {
-            f( i );
-        }
+    if (nw == 0 || num_chunks <= 1) {
+        for (int i = begin; i < end; ++i) { f(i); }
         return;
     }
 
-    std::latch latch( num_chunks );
+    std::latch latch(num_chunks);
     std::exception_ptr first_ex;
-    std::mutex         ex_mutex;
+    std::mutex ex_mutex;
 
-    for( int c = 0; c < num_chunks; ++c ) {
+    for (int c = 0; c < num_chunks; ++c) {
         const int chunk_begin = begin + c * chunk_size;
-        const int chunk_end   = std::min( chunk_begin + chunk_size, end );
-        pool.submit( [&latch, &f, &first_ex, &ex_mutex, chunk_begin, chunk_end]() {
+        const int chunk_end = std::min(chunk_begin + chunk_size, end);
+        pool.submit([&latch, &f, &first_ex, &ex_mutex, chunk_begin, chunk_end]() {
             try {
-                for( int i = chunk_begin; i < chunk_end; ++i ) {
-                    f( i );
-                }
-            } catch( ... ) {
-                std::lock_guard<std::mutex> lock( ex_mutex );
-                if( !first_ex ) {
-                    first_ex = std::current_exception();
-                }
+                for (int i = chunk_begin; i < chunk_end; ++i) { f(i); }
+            } catch (...) {
+                std::lock_guard<std::mutex> lock(ex_mutex);
+                if (!first_ex) { first_ex = std::current_exception(); }
             }
             latch.count_down();
-        } );
+        });
     }
 
     latch.wait();
-    if( first_ex ) {
-        std::rethrow_exception( first_ex );
-    }
+    if (first_ex) { std::rethrow_exception(first_ex); }
 }

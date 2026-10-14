@@ -46,7 +46,7 @@ public:
     ~PhysicsWorld();
 
     PhysicsWorld(const PhysicsWorld&) = delete;
-    auto operator=(const PhysicsWorld&) -> PhysicsWorld& = delete; // *NOPAD*
+    auto operator=(const PhysicsWorld&) -> PhysicsWorld& = delete;
 
     // ── Vehicle lifecycle ──────────────────────────────────────────────────
     void on_vehicle_added(vehicle& v);
@@ -116,12 +116,12 @@ public:
     /// submaps and z-levels.  Exists so tests can assert that colliders were
     /// actually built: several code paths gate collider creation on the player's
     /// z-level, and a silent zero here means vehicles pass through walls.
-    auto terrain_body_count() const -> size_t; // *NOPAD*
+    auto terrain_body_count() const -> size_t;
 
     /// Bodies as Box2D itself sees them.  Differs from `terrain_body_count()` on
     /// purpose: a body dropped from the registry without `b2DestroyBody` still
     /// collides but is invisible to the registry count, so leaks only show here.
-    auto world_body_count() const -> size_t; // *NOPAD*
+    auto world_body_count() const -> size_t;
 
     // ── Phase 5 hooks (wired in Phase 5) ─────────────────────────────────
     /// Remove the Box2D body for the bashable tile at `pos` after it is bashed.
@@ -159,7 +159,8 @@ public:
         explicit physics_move_scope(PhysicsWorld& w): w_(w) { w_.applying_readback_ = true; }
         ~physics_move_scope() { w_.applying_readback_ = false; }
         physics_move_scope(const physics_move_scope&) = delete;
-        auto operator=(const physics_move_scope&) -> physics_move_scope& = delete; // *NOPAD*
+        auto operator=(const physics_move_scope&) -> physics_move_scope& = delete;
+
     private:
         PhysicsWorld& w_;
     };
@@ -169,13 +170,13 @@ public:
     /// Toggle the real-time Box2D shape overlay (tiles mode only).
     /// Returns the new enabled state.
     auto toggle_debug_draw() -> bool;
-    auto debug_draw_enabled() const -> bool { return debug_draw_; } // *NOPAD*
+    auto debug_draw_enabled() const -> bool { return debug_draw_; }
     /// Populate the GPU debug_line_pass with collision shapes, contact manifolds,
     /// and body transforms.  Called from cata_tiles::draw() after tiles are
     /// flushed; the actual GPU draw happens later in render_world_pass_w.
     auto draw_debug(lighting::debug_line_pass& pass) const -> void;
     // ── Query access ──────────────────────────────────────────────────────
-    auto world_id() const -> b2WorldId; // *NOPAD*
+    auto world_id() const -> b2WorldId;
 
     // ── Phase 5: transient terrain-impulse solve ──────────────────────────
     auto resolve_terrain_impulse(
@@ -218,14 +219,14 @@ private:
     auto make_vehicle_body(vehicle& v) -> b2BodyId;
     /// Attach the vehicle footprint polygon to `bid`.  False when the vehicle has no
     /// footprint yet, in which case no shape is created and `bid` keeps zero shapes.
-    auto create_vehicle_shape(b2BodyId bid, const vehicle& v) -> bool; // *NOPAD*
+    auto create_vehicle_shape(b2BodyId bid, const vehicle& v) -> bool;
     void rebuild_bashable_lookup();
     /// Push game-side velocity into the bodies (once per turn, before stepping).
     void sync_bodies_from_game();
     /// Read integrated position/angle/spin back out (once per turn, after stepping).
     void sync_game_from_bodies();
     /// Sub-step count that keeps per-step translation below half a tile.
-    auto substeps_for_turn(float turn_seconds) const -> int; // *NOPAD*
+    auto substeps_for_turn(float turn_seconds) const -> int;
     bool debug_draw_ = false;
     /// Set only while a `physics_move_scope` is alive; see that class.
     bool applying_readback_ = false;

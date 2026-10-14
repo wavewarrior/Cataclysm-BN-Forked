@@ -6,10 +6,8 @@
 #include "calendar.h"
 #include "enums.h"
 
-template<>
-std::string io::enum_to_string<Attitude>( Attitude att )
-{
-    switch( att ) {
+template <> std::string io::enum_to_string<Attitude>(Attitude att) {
+    switch (att) {
         case Attitude::A_HOSTILE:
             return "Hostile";
         case Attitude::A_NEUTRAL:
@@ -21,14 +19,12 @@ std::string io::enum_to_string<Attitude>( Attitude att )
         case Attitude::NUM_A:
             break;
     }
-    debugmsg( "Invalid Attitude" );
+    debugmsg("Invalid Attitude");
     abort();
 }
 
-template<>
-std::string io::enum_to_string<creature_size>( creature_size data )
-{
-    switch( data ) {
+template <> std::string io::enum_to_string<creature_size>(creature_size data) {
+    switch (data) {
         case creature_size::tiny:
             return "TINY";
         case creature_size::small:
@@ -42,14 +38,12 @@ std::string io::enum_to_string<creature_size>( creature_size data )
         case creature_size::num_creature_size:
             break;
     }
-    debugmsg( "Invalid body_size value: %d", static_cast<int>( data ) );
+    debugmsg("Invalid body_size value: %d", static_cast<int>(data));
     abort();
 }
 
-template<>
-std::string io::enum_to_string<moon_phase>( moon_phase data )
-{
-    switch( data ) {
+template <> std::string io::enum_to_string<moon_phase>(moon_phase data) {
+    switch (data) {
         case moon_phase::MOON_NEW:
             return "MOON_NEW";
         case moon_phase::MOON_WAXING_CRESCENT:
@@ -69,7 +63,6 @@ std::string io::enum_to_string<moon_phase>( moon_phase data )
         case moon_phase::MOON_PHASE_MAX:
             break;
     }
-    debugmsg( "Invalid moon_phase %d", static_cast<int>( data ) );
+    debugmsg("Invalid moon_phase %d", static_cast<int>(data));
     abort();
 }
-

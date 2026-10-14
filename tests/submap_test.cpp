@@ -7,7 +7,6 @@
 
 TEST_CASE("submap rotation", "[submap]") {
     // Corners are labelled starting from the upper-left one, clockwise.
-    // NOLINTNEXTLINE(cata-point-initialization)
     constexpr auto corner_1 = point_sm_ms::zero();
     constexpr auto corner_2 = point_sm_ms{SEEX - 1, 0};
     constexpr auto corner_3 = point_sm_ms{SEEX - 1, SEEY - 1};

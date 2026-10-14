@@ -37,177 +37,176 @@
  *    instead of mbstowcs_s and wcstombs_s on MSC.
  */
 #ifndef DIRENT_H
-#define DIRENT_H
+#    define DIRENT_H
 
 /* Hide warnings about unreferenced local functions */
-#if defined(__clang__)
-#   pragma clang diagnostic ignored "-Wunused-function"
-#elif defined(_MSC_VER)
-#   pragma warning(disable:4505)
-#elif defined(__GNUC__)
-#   pragma GCC diagnostic ignored "-Wunused-function"
-#endif
+#    if defined(__clang__)
+#        pragma clang diagnostic ignored "-Wunused-function"
+#    elif defined(_MSC_VER)
+#        pragma warning(disable : 4505)
+#    elif defined(__GNUC__)
+#        pragma GCC diagnostic ignored "-Wunused-function"
+#    endif
 
 /*
  * Include windows.h without Windows Sockets 1.1 to prevent conflicts with
  * Windows Sockets 2.0.
  */
-#ifndef WIN32_LEAN_AND_MEAN
-#   define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-
-#include <stdio.h>
-#include <stdarg.h>
-#include <wchar.h>
-#include <string.h>
-#include <stdlib.h>
-#include <malloc.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <errno.h>
-#include <ctype.h>
+#    ifndef WIN32_LEAN_AND_MEAN
+#        define WIN32_LEAN_AND_MEAN
+#    endif
+#    include <ctype.h>
+#    include <errno.h>
+#    include <malloc.h>
+#    include <stdarg.h>
+#    include <stdio.h>
+#    include <stdlib.h>
+#    include <string.h>
+#    include <sys/stat.h>
+#    include <sys/types.h>
+#    include <wchar.h>
+#    include <windows.h>
 
 /* Indicates that d_type field is available in dirent structure */
-#define _DIRENT_HAVE_D_TYPE
+#    define _DIRENT_HAVE_D_TYPE
 
 /* Indicates that d_namlen field is available in dirent structure */
-#define _DIRENT_HAVE_D_NAMLEN
+#    define _DIRENT_HAVE_D_NAMLEN
 
 /* Entries missing from MSVC 6.0 */
-#if !defined(FILE_ATTRIBUTE_DEVICE)
-#   define FILE_ATTRIBUTE_DEVICE 0x40
-#endif
+#    if !defined(FILE_ATTRIBUTE_DEVICE)
+#        define FILE_ATTRIBUTE_DEVICE 0x40
+#    endif
 
 /* File type and permission flags for stat(), general mask */
-#if !defined(S_IFMT)
-#   define S_IFMT _S_IFMT
-#endif
+#    if !defined(S_IFMT)
+#        define S_IFMT _S_IFMT
+#    endif
 
 /* Directory bit */
-#if !defined(S_IFDIR)
-#   define S_IFDIR _S_IFDIR
-#endif
+#    if !defined(S_IFDIR)
+#        define S_IFDIR _S_IFDIR
+#    endif
 
 /* Character device bit */
-#if !defined(S_IFCHR)
-#   define S_IFCHR _S_IFCHR
-#endif
+#    if !defined(S_IFCHR)
+#        define S_IFCHR _S_IFCHR
+#    endif
 
 /* Pipe bit */
-#if !defined(S_IFFIFO)
-#   define S_IFFIFO _S_IFFIFO
-#endif
+#    if !defined(S_IFFIFO)
+#        define S_IFFIFO _S_IFFIFO
+#    endif
 
 /* Regular file bit */
-#if !defined(S_IFREG)
-#   define S_IFREG _S_IFREG
-#endif
+#    if !defined(S_IFREG)
+#        define S_IFREG _S_IFREG
+#    endif
 
 /* Read permission */
-#if !defined(S_IREAD)
-#   define S_IREAD _S_IREAD
-#endif
+#    if !defined(S_IREAD)
+#        define S_IREAD _S_IREAD
+#    endif
 
 /* Write permission */
-#if !defined(S_IWRITE)
-#   define S_IWRITE _S_IWRITE
-#endif
+#    if !defined(S_IWRITE)
+#        define S_IWRITE _S_IWRITE
+#    endif
 
 /* Execute permission */
-#if !defined(S_IEXEC)
-#   define S_IEXEC _S_IEXEC
-#endif
+#    if !defined(S_IEXEC)
+#        define S_IEXEC _S_IEXEC
+#    endif
 
 /* Pipe */
-#if !defined(S_IFIFO)
-#   define S_IFIFO _S_IFIFO
-#endif
+#    if !defined(S_IFIFO)
+#        define S_IFIFO _S_IFIFO
+#    endif
 
 /* Block device */
-#if !defined(S_IFBLK)
-#   define S_IFBLK 0
-#endif
+#    if !defined(S_IFBLK)
+#        define S_IFBLK 0
+#    endif
 
 /* Link */
-#if !defined(S_IFLNK)
-#   define S_IFLNK 0
-#endif
+#    if !defined(S_IFLNK)
+#        define S_IFLNK 0
+#    endif
 
 /* Socket */
-#if !defined(S_IFSOCK)
-#   define S_IFSOCK 0
-#endif
+#    if !defined(S_IFSOCK)
+#        define S_IFSOCK 0
+#    endif
 
 /* Read user permission */
-#if !defined(S_IRUSR)
-#   define S_IRUSR S_IREAD
-#endif
+#    if !defined(S_IRUSR)
+#        define S_IRUSR S_IREAD
+#    endif
 
 /* Write user permission */
-#if !defined(S_IWUSR)
-#   define S_IWUSR S_IWRITE
-#endif
+#    if !defined(S_IWUSR)
+#        define S_IWUSR S_IWRITE
+#    endif
 
 /* Execute user permission */
-#if !defined(S_IXUSR)
-#   define S_IXUSR 0
-#endif
+#    if !defined(S_IXUSR)
+#        define S_IXUSR 0
+#    endif
 
 /* Read group permission */
-#if !defined(S_IRGRP)
-#   define S_IRGRP 0
-#endif
+#    if !defined(S_IRGRP)
+#        define S_IRGRP 0
+#    endif
 
 /* Write group permission */
-#if !defined(S_IWGRP)
-#   define S_IWGRP 0
-#endif
+#    if !defined(S_IWGRP)
+#        define S_IWGRP 0
+#    endif
 
 /* Execute group permission */
-#if !defined(S_IXGRP)
-#   define S_IXGRP 0
-#endif
+#    if !defined(S_IXGRP)
+#        define S_IXGRP 0
+#    endif
 
 /* Read others permission */
-#if !defined(S_IROTH)
-#   define S_IROTH 0
-#endif
+#    if !defined(S_IROTH)
+#        define S_IROTH 0
+#    endif
 
 /* Write others permission */
-#if !defined(S_IWOTH)
-#   define S_IWOTH 0
-#endif
+#    if !defined(S_IWOTH)
+#        define S_IWOTH 0
+#    endif
 
 /* Execute others permission */
-#if !defined(S_IXOTH)
-#   define S_IXOTH 0
-#endif
+#    if !defined(S_IXOTH)
+#        define S_IXOTH 0
+#    endif
 
 /* Maximum length of file name */
-#if !defined(PATH_MAX)
-#   define PATH_MAX MAX_PATH
-#endif
-#if !defined(FILENAME_MAX)
-#   define FILENAME_MAX MAX_PATH
-#endif
-#if !defined(NAME_MAX)
-#   define NAME_MAX FILENAME_MAX
-#endif
+#    if !defined(PATH_MAX)
+#        define PATH_MAX MAX_PATH
+#    endif
+#    if !defined(FILENAME_MAX)
+#        define FILENAME_MAX MAX_PATH
+#    endif
+#    if !defined(NAME_MAX)
+#        define NAME_MAX FILENAME_MAX
+#    endif
 
 /* File type flags for d_type */
-#define DT_UNKNOWN 0
-#define DT_REG S_IFREG
-#define DT_DIR S_IFDIR
-#define DT_FIFO S_IFIFO
-#define DT_SOCK S_IFSOCK
-#define DT_CHR S_IFCHR
-#define DT_BLK S_IFBLK
-#define DT_LNK S_IFLNK
+#    define DT_UNKNOWN 0
+#    define DT_REG S_IFREG
+#    define DT_DIR S_IFDIR
+#    define DT_FIFO S_IFIFO
+#    define DT_SOCK S_IFSOCK
+#    define DT_CHR S_IFCHR
+#    define DT_BLK S_IFBLK
+#    define DT_LNK S_IFLNK
 
 /* Macros for converting between st_mode and d_type */
-#define IFTODT(mode) ((mode) & S_IFMT)
-#define DTTOIF(type) (type)
+#    define IFTODT(mode) ((mode) & S_IFMT)
+#    define DTTOIF(type) (type)
 
 /*
  * File type macros.  Note that block devices, sockets and links cannot be
@@ -215,38 +214,38 @@
  * only defined for compatibility.  These macros should always return false
  * on Windows.
  */
-#if !defined(S_ISFIFO)
-#   define S_ISFIFO(mode) (((mode) & S_IFMT) == S_IFIFO)
-#endif
-#if !defined(S_ISDIR)
-#   define S_ISDIR(mode) (((mode) & S_IFMT) == S_IFDIR)
-#endif
-#if !defined(S_ISREG)
-#   define S_ISREG(mode) (((mode) & S_IFMT) == S_IFREG)
-#endif
-#if !defined(S_ISLNK)
-#   define S_ISLNK(mode) (((mode) & S_IFMT) == S_IFLNK)
-#endif
-#if !defined(S_ISSOCK)
-#   define S_ISSOCK(mode) (((mode) & S_IFMT) == S_IFSOCK)
-#endif
-#if !defined(S_ISCHR)
-#   define S_ISCHR(mode) (((mode) & S_IFMT) == S_IFCHR)
-#endif
-#if !defined(S_ISBLK)
-#   define S_ISBLK(mode) (((mode) & S_IFMT) == S_IFBLK)
-#endif
+#    if !defined(S_ISFIFO)
+#        define S_ISFIFO(mode) (((mode) & S_IFMT) == S_IFIFO)
+#    endif
+#    if !defined(S_ISDIR)
+#        define S_ISDIR(mode) (((mode) & S_IFMT) == S_IFDIR)
+#    endif
+#    if !defined(S_ISREG)
+#        define S_ISREG(mode) (((mode) & S_IFMT) == S_IFREG)
+#    endif
+#    if !defined(S_ISLNK)
+#        define S_ISLNK(mode) (((mode) & S_IFMT) == S_IFLNK)
+#    endif
+#    if !defined(S_ISSOCK)
+#        define S_ISSOCK(mode) (((mode) & S_IFMT) == S_IFSOCK)
+#    endif
+#    if !defined(S_ISCHR)
+#        define S_ISCHR(mode) (((mode) & S_IFMT) == S_IFCHR)
+#    endif
+#    if !defined(S_ISBLK)
+#        define S_ISBLK(mode) (((mode) & S_IFMT) == S_IFBLK)
+#    endif
 
 /* Return the exact length of the file name without zero terminator */
-#define _D_EXACT_NAMLEN(p) ((p)->d_namlen)
+#    define _D_EXACT_NAMLEN(p) ((p)->d_namlen)
 
 /* Return the maximum size of a file name */
-#define _D_ALLOC_NAMLEN(p) ((PATH_MAX)+1)
+#    define _D_ALLOC_NAMLEN(p) ((PATH_MAX) + 1)
 
 
-#ifdef __cplusplus
+#    ifdef __cplusplus
 extern "C" {
-#endif
+#    endif
 
 
 /* Wide-character version */
@@ -285,7 +284,7 @@ struct _WDIR {
     HANDLE handle;
 
     /* Initial directory name */
-    wchar_t *patt;
+    wchar_t* patt;
 };
 typedef struct _WDIR _WDIR;
 
@@ -313,50 +312,47 @@ typedef struct dirent dirent;
 
 struct DIR {
     struct dirent ent;
-    struct _WDIR *wdirp;
+    struct _WDIR* wdirp;
 };
 typedef struct DIR DIR;
 
 
 /* Dirent functions */
-static DIR *opendir( const char *dirname );
-static _WDIR *_wopendir( const wchar_t *dirname );
+static DIR* opendir(const char* dirname);
+static _WDIR* _wopendir(const wchar_t* dirname);
 
-static struct dirent *readdir( DIR *dirp );
+static struct dirent* readdir(DIR* dirp);
 
-static int readdir_r(
-    DIR *dirp, struct dirent *entry, struct dirent **result );
+static int readdir_r(DIR* dirp, struct dirent* entry, struct dirent** result);
 
-static int closedir( DIR *dirp );
-static int _wclosedir( _WDIR *dirp );
+static int closedir(DIR* dirp);
+static int _wclosedir(_WDIR* dirp);
 
 /* For compatibility with Symbian */
-#define wdirent _wdirent
-#define WDIR _WDIR
-#define wopendir _wopendir
-#define wreaddir _wreaddir
+#    define wdirent _wdirent
+#    define WDIR _WDIR
+#    define wopendir _wopendir
+#    define wreaddir _wreaddir
 
 /* Optimize dirent_set_errno() away on modern Microsoft compilers */
-#if defined(_MSC_VER) && _MSC_VER >= 1400
-#   define dirent_set_errno _set_errno
-#endif
+#    if defined(_MSC_VER) && _MSC_VER >= 1400
+#        define dirent_set_errno _set_errno
+#    endif
 
 
 /* Internal utility functions */
-static WIN32_FIND_DATAW *dirent_first( _WDIR *dirp );
-static WIN32_FIND_DATAW *dirent_next( _WDIR *dirp );
+static WIN32_FIND_DATAW* dirent_first(_WDIR* dirp);
+static WIN32_FIND_DATAW* dirent_next(_WDIR* dirp);
 
 static int dirent_mbstowcs_s(
-    size_t *pReturnValue, wchar_t *wcstr, size_t sizeInWords,
-    const char *mbstr, size_t count );
+    size_t* pReturnValue, wchar_t* wcstr, size_t sizeInWords, const char* mbstr, size_t count);
 
 static int dirent_wcstombs_s(
-    size_t *pReturnValue, char *mbstr, size_t sizeInBytes,
-    const wchar_t *wcstr, size_t count );
+    size_t* pReturnValue, char* mbstr, size_t sizeInBytes, const wchar_t* wcstr, size_t count);
 
-#if !defined(_MSC_VER) || _MSC_VER < 1400
-static void dirent_set_errno( int error );
-#endif
+#    if !defined(_MSC_VER) || _MSC_VER < 1400
+static void dirent_set_errno(int error);
+#    endif
 
 
 /*
@@ -364,21 +360,18 @@ static void dirent_set_errno( int error );
  * internal working area that is used to retrieve individual directory
  * entries.
  */
-static _WDIR *_wopendir( const wchar_t *dirname )
-{
-    wchar_t *p;
+static _WDIR* _wopendir(const wchar_t* dirname) {
+    wchar_t* p;
 
     /* Must have directory name */
-    if( dirname == NULL || dirname[0] == '\0' ) {
-        dirent_set_errno( ENOENT );
+    if (dirname == NULL || dirname[0] == '\0') {
+        dirent_set_errno(ENOENT);
         return NULL;
     }
 
     /* Allocate new _WDIR structure */
-    _WDIR *dirp = ( _WDIR * ) malloc( sizeof( struct _WDIR ) );
-    if( !dirp ) {
-        return NULL;
-    }
+    _WDIR* dirp = (_WDIR*)malloc(sizeof(struct _WDIR));
+    if (!dirp) { return NULL; }
 
     /* Reset _WDIR structure */
     dirp->handle = INVALID_HANDLE_VALUE;
@@ -391,19 +384,17 @@ static _WDIR *_wopendir( const wchar_t *dirname )
      * Note that on WinRT there's no way to convert relative paths
      * into absolute paths, so just assume it is an absolute path.
      */
-#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
+#    if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
     /* Desktop */
-    DWORD n = GetFullPathNameW( dirname, 0, NULL, NULL );
-#else
+    DWORD n = GetFullPathNameW(dirname, 0, NULL, NULL);
+#    else
     /* WinRT */
-    size_t n = wcslen( dirname );
-#endif
+    size_t n = wcslen(dirname);
+#    endif
 
     /* Allocate room for absolute directory name and search pattern */
-    dirp->patt = ( wchar_t * ) malloc( sizeof( wchar_t ) * n + 16 );
-    if( dirp->patt == NULL ) {
-        goto exit_closedir;
-    }
+    dirp->patt = (wchar_t*)malloc(sizeof(wchar_t) * n + 16);
+    if (dirp->patt == NULL) { goto exit_closedir; }
 
     /*
      * Convert relative directory name to an absolute one.  This
@@ -413,20 +404,18 @@ static _WDIR *_wopendir( const wchar_t *dirname )
      * Note that on WinRT there's no way to convert relative paths
      * into absolute paths, so just assume it is an absolute path.
      */
-#if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
+#    if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
     /* Desktop */
-    n = GetFullPathNameW( dirname, n, dirp->patt, NULL );
-    if( n <= 0 ) {
-        goto exit_closedir;
-    }
-#else
+    n = GetFullPathNameW(dirname, n, dirp->patt, NULL);
+    if (n <= 0) { goto exit_closedir; }
+#    else
     /* WinRT */
-    wcsncpy_s( dirp->patt, n + 1, dirname, n );
-#endif
+    wcsncpy_s(dirp->patt, n + 1, dirname, n);
+#    endif
 
     /* Append search pattern \* to the directory name */
     p = dirp->patt + n;
-    switch( p[-1] ) {
+    switch (p[-1]) {
         case '\\':
         case '/':
         case ':':
@@ -443,16 +432,14 @@ static _WDIR *_wopendir( const wchar_t *dirname )
     *p = '\0';
 
     /* Open directory stream and retrieve the first entry */
-    if( !dirent_first( dirp ) ) {
-        goto exit_closedir;
-    }
+    if (!dirent_first(dirp)) { goto exit_closedir; }
 
     /* Success */
     return dirp;
 
     /* Failure */
 exit_closedir:
-    _wclosedir( dirp );
+    _wclosedir(dirp);
     return NULL;
 }
 
@@ -461,40 +448,31 @@ exit_closedir:
  * DIR structure as well as any directory entry read previously by
  * _wreaddir().
  */
-static int _wclosedir( _WDIR *dirp )
-{
-    if( !dirp ) {
-        dirent_set_errno( EBADF );
+static int _wclosedir(_WDIR* dirp) {
+    if (!dirp) {
+        dirent_set_errno(EBADF);
         return /*failure*/ -1;
     }
 
     /* Release search handle */
-    if( dirp->handle != INVALID_HANDLE_VALUE ) {
-        FindClose( dirp->handle );
-    }
+    if (dirp->handle != INVALID_HANDLE_VALUE) { FindClose(dirp->handle); }
 
     /* Release search pattern */
-    free( dirp->patt );
+    free(dirp->patt);
 
     /* Release directory structure */
-    free( dirp );
-    return /*success*/0;
+    free(dirp);
+    return /*success*/ 0;
 }
 
 /* Get first directory entry */
-static WIN32_FIND_DATAW *dirent_first( _WDIR *dirp )
-{
-    if( !dirp ) {
-        return NULL;
-    }
+static WIN32_FIND_DATAW* dirent_first(_WDIR* dirp) {
+    if (!dirp) { return NULL; }
 
     /* Open directory and retrieve the first entry */
     dirp->handle = FindFirstFileExW(
-                       dirp->patt, FindExInfoStandard, &dirp->data,
-                       FindExSearchNameMatch, NULL, 0 );
-    if( dirp->handle == INVALID_HANDLE_VALUE ) {
-        goto error;
-    }
+        dirp->patt, FindExInfoStandard, &dirp->data, FindExSearchNameMatch, NULL, 0);
+    if (dirp->handle == INVALID_HANDLE_VALUE) { goto error; }
 
     /* A directory entry is now waiting in memory */
     dirp->cached = 1;
@@ -506,102 +484,89 @@ error:
 
     /* Set error code */
     DWORD errorcode = GetLastError();
-    switch( errorcode ) {
+    switch (errorcode) {
         case ERROR_ACCESS_DENIED:
             /* No read access to directory */
-            dirent_set_errno( EACCES );
+            dirent_set_errno(EACCES);
             break;
 
         case ERROR_DIRECTORY:
             /* Directory name is invalid */
-            dirent_set_errno( ENOTDIR );
+            dirent_set_errno(ENOTDIR);
             break;
 
         case ERROR_PATH_NOT_FOUND:
         default:
             /* Cannot find the file */
-            dirent_set_errno( ENOENT );
+            dirent_set_errno(ENOENT);
     }
     return NULL;
 }
 
 /* Get next directory entry */
-static WIN32_FIND_DATAW *dirent_next( _WDIR *dirp )
-{
+static WIN32_FIND_DATAW* dirent_next(_WDIR* dirp) {
     /* Is the next directory entry already in cache? */
-    if( dirp->cached ) {
+    if (dirp->cached) {
         /* Yes, a valid directory entry found in memory */
         dirp->cached = 0;
         return &dirp->data;
     }
 
     /* No directory entry in cache */
-    if( dirp->handle == INVALID_HANDLE_VALUE ) {
-        return NULL;
-    }
+    if (dirp->handle == INVALID_HANDLE_VALUE) { return NULL; }
 
     /* Read the next directory entry from stream */
-    if( FindNextFileW( dirp->handle, &dirp->data ) == FALSE ) {
-        goto exit_close;
-    }
+    if (FindNextFileW(dirp->handle, &dirp->data) == FALSE) { goto exit_close; }
 
     /* Success */
     return &dirp->data;
 
     /* Failure */
 exit_close:
-    FindClose( dirp->handle );
+    FindClose(dirp->handle);
     dirp->handle = INVALID_HANDLE_VALUE;
     return NULL;
 }
 
 /* Open directory stream using plain old C-string */
-static DIR *opendir( const char *dirname )
-{
+static DIR* opendir(const char* dirname) {
     /* Must have directory name */
-    if( dirname == NULL || dirname[0] == '\0' ) {
-        dirent_set_errno( ENOENT );
+    if (dirname == NULL || dirname[0] == '\0') {
+        dirent_set_errno(ENOENT);
         return NULL;
     }
 
     /* Allocate memory for DIR structure */
-    struct DIR *dirp = ( DIR * ) malloc( sizeof( struct DIR ) );
-    if( !dirp ) {
-        return NULL;
-    }
+    struct DIR* dirp = (DIR*)malloc(sizeof(struct DIR));
+    if (!dirp) { return NULL; }
 
     /* Convert directory name to wide-character string */
     wchar_t wname[PATH_MAX + 1];
     size_t n;
-    int error = dirent_mbstowcs_s( &n, wname, PATH_MAX + 1, dirname, PATH_MAX + 1 );
-    if( error ) {
-        goto exit_failure;
-    }
+    int error = dirent_mbstowcs_s(&n, wname, PATH_MAX + 1, dirname, PATH_MAX + 1);
+    if (error) { goto exit_failure; }
 
     /* Open directory stream using wide-character name */
-    dirp->wdirp = _wopendir( wname );
-    if( !dirp->wdirp ) {
-        goto exit_failure;
-    }
+    dirp->wdirp = _wopendir(wname);
+    if (!dirp->wdirp) { goto exit_failure; }
 
     /* Success */
     return dirp;
 
     /* Failure */
 exit_failure:
-    free( dirp );
+    free(dirp);
     return NULL;
 }
 
 /* Read next directory entry */
-static struct dirent *readdir( DIR *dirp )
-{
+static struct dirent* readdir(DIR* dirp) {
     /*
      * Read directory entry to buffer.  We can safely ignore the return
      * value as entry will be set to NULL in case of error.
      */
-    struct dirent *entry;
-    ( void ) readdir_r( dirp, &dirp->ent, &entry );
+    struct dirent* entry;
+    (void)readdir_r(dirp, &dirp->ent, &entry);
 
     /* Return pointer to statically allocated directory entry */
     return entry;
@@ -613,22 +578,18 @@ static struct dirent *readdir( DIR *dirp )
  * Returns zero on success.  If the end of directory stream is reached, then
  * sets result to NULL and returns zero.
  */
-static int readdir_r(
-    DIR *dirp, struct dirent *entry, struct dirent **result )
-{
+static int readdir_r(DIR* dirp, struct dirent* entry, struct dirent** result) {
     /* Read next directory entry */
-    WIN32_FIND_DATAW *datap = dirent_next( dirp->wdirp );
-    if( !datap ) {
+    WIN32_FIND_DATAW* datap = dirent_next(dirp->wdirp);
+    if (!datap) {
         /* No more directory entries */
         *result = NULL;
-        return /*OK*/0;
+        return /*OK*/ 0;
     }
 
     /* Attempt to convert file name to multi-byte string */
     size_t n;
-    int error = dirent_wcstombs_s(
-                    &n, entry->d_name, PATH_MAX + 1,
-                    datap->cFileName, PATH_MAX + 1 );
+    int error = dirent_wcstombs_s(&n, entry->d_name, PATH_MAX + 1, datap->cFileName, PATH_MAX + 1);
 
     /*
      * If the file name cannot be represented by a multi-byte string, then
@@ -639,21 +600,20 @@ static int readdir_r(
      * unless the file system provides one.  At least VirtualBox shared
      * folders fail to do this.
      */
-    if( error && datap->cAlternateFileName[0] != '\0' ) {
+    if (error && datap->cAlternateFileName[0] != '\0') {
         error = dirent_wcstombs_s(
-                    &n, entry->d_name, PATH_MAX + 1,
-                    datap->cAlternateFileName, PATH_MAX + 1 );
+            &n, entry->d_name, PATH_MAX + 1, datap->cAlternateFileName, PATH_MAX + 1);
     }
 
-    if( !error ) {
+    if (!error) {
         /* Length of file name excluding zero terminator */
         entry->d_namlen = n - 1;
 
         /* File attributes */
         DWORD attr = datap->dwFileAttributes;
-        if( ( attr & FILE_ATTRIBUTE_DEVICE ) != 0 ) {
+        if ((attr & FILE_ATTRIBUTE_DEVICE) != 0) {
             entry->d_type = DT_CHR;
-        } else if( ( attr & FILE_ATTRIBUTE_DIRECTORY ) != 0 ) {
+        } else if ((attr & FILE_ATTRIBUTE_DIRECTORY) != 0) {
             entry->d_type = DT_DIR;
         } else {
             entry->d_type = DT_REG;
@@ -662,7 +622,7 @@ static int readdir_r(
         /* Reset dummy fields */
         entry->d_ino = 0;
         entry->d_off = 0;
-        entry->d_reclen = sizeof( struct dirent );
+        entry->d_reclen = sizeof(struct dirent);
     } else {
         /*
          * Cannot convert file name to multi-byte string so construct
@@ -681,82 +641,66 @@ static int readdir_r(
 
     /* Return pointer to directory entry */
     *result = entry;
-    return /*OK*/0;
+    return /*OK*/ 0;
 }
 
 /* Close directory stream */
-static int closedir( DIR *dirp )
-{
+static int closedir(DIR* dirp) {
     int ok;
 
-    if( !dirp ) {
-        goto exit_failure;
-    }
+    if (!dirp) { goto exit_failure; }
 
     /* Close wide-character directory stream */
-    ok = _wclosedir( dirp->wdirp );
+    ok = _wclosedir(dirp->wdirp);
     dirp->wdirp = NULL;
 
     /* Release multi-byte character version */
-    free( dirp );
+    free(dirp);
     return ok;
 
 exit_failure:
     /* Invalid directory stream */
-    dirent_set_errno( EBADF );
+    dirent_set_errno(EBADF);
     return /*failure*/ -1;
 }
 
 /* Convert multi-byte string to wide character string */
 static int dirent_mbstowcs_s(
-    size_t *pReturnValue, wchar_t *wcstr,
-    size_t sizeInWords, const char *mbstr, size_t /*count*/ )
-{
-    const int required_size = MultiByteToWideChar( CP_UTF8, 0, mbstr, -1, NULL, 0 ) + 1;
-    if( required_size > static_cast < int > ( sizeInWords ) ) {
+    size_t* pReturnValue, wchar_t* wcstr, size_t sizeInWords, const char* mbstr, size_t /*count*/) {
+    const int required_size = MultiByteToWideChar(CP_UTF8, 0, mbstr, -1, NULL, 0) + 1;
+    if (required_size > static_cast<int>(sizeInWords)) { return 1; }
+    const int n = MultiByteToWideChar(CP_UTF8, 0, mbstr, -1, wcstr, required_size);
+    if (n == 0) {
+        debugmsg("MultiByteToWideChar failed!");
         return 1;
     }
-    const int n = MultiByteToWideChar( CP_UTF8, 0, mbstr, -1, wcstr, required_size );
-    if( n == 0 ) {
-        debugmsg( "MultiByteToWideChar failed!" );
-        return 1;
-    }
-    if( pReturnValue ) {
-        *pReturnValue = n;
-    }
+    if (pReturnValue) { *pReturnValue = n; }
     return 0;
 }
 
 /* Convert wide-character string to multi-byte string */
 static int dirent_wcstombs_s(
-    size_t *pReturnValue, char *mbstr,
-    size_t sizeInBytes, const wchar_t *wcstr, size_t /*count*/ )
-{
-    const int required_size = WideCharToMultiByte( CP_UTF8, 0, wcstr, -1, NULL, 0, NULL, 0 ) + 1;
-    if( required_size > static_cast < int > ( sizeInBytes ) ) {
+    size_t* pReturnValue, char* mbstr, size_t sizeInBytes, const wchar_t* wcstr, size_t /*count*/) {
+    const int required_size = WideCharToMultiByte(CP_UTF8, 0, wcstr, -1, NULL, 0, NULL, 0) + 1;
+    if (required_size > static_cast<int>(sizeInBytes)) { return 1; }
+    const int n = WideCharToMultiByte(CP_UTF8, 0, wcstr, -1, mbstr, required_size, NULL, 0);
+    if (n == 0) {
+        debugmsg("WideCharToMultiByte failed!");
         return 1;
     }
-    const int n = WideCharToMultiByte( CP_UTF8, 0, wcstr, -1, mbstr, required_size, NULL, 0 );
-    if( n == 0 ) {
-        debugmsg( "WideCharToMultiByte failed!" );
-        return 1;
-    }
-    if( pReturnValue ) {
-        *pReturnValue = n;
-    }
+    if (pReturnValue) { *pReturnValue = n; }
     return 0;
 }
 
 /* Set errno variable */
-#if !defined(_MSC_VER) || _MSC_VER < 1400
-static void dirent_set_errno( int error )
-{
+#    if !defined(_MSC_VER) || _MSC_VER < 1400
+static void dirent_set_errno(int error) {
     /* Non-Microsoft compiler or older Microsoft compiler */
     errno = error;
 }
-#endif
+#    endif
 
-#ifdef __cplusplus
+#    ifdef __cplusplus
 }
-#endif
+#    endif
 #endif /*DIRENT_H*/

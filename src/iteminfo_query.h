@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstddef>
 #include <bitset>
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -224,23 +224,21 @@ enum class iteminfo_parts : size_t {
     NUM_VALUES
 };
 
-using iteminfo_query_base = std::bitset < static_cast<size_t>( iteminfo_parts::NUM_VALUES ) >;
+using iteminfo_query_base = std::bitset<static_cast<size_t>(iteminfo_parts::NUM_VALUES)>;
 
-class iteminfo_query
-{
-    private:
-        iteminfo_query_base parts;
-    public:
-        iteminfo_query( const iteminfo_query_base &values );
-        iteminfo_query( const std::string &bits );
-        iteminfo_query( const std::vector<iteminfo_parts> &set_bits );
+class iteminfo_query {
+private:
+    iteminfo_query_base parts;
 
-        bool test( const iteminfo_parts &value ) const;
+public:
+    iteminfo_query(const iteminfo_query_base& values);
+    iteminfo_query(const std::string& bits);
+    iteminfo_query(const std::vector<iteminfo_parts>& set_bits);
 
-        static const iteminfo_query all;
-        static const iteminfo_query no_text;
-        static const iteminfo_query any_flags;
-        static const iteminfo_query no_conditions;
+    bool test(const iteminfo_parts& value) const;
+
+    static const iteminfo_query all;
+    static const iteminfo_query no_text;
+    static const iteminfo_query any_flags;
+    static const iteminfo_query no_conditions;
 };
-
-

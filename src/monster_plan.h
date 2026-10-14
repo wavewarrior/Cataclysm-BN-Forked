@@ -1,11 +1,11 @@
 #pragma once
 
-#include <cstdint>
-#include <vector>
-
 #include "coordinates.h"
 #include "point.h"
 #include "type_id.h"
+
+#include <cstdint>
+#include <vector>
 
 class Creature;
 
@@ -41,7 +41,7 @@ struct monster_plan_t {
     // Same-turn memory from the planning pass.  This is not live visibility:
     // callers may use it to preserve movement intent, but attacks still
     // revalidate against current state.
-    Creature *observed_target = nullptr;
+    Creature* observed_target = nullptr;
     tripoint_bub_ms observed_target_pos = tripoint_bub_ms::zero();
 
     // Wander state.  Only written when swarm dispersal logic fires;
@@ -51,8 +51,8 @@ struct monster_plan_t {
     int wandf = 0;
 
     // Per-monster stat final values.
-    int anger   = 0;
-    int morale  = 0;
+    int anger = 0;
+    int morale = 0;
     int friendly = 0;
 
     // Faction anger entries accumulated during planning.
@@ -69,5 +69,5 @@ struct monster_plan_t {
     // Character aggro triggers that fired during planning.
     // Each entry is the reason string (a string literal) from the call site.
     // apply_plan() calls trigger_character_aggro(reason) for each.
-    std::vector<const char *> aggro_triggers;
+    std::vector<const char*> aggro_triggers;
 };

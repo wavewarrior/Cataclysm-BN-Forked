@@ -1,20 +1,19 @@
 #pragma once
 
-#include <functional>
-#include <map>
-#include <optional>
-#include <vector>
-#include <string>
-
-#include "coordinates.h"
 #include "color.h"
+#include "coordinates.h"
 #include "cursesdef.h"
 #include "memory_fast.h"
 #include "point.h"
 #include "type_id.h"
 
-namespace Rml
-{
+#include <functional>
+#include <map>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace Rml {
 class ElementDocument;
 } // namespace Rml
 
@@ -26,7 +25,10 @@ class vehicle;
 class map;
 
 enum shapetype {
-    editmap_rect, editmap_rect_filled, editmap_line, editmap_circle,
+    editmap_rect,
+    editmap_rect_filled,
+    editmap_line,
+    editmap_circle,
 };
 
 class editmap;
@@ -36,92 +38,92 @@ struct editmap_hilight {
     int cur_blink;
     nc_color color;
     std::map<tripoint_bub_ms, char> points;
-    nc_color( *getbg )( const nc_color & );
+    nc_color (*getbg)(const nc_color&);
     void setup() {
-        getbg = color == c_red ? &red_background :
-                color == c_magenta ? &magenta_background :
-                color == c_cyan ? &cyan_background :
-                color == c_yellow ? &yellow_background : &green_background;
+        getbg =
+            color == c_red       ? &red_background
+            : color == c_magenta ? &magenta_background
+            : color == c_cyan    ? &cyan_background
+            : color == c_yellow
+                ? &yellow_background
+                : &green_background;
     }
 };
 
-class editmap
-{
-    public:
-        tripoint pos2screen( const tripoint_bub_ms &p );
-        bool eget_direction( tripoint_rel_ms &p, const std::string &action ) const;
-        std::optional<tripoint_bub_ms> edit();
-        void update_view_with_help( const std::string &txt, const std::string &title );
-        // RmlUi backdrop for the w_info panel: builds the colour-tagged info text
-        // (the same content update_view_with_help draws via curses) for #editmap-info.
-        std::string info_panel_text( const std::string &txt, const std::string &title ) const;
+class editmap {
+public:
+    tripoint pos2screen(const tripoint_bub_ms& p);
+    bool eget_direction(tripoint_rel_ms& p, const std::string& action) const;
+    std::optional<tripoint_bub_ms> edit();
+    void update_view_with_help(const std::string& txt, const std::string& title);
+    // RmlUi backdrop for the w_info panel: builds the colour-tagged info text
+    // (the same content update_view_with_help draws via curses) for #editmap-info.
+    std::string info_panel_text(const std::string& txt, const std::string& title) const;
 
-        // T_t can be ter_t, furn_t, and trap
-        template<typename T_t>
-        void edit_feature();
-        void edit_fld();
-        void edit_itm();
-        void edit_critter( Creature &critter );
-        void edit_veh();
-        void edit_mapgen();
-        void cleartmpmap( map &tmpmap );
-        void mapgen_preview( const point_abs_ms &tc, uilist &gmenu );
-        vehicle *mapgen_veh_query( const tripoint_abs_omt &omt_tgt );
-        bool mapgen_veh_destroy( const tripoint_abs_omt &omt_tgt, vehicle *car_target );
-        void mapgen_retarget();
-        int select_shape( shapetype shape, int mode = -1 );
+    // T_t can be ter_t, furn_t, and trap
+    template <typename T_t> void edit_feature();
+    void edit_fld();
+    void edit_itm();
+    void edit_critter(Creature& critter);
+    void edit_veh();
+    void edit_mapgen();
+    void cleartmpmap(map& tmpmap);
+    void mapgen_preview(const point_abs_ms& tc, uilist& gmenu);
+    vehicle* mapgen_veh_query(const tripoint_abs_omt& omt_tgt);
+    bool mapgen_veh_destroy(const tripoint_abs_omt& omt_tgt, vehicle* car_target);
+    void mapgen_retarget();
+    int select_shape(shapetype shape, int mode = -1);
 
-        void update_fmenu_entry( uilist &fmenu, field &field, const field_type_id &idx );
-        void setup_fmenu( uilist &fmenu );
-        catacurses::window w_info;
-        // Passive RmlUi backdrop replacing the curses w_info panel (tiles-only
-        // rip-out). Opened in edit() when editmap_rmlui_enabled(); null = curses.
-        Rml::ElementDocument *info_doc_ = nullptr;
+    void update_fmenu_entry(uilist& fmenu, field& field, const field_type_id& idx);
+    void setup_fmenu(uilist& fmenu);
+    catacurses::window w_info;
+    // Passive RmlUi backdrop replacing the curses w_info panel (tiles-only
+    // rip-out). Opened in edit() when editmap_rmlui_enabled(); null = curses.
+    Rml::ElementDocument* info_doc_ = nullptr;
 
-        void recalc_target( shapetype shape );
-        bool move_target( const std::string &action, int moveorigin = -1 );
+    void recalc_target(shapetype shape);
+    bool move_target(const std::string& action, int moveorigin = -1);
 
-        int sel_field;
-        int sel_field_intensity;
+    int sel_field;
+    int sel_field_intensity;
 
-        tripoint_bub_ms target;
-        tripoint_bub_ms origin;
-        bool moveall;
-        bool refresh_mplans;
-        shapetype editshape;
+    tripoint_bub_ms target;
+    tripoint_bub_ms origin;
+    bool moveall;
+    bool refresh_mplans;
+    shapetype editshape;
 
-        std::vector<tripoint_bub_ms> target_list;
-        std::function<void( const tripoint_bub_ms &p )> draw_target_override;
-        std::map<std::string, editmap_hilight> hilights;
-        bool blink;
-        bool altblink;
-        bool uberdraw;
+    std::vector<tripoint_bub_ms> target_list;
+    std::function<void(const tripoint_bub_ms& p)> draw_target_override;
+    std::map<std::string, editmap_hilight> hilights;
+    bool blink;
+    bool altblink;
+    bool uberdraw;
 
-        editmap();
-        ~editmap();
+    editmap();
+    ~editmap();
 
-    private:
-        shared_ptr_fast<ui_adaptor> create_or_get_ui_adaptor();
+private:
+    shared_ptr_fast<ui_adaptor> create_or_get_ui_adaptor();
 
-        weak_ptr_fast<ui_adaptor> ui;
+    weak_ptr_fast<ui_adaptor> ui;
 
-        std::string info_txt_curr;
-        std::string info_title_curr;
+    std::string info_txt_curr;
+    std::string info_title_curr;
 
-        map *tmpmap_ptr = nullptr;
+    map* tmpmap_ptr = nullptr;
 
-        const int width = 45;
-        const int offsetX = 0;
-        const int infoHeight = 20;
+    const int width = 45;
+    const int offsetX = 0;
+    const int infoHeight = 20;
 
-        point tmax;
+    point tmax;
 
-        void draw_main_ui_overlay();
-        void do_ui_invalidation();
+    void draw_main_ui_overlay();
+    void do_ui_invalidation();
 
-        // work around the limitation that you can't forward declare an inner class
-        class game_draw_callback_t_container;
-        std::unique_ptr<game_draw_callback_t_container> draw_cb_container_;
-        game_draw_callback_t_container &draw_cb_container();
+    // work around the limitation that you can't forward declare an inner class
+    class game_draw_callback_t_container;
+    std::unique_ptr<game_draw_callback_t_container> draw_cb_container_;
+    game_draw_callback_t_container& draw_cb_container();
 };
-

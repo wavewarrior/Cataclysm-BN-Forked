@@ -83,7 +83,7 @@ extern bool pixel_minimap_option;
 /**
  * Items on the map with at most this distance to the player are considered
  * available for crafting, see inventory::form_from_map
-*/
+ */
 extern int PICKUP_RANGE;
 
 /**
@@ -96,14 +96,14 @@ extern bool log_activity_skip_state;
 
 /** Monster LOD (level-of-detail) options. */
 extern bool monster_lod_enabled;
-extern int  lod_tier_full_dist;
-extern int  lod_tier_coarse_dist;
-extern int  lod_demotion_cooldown;
-extern int  lod_action_budget;
-extern int  lod_macro_interval;
-extern int  lod_coarse_scent_interval;
-extern int  lod_group_morale_max_tier;
-extern int  activity_skip_monster_lod_gate;
+extern int lod_tier_full_dist;
+extern int lod_tier_coarse_dist;
+extern int lod_demotion_cooldown;
+extern int lod_action_budget;
+extern int lod_macro_interval;
+extern int lod_coarse_scent_interval;
+extern int lod_group_morale_max_tier;
+extern int activity_skip_monster_lod_gate;
 
 /** Z-level distance penalty for monster LOD tier assignment. */
 extern int lod_z_penalty;
@@ -120,22 +120,18 @@ extern int item_process_stride;
 
 /** NPC LOD options — mirror monster LOD system for NPC AI detail. */
 extern bool npc_lod_enabled;
-extern int  npc_tier0_dist;
-extern int  npc_tier1_dist;
-extern int  npc_demotion_cooldown;
-extern int  npc_action_budget;
-extern int  npc_coarse_danger_interval;
-extern int  npc_macro_interval;
+extern int npc_tier0_dist;
+extern int npc_tier1_dist;
+extern int npc_demotion_cooldown;
+extern int npc_action_budget;
+extern int npc_coarse_danger_interval;
+extern int npc_macro_interval;
 
 /** Out-of-bubble world-tick options. */
 extern bool reality_bubble_fire_spread;
 
 /** How visibility attenuation scales relative to the reality bubble hard cap. */
-enum class visibility_scaling_mode {
-    perfect,
-    smart,
-    no_scale
-};
+enum class visibility_scaling_mode { perfect, smart, no_scale };
 extern visibility_scaling_mode visibility_scaling;
 
 extern bool lazy_border_enabled;
@@ -169,45 +165,50 @@ extern int safe_mode_proximity;
 /** Multithreading options — all require restart to take effect. */
 extern bool parallel_enabled;
 extern bool parallel_monster_planning;
-extern int  monster_plan_chunk_size;
+extern int monster_plan_chunk_size;
 extern bool parallel_map_cache;
 extern bool parallel_scent_update;
 
 /* Options related to fungal activity */
 struct FungalOptions {
     /**
-    * Enables fungal stalk to be spawned on infested terrain from 'PLANT' attack function.
-    */
+     * Enables fungal stalk to be spawned on infested terrain from 'PLANT' attack function.
+     */
     bool young_allowed;
     /**
-    * Enables fungal infestation on FLAT tiles (indoors houses/asphalt/etc..).
-    */
+     * Enables fungal infestation on FLAT tiles (indoors houses/asphalt/etc..).
+     */
     bool spread_on_flat_tiles_allowed;
     /**
-    * Base rate to spawn fungal stalk from 'PLANT' attack function.
-    * Chance to spawn: 1 / (MON_FUNGALOID_YOUNG_SPAWN_BASE_RATE + num_creatures_in_bubble / MON_FUNGALOID_YOUNG_SPAWN_BUBBLE_CREATURES_DIVIDER)
-    */
+     * Base rate to spawn fungal stalk from 'PLANT' attack function.
+     * Chance to spawn: 1 / (MON_FUNGALOID_YOUNG_SPAWN_BASE_RATE + num_creatures_in_bubble /
+     * MON_FUNGALOID_YOUNG_SPAWN_BUBBLE_CREATURES_DIVIDER)
+     */
     int young_spawn_base_rate;
     /**
-    * Number of creatures in bubble will be divided on that number to calculate chance to spawn fungal stalk from 'PLANT' attack function.
-    * Chance to spawn: 1 / (MON_FUNGALOID_YOUNG_SPAWN_BASE_RATE + num_creatures_in_bubble / MON_FUNGALOID_YOUNG_SPAWN_BUBBLE_CREATURES_DIVIDER)
-    */
+     * Number of creatures in bubble will be divided on that number to calculate chance to spawn
+     * fungal stalk from 'PLANT' attack function. Chance to spawn: 1 /
+     * (MON_FUNGALOID_YOUNG_SPAWN_BASE_RATE + num_creatures_in_bubble /
+     * MON_FUNGALOID_YOUNG_SPAWN_BUBBLE_CREATURES_DIVIDER)
+     */
     int young_spawn_bubble_creatures_divider;
     /**
-    * Chance (0 to 1) to trigger spore creation on fungal_effects::fungalize method
-    * (for character; infested furniture/terrain bash; FUNGUS death function, FUNGUS_ADVANCED attack function)
-    * (note: change for FUNGUS_ADVANCED attack function will be affected by random radius change (1~2)
-    * and will proportionally decrease as FUNGUS_ADVANCED_CREATURES_THRESHOLD is passed)",
-    */
+     * Chance (0 to 1) to trigger spore creation on fungal_effects::fungalize method
+     * (for character; infested furniture/terrain bash; FUNGUS death function, FUNGUS_ADVANCED
+     * attack function) (note: change for FUNGUS_ADVANCED attack function will be affected by random
+     * radius change (1~2) and will proportionally decrease as FUNGUS_ADVANCED_CREATURES_THRESHOLD
+     * is passed)",
+     */
     float spore_chance;
     /**
-    * If number of creatures nearby will pass this threshold - chance to spawn spore by FUNGUS_ADVANCED attack will be proportionally decreased.
-    */
+     * If number of creatures nearby will pass this threshold - chance to spawn spore by
+     * FUNGUS_ADVANCED attack will be proportionally decreased.
+     */
     int advanced_creatures_threshold;
     /**
-    * Global value that affects ability of fungal_effects::fungalize to spawn spores.
-    * If there is more creature nearby than specified value - spore will not spawn.
-    */
+     * Global value that affects ability of fungal_effects::fungalize to spawn spores.
+     * If there is more creature nearby than specified value - spore will not spawn.
+     */
     int spore_creatures_threshold;
 };
 
@@ -216,7 +217,8 @@ extern FungalOptions fungal_opt;
 enum class error_log_format_t {
     human_readable,
     // Output error messages in github action command format (currently json only)
-    // See https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-commands-for-github-actions#setting-an-error-message
+    // See
+    // https://docs.github.com/en/free-pro-team@latest/actions/reference/workflow-commands-for-github-actions#setting-an-error-message
     github_action,
 };
 #ifndef CATA_IN_TOOL

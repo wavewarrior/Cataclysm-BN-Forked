@@ -67,7 +67,7 @@ class splatmap_pass {
 public:
     splatmap_pass() = default;
     splatmap_pass(const splatmap_pass&) = delete;
-    splatmap_pass& operator=(const splatmap_pass&) = delete; // *NOPAD*
+    splatmap_pass& operator=(const splatmap_pass&) = delete;
     ~splatmap_pass();
 
     auto init(gpu_device& dev, SDL_GPUTextureFormat world_format) -> bool;
@@ -112,7 +112,7 @@ private:
     static constexpr std::size_t MAX_STAMPS_PER_FLUSH = 1024;
 
     auto load_atlas() -> bool;
-    auto find(std::uint64_t key) -> entry*; // *NOPAD*
+    auto find(std::uint64_t key) -> entry*;
 
     gpu_device* dev_ = nullptr;
     SDL_GPUTextureFormat world_format_ = SDL_GPU_TEXTUREFORMAT_INVALID;

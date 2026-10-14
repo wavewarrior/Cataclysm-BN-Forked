@@ -1,5 +1,12 @@
 #pragma once
 
+#include "catalua_type_operators.h"
+#include "character_id.h"
+#include "color.h"
+#include "cursesdef.h"
+#include "string_id.h"
+#include "type_id.h"
+
 #include <bitset>
 #include <map>
 #include <set>
@@ -9,17 +16,10 @@
 #include <utility>
 #include <vector>
 
-#include "catalua_type_operators.h"
-#include "character_id.h"
-#include "color.h"
-#include "cursesdef.h"
-#include "string_id.h"
-#include "type_id.h"
-
-std::string fac_ranking_text( int val );
-std::string fac_respect_text( int val );
-std::string fac_wealth_text( int val, int size );
-std::string fac_combat_ability_text( int val );
+std::string fac_ranking_text(int val);
+std::string fac_respect_text(int val);
+std::string fac_wealth_text(int val, int size);
+std::string fac_combat_ability_text(int val);
 
 class JsonIn;
 class JsonObject;
@@ -29,15 +29,14 @@ struct faction_epilogue {
     int power_min;
     int power_max;
     snippet_id id;
-    bool operator<( const faction_epilogue &rhs ) const {
-        return std::tie( power_min, power_max, id ) < std::tie( rhs.power_min, rhs.power_max, rhs.id );
+    bool operator<(const faction_epilogue& rhs) const {
+        return std::tie(power_min, power_max, id) < std::tie(rhs.power_min, rhs.power_max, rhs.id);
     }
 };
 
 using faction_id = string_id<faction>;
 
-namespace npc_factions
-{
+namespace npc_factions {
 void finalize();
 enum relationship : int {
     kill_on_sight,
@@ -51,164 +50,121 @@ enum relationship : int {
     rel_types
 };
 
-const std::unordered_map<std::string, relationship> relation_strs = { {
-        { "kill on sight", kill_on_sight },
-        { "watch your back", watch_your_back },
-        { "share my stuff", share_my_stuff },
-        { "guard your stuff", guard_your_stuff },
-        { "lets you in", lets_you_in },
-        { "defends your space", defend_your_space },
-        { "knows your voice", knows_your_voice }
-    }
-};
+const std::unordered_map<std::string, relationship> relation_strs = {
+    {{"kill on sight", kill_on_sight},
+     {"watch your back", watch_your_back},
+     {"share my stuff", share_my_stuff},
+     {"guard your stuff", guard_your_stuff},
+     {"lets you in", lets_you_in},
+     {"defends your space", defend_your_space},
+     {"knows your voice", knows_your_voice}}};
 } // namespace npc_factions
 
-class faction_template
-{
-    protected:
-        faction_template();
-        void load_relations( const JsonObject &jsobj );
+class faction_template {
+protected:
+    faction_template();
+    void load_relations(const JsonObject& jsobj);
 
-    private:
-        explicit faction_template( const JsonObject &jsobj );
+private:
+    explicit faction_template(const JsonObject& jsobj);
 
-    public:
-        explicit faction_template( const faction_template & ) = default;
-        faction_template &operator = ( const faction_template & ) = default;
-        static void load( const JsonObject &jsobj );
-        static void check_consistency();
-        static void reset();
+public:
+    explicit faction_template(const faction_template&) = default;
+    faction_template& operator=(const faction_template&) = default;
+    static void load(const JsonObject& jsobj);
+    static void check_consistency();
+    static void reset();
 
-        // Accessors - read-only
-        auto name() const -> const std::string & {
-            return name_;
-        }
-        auto id() const -> const faction_id & {
-            return id_;
-        }
-        auto desc() const -> const std::string & {
-            return desc_;
-        }
-        auto size() const -> int {
-            return size_;
-        }
-        auto food_supply() const -> int {
-            return food_supply_;
-        }
-        auto wealth() const -> int {
-            return wealth_;
-        }
-        auto lone_wolf_faction() const -> bool {
-            return lone_wolf_faction_;
-        }
-        auto currency() const -> const itype_id & {
-            return currency_;
-        }
-        auto relations() const -> const std::map<std::string, std::bitset<npc_factions::rel_types>> & {
-            return relations_;
-        }
-        auto mon_faction() const -> const mfaction_str_id & {
-            return mon_faction_;
-        }
-        auto epilogue_data() const -> const std::set<faction_epilogue> & {
-            return epilogue_data_;
-        }
+    // Accessors - read-only
+    auto name() const -> const std::string& { return name_; }
+    auto id() const -> const faction_id& { return id_; }
+    auto desc() const -> const std::string& { return desc_; }
+    auto size() const -> int { return size_; }
+    auto food_supply() const -> int { return food_supply_; }
+    auto wealth() const -> int { return wealth_; }
+    auto lone_wolf_faction() const -> bool { return lone_wolf_faction_; }
+    auto currency() const -> const itype_id& { return currency_; }
+    auto relations() const -> const std::map<std::string, std::bitset<npc_factions::rel_types>>& {
+        return relations_;
+    }
+    auto mon_faction() const -> const mfaction_str_id& { return mon_faction_; }
+    auto epilogue_data() const -> const std::set<faction_epilogue>& { return epilogue_data_; }
 
-        // Accessors - mutable
-        auto likes_u() const -> int {
-            return likes_u_;
-        }
-        void set_likes_u( int val ) {
-            likes_u_ = val;
-        }
-        auto respects_u() const -> int {
-            return respects_u_;
-        }
-        void set_respects_u( int val ) {
-            respects_u_ = val;
-        }
-        auto known_by_u() const -> bool {
-            return known_by_u_;
-        }
-        void set_known_by_u( bool val ) {
-            known_by_u_ = val;
-        }
-        auto power() const -> int {
-            return power_;
-        }
-        void set_power( int val ) {
-            power_ = val;
-        }
+    // Accessors - mutable
+    auto likes_u() const -> int { return likes_u_; }
+    void set_likes_u(int val) { likes_u_ = val; }
+    auto respects_u() const -> int { return respects_u_; }
+    void set_respects_u(int val) { respects_u_ = val; }
+    auto known_by_u() const -> bool { return known_by_u_; }
+    void set_known_by_u(bool val) { known_by_u_ = val; }
+    auto power() const -> int { return power_; }
+    void set_power(int val) { power_ = val; }
 
-    private:
-        std::string name_;
-        int likes_u_ = 0;
-        int respects_u_ = 0;
-        bool known_by_u_ = false;
-        faction_id id_;
-        std::string desc_;
-        int size_ = 0; // How big is our sphere of influence?
-        int power_ = 0; // General measure of our power
-        int food_supply_ = 0;  //Total nutritional value held
-        int wealth_ = 0;  //Total trade currency
-        bool lone_wolf_faction_ = false; // is this a faction for just one person?
-        itype_id currency_; // id of the faction currency
-        std::map<std::string, std::bitset<npc_factions::rel_types>> relations_;
-        mfaction_str_id mon_faction_; // mon_faction_id of the monster faction; defaults to human
-        std::set<faction_epilogue> epilogue_data_;
+private:
+    std::string name_;
+    int likes_u_ = 0;
+    int respects_u_ = 0;
+    bool known_by_u_ = false;
+    faction_id id_;
+    std::string desc_;
+    int size_ = 0;                   // How big is our sphere of influence?
+    int power_ = 0;                  // General measure of our power
+    int food_supply_ = 0;            // Total nutritional value held
+    int wealth_ = 0;                 // Total trade currency
+    bool lone_wolf_faction_ = false; // is this a faction for just one person?
+    itype_id currency_;              // id of the faction currency
+    std::map<std::string, std::bitset<npc_factions::rel_types>> relations_;
+    mfaction_str_id mon_faction_; // mon_faction_id of the monster faction; defaults to human
+    std::set<faction_epilogue> epilogue_data_;
 
-        friend class faction;
-        friend class faction_manager;
+    friend class faction;
+    friend class faction_manager;
 };
 
-class faction : public faction_template
-{
-    public:
-        faction() = default;
-        faction( const faction_template &templ );
+class faction: public faction_template {
+public:
+    faction() = default;
+    faction(const faction_template& templ);
 
-        void deserialize( JsonIn &jsin );
-        void serialize( JsonOut &json ) const;
-        // Colour-tagged text for the faction manager's detail pane (parallel to
-        // faction_display; curses path untouched for the A/B toggle).
-        std::string faction_info_text() const;
+    void deserialize(JsonIn& jsin);
+    void serialize(JsonOut& json) const;
+    // Colour-tagged text for the faction manager's detail pane (parallel to
+    // faction_display; curses path untouched for the A/B toggle).
+    std::string faction_info_text() const;
 
-        std::string describe() const;
-        std::vector<std::string> epilogue() const;
+    std::string describe() const;
+    std::vector<std::string> epilogue() const;
 
-        LUA_TYPE_OPS( faction, id_ );
+    LUA_TYPE_OPS(faction, id_);
 
-        std::string food_supply_text();
-        nc_color food_supply_color();
+    std::string food_supply_text();
+    nc_color food_supply_color();
 
-        auto relationship_flags_with( const faction_id &guy_id ) const
-        -> const std::bitset<npc_factions::rel_types> *;
-        bool has_relationship( const faction_id &guy_id, npc_factions::relationship flag ) const;
-        void add_to_membership( const character_id &guy_id, const std::string &guy_name, bool known );
-        void remove_member( const character_id &guy_id );
-        std::vector<int> opinion_of;
-        bool validated = false;
-        std::map<character_id, std::pair<std::string, bool>> members;
+    auto relationship_flags_with(const faction_id& guy_id) const
+        -> const std::bitset<npc_factions::rel_types>*;
+    bool has_relationship(const faction_id& guy_id, npc_factions::relationship flag) const;
+    void add_to_membership(const character_id& guy_id, const std::string& guy_name, bool known);
+    void remove_member(const character_id& guy_id);
+    std::vector<int> opinion_of;
+    bool validated = false;
+    std::map<character_id, std::pair<std::string, bool>> members;
 };
 
 class faction_manager {
-    private:
-        std::map<faction_id, faction> factions;
+private:
+    std::map<faction_id, faction> factions;
 
-    public:
-        void deserialize( JsonIn & jsin );
-        void serialize( JsonOut & jsout ) const;
+public:
+    void deserialize(JsonIn& jsin);
+    void serialize(JsonOut& jsout) const;
 
-        void clear();
-        void create_if_needed();
-        void display() const;
-        faction * add_new_faction( const std::string & name_new, const faction_id & id_new,
-                                   const faction_id & template_id );
-        void remove_faction( const faction_id & id );
-        const std::map<faction_id, faction> &all() const {
-            return factions;
-        }
+    void clear();
+    void create_if_needed();
+    void display() const;
+    faction* add_new_faction(
+        const std::string& name_new, const faction_id& id_new, const faction_id& template_id);
+    void remove_faction(const faction_id& id);
+    const std::map<faction_id, faction>& all() const { return factions; }
 
-        faction * get( const faction_id & id, bool complain = true );
+    faction* get(const faction_id& id, bool complain = true);
 };
-

@@ -1,14 +1,13 @@
 #pragma once
 
+#include "catalua_sol.h"
+
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
-#include "catalua_sol.h"
-
-namespace cata::lua_sidebar_widgets
-{
+namespace cata::lua_sidebar_widgets {
 struct widget_entry {
     std::string id;
     std::string name;
@@ -35,8 +34,8 @@ struct widget_options {
     std::optional<sol::protected_function> render;
 };
 
-auto register_widget( const widget_options &opts ) -> void;
+auto register_widget(const widget_options& opts) -> void;
 auto clear_widgets() -> void;
-auto get_widgets() -> const std::vector<widget_entry> &; // *NOPAD*
-auto find_widget( std::string_view id ) -> const widget_entry *; // *NOPAD*
+auto get_widgets() -> const std::vector<widget_entry>&;
+auto find_widget(std::string_view id) -> const widget_entry*;
 } // namespace cata::lua_sidebar_widgets

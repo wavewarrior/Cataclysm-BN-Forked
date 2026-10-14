@@ -1,49 +1,47 @@
 #pragma once
 #ifndef CATA_SRC_VEHICLE_PART_HANDLER_H
-#define CATA_SRC_VEHICLE_PART_HANDLER_H
+#    define CATA_SRC_VEHICLE_PART_HANDLER_H
 
-#include "avatar.h"
-#include "debug.h"
-#include "detached_ptr.h"
-#include "game.h"
-#include "item.h"
-#include "map.h"
-#include "level_cache_freshness.h"
-#include "player_activity.h"
-#include "translations.h"
-#include "vehicle.h"
+#    include "avatar.h"
+#    include "debug.h"
+#    include "detached_ptr.h"
+#    include "game.h"
+#    include "item.h"
+#    include "level_cache_freshness.h"
+#    include "map.h"
+#    include "player_activity.h"
+#    include "translations.h"
+#    include "vehicle.h"
 
-class RemovePartHandler
-{
-    public:
-        virtual ~RemovePartHandler() = default;
+class RemovePartHandler {
+public:
+    virtual ~RemovePartHandler() = default;
 
-        virtual void unboard( const tripoint_bub_ms &loc ) = 0;
-        virtual detached_ptr<item> add_item_or_charges( const tripoint_bub_ms &loc, detached_ptr<item> &&it,
-                bool permit_oob ) = 0;
-        /** The part edit changed opacity/floor coverage; implementations report a change kind. */
-        virtual void report_part_opacity_change( int z ) = 0;
-        virtual void report_part_floor_change( int z ) = 0;
-        virtual void removed( vehicle &veh, int part ) = 0;
-        virtual void spawn_animal_from_part( item &base, const tripoint_bub_ms &loc ) = 0;
-        virtual auto part_location( const vehicle &veh, const int part ) const -> tripoint_bub_ms = 0;
+    virtual void unboard(const tripoint_bub_ms& loc) = 0;
+    virtual detached_ptr<item> add_item_or_charges(
+        const tripoint_bub_ms& loc, detached_ptr<item>&& it, bool permit_oob) = 0;
+    /** The part edit changed opacity/floor coverage; implementations report a change kind. */
+    virtual void report_part_opacity_change(int z) = 0;
+    virtual void report_part_floor_change(int z) = 0;
+    virtual void removed(vehicle& veh, int part) = 0;
+    virtual void spawn_animal_from_part(item& base, const tripoint_bub_ms& loc) = 0;
+    virtual auto part_location(const vehicle& veh, const int part) const -> tripoint_bub_ms = 0;
 };
 
-class DefaultRemovePartHandler : public RemovePartHandler
-{
-    public:
-        ~DefaultRemovePartHandler() override = default;
+class DefaultRemovePartHandler: public RemovePartHandler {
+public:
+    ~DefaultRemovePartHandler() override = default;
 
-        void unboard( const tripoint_bub_ms &loc ) override {
-            g->m.unboard_vehicle( loc );
-        }
-        detached_ptr<item> add_item_or_charges( const tripoint_bub_ms &loc, detached_ptr<item> &&it,
-                                                bool /*permit_oob*/ ) override {
-            return g->m.add_item_or_charges( loc, std::move( it ) );
-        }
-        void report_part_opacity_change( const int z ) override {
-            level_cache_freshness::report( get_map(), level_cache_freshness::terrain_changed {
-                .at = tripoint_bub_ms( 0, 0, z ),
+    void unboard(const tripoint_bub_ms& loc) override { g->m.unboard_vehicle(loc); }
+    detached_ptr<item> add_item_or_charges(
+        const tripoint_bub_ms& loc, detached_ptr<item>&& it, bool /*permit_oob*/) override {
+        return g->m.add_item_or_charges(loc, std::move(it));
+    }
+    void report_part_opacity_change(const int z) override {
+        level_cache_freshness::report(
+            get_map(),
+            level_cache_freshness::terrain_changed{
+                .at = tripoint_bub_ms(0, 0, z),
                 .transparency = true,
                 // A part edit repaints the whole level's transparency cache.
                 .scope = level_cache_freshness::terrain_changed::transparency_scope::level,
@@ -51,88 +49,88 @@ class DefaultRemovePartHandler : public RemovePartHandler
                 .memory_seen = false,
                 // The old pair probed the bubble origin, not the part's tile.
                 .seen_probe = tripoint_bub_ms::zero(),
-            } );
-        }
-        void report_part_floor_change( const int z ) override {
-            map &here = get_map();
-            level_cache_freshness::report( here, level_cache_freshness::terrain_changed {
-                .at = tripoint_bub_ms( 0, 0, z ),
+            });
+    }
+    void report_part_floor_change(const int z) override {
+        map& here = get_map();
+        level_cache_freshness::report(
+            here,
+            level_cache_freshness::terrain_changed{
+                .at = tripoint_bub_ms(0, 0, z),
                 .support_above = false,
                 .memory_seen = false,
                 .floor_level = true,
-            } );
-        }
-        void removed( vehicle &veh, const int part ) override {
-            avatar &player_character = get_avatar();
-            const player_activity &act = *player_character.activity;
-            map &here = get_map();
-            if( act.id() == ACT_VEHICLE && act.moves_left > 0 && act.values.size() > 6 ) {
-                if( veh_pointer_or_null( here.veh_at( tripoint_bub_ms( act.values[0], act.values[1],
-                                                      player_character.bub_pos().z() ) ) ) == &veh ) {
-                    if( act.values[6] >= part ) {
-                        player_character.cancel_activity();
-                        add_msg( m_info, _( "The vehicle part you were working on has gone!" ) );
-                    }
+            });
+    }
+    void removed(vehicle& veh, const int part) override {
+        avatar& player_character = get_avatar();
+        const player_activity& act = *player_character.activity;
+        map& here = get_map();
+        if (act.id() == ACT_VEHICLE && act.moves_left > 0 && act.values.size() > 6) {
+            if (veh_pointer_or_null(here.veh_at(
+                    tripoint_bub_ms(act.values[0], act.values[1], player_character.bub_pos().z())))
+                == &veh) {
+                if (act.values[6] >= part) {
+                    player_character.cancel_activity();
+                    add_msg(m_info, _("The vehicle part you were working on has gone!"));
                 }
             }
-            if( g->u.get_grab_type() == OBJECT_VEHICLE &&
-                g->u.bub_pos() + g->u.grab_point == veh.bub_part_location( part ) ) {
-                if( veh.parts_at_relative( veh.part( part ).mount, false ).empty() ) {
-                    add_msg( m_info, _( "The vehicle part you were holding has been destroyed!" ) );
-                    g->u.grab( OBJECT_NONE );
-                }
+        }
+        if (g->u.get_grab_type() == OBJECT_VEHICLE
+            && g->u.bub_pos() + g->u.grab_point == veh.bub_part_location(part)) {
+            if (veh.parts_at_relative(veh.part(part).mount, false).empty()) {
+                add_msg(m_info, _("The vehicle part you were holding has been destroyed!"));
+                g->u.grab(OBJECT_NONE);
             }
-            here.dirty_vehicle_list.insert( veh.handle() );
         }
-        void spawn_animal_from_part( item &base, const tripoint_bub_ms &loc ) override {
-            base.release_monster( loc, 1 );
-        }
-        auto part_location( const vehicle &veh, const int part ) const -> tripoint_bub_ms override {
-            return veh.bub_part_location( part );
-        }
+        here.dirty_vehicle_list.insert(veh.handle());
+    }
+    void spawn_animal_from_part(item& base, const tripoint_bub_ms& loc) override {
+        base.release_monster(loc, 1);
+    }
+    auto part_location(const vehicle& veh, const int part) const -> tripoint_bub_ms override {
+        return veh.bub_part_location(part);
+    }
 };
 
-class MapgenRemovePartHandler : public RemovePartHandler
-{
-    private:
-        map &m;
+class MapgenRemovePartHandler: public RemovePartHandler {
+private:
+    map& m;
 
-    public:
-        MapgenRemovePartHandler( map &m ) : m( m ) { }
-        ~MapgenRemovePartHandler() override = default;
+public:
+    MapgenRemovePartHandler(map& m): m(m) {}
+    ~MapgenRemovePartHandler() override = default;
 
-        void unboard( const tripoint_bub_ms &/*loc*/ ) override {
-            debugmsg( "Tried to unboard during mapgen!" );
-        }
-        detached_ptr<item> add_item_or_charges( const tripoint_bub_ms &loc, detached_ptr<item> &&it,
-                                                bool permit_oob ) override {
-            if( !m.inbounds( loc ) ) {
-                point_sm_ms offset;
-                if( !m.get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( m, loc ) ) &&
-                    m.get_submap_at( loc, offset ) != nullptr ) {
-                    return m.add_item_or_charges( loc, std::move( it ) );
-                }
-                if( !permit_oob ) {
-                    return std::move( it );
-                }
-                auto copy = loc;
-                m.clip_to_bounds( copy );
-                assert( m.inbounds( copy ) );
-                return add_item_or_charges( copy, std::move( it ), false );
+    void unboard(const tripoint_bub_ms& /*loc*/) override {
+        debugmsg("Tried to unboard during mapgen!");
+    }
+    detached_ptr<item> add_item_or_charges(
+        const tripoint_bub_ms& loc, detached_ptr<item>&& it, bool permit_oob) override {
+        if (!m.inbounds(loc)) {
+            point_sm_ms offset;
+            if (!m.get_mapbuffer().is_outside_pocket_dimension_bounds(map_local_to_abs(m, loc))
+                && m.get_submap_at(loc, offset) != nullptr) {
+                return m.add_item_or_charges(loc, std::move(it));
             }
-            return m.add_item_or_charges( loc, std::move( it ) );
+            if (!permit_oob) { return std::move(it); }
+            auto copy = loc;
+            m.clip_to_bounds(copy);
+            assert(m.inbounds(copy));
+            return add_item_or_charges(copy, std::move(it), false);
         }
-        void report_part_opacity_change( const int /*z*/ ) override {}
-        void report_part_floor_change( const int /*z*/ ) override {}
-        void removed( vehicle &veh, const int /*part*/ ) override {
-            m.dirty_vehicle_list.insert( veh.handle() );
-        }
-        void spawn_animal_from_part( item &/*base*/, const tripoint_bub_ms &/*loc*/ ) override {
-            debugmsg( "Tried to spawn animal from vehicle part during mapgen!" );
-        }
-        auto part_location( const vehicle &veh, const int part ) const -> tripoint_bub_ms override {
-            return abs_to_map_local( m, veh.abs_part_location( part ) );
-        }
+        return m.add_item_or_charges(loc, std::move(it));
+    }
+    void report_part_opacity_change(const int /*z*/) override {}
+    void report_part_floor_change(const int /*z*/) override {}
+    void removed(vehicle& veh, const int /*part*/) override {
+        m.dirty_vehicle_list.insert(veh.handle());
+    }
+    void spawn_animal_from_part(item& /*base*/, const tripoint_bub_ms& /*loc*/) override {
+        debugmsg("Tried to spawn animal from vehicle part during mapgen!");
+    }
+    auto part_location(const vehicle& veh, const int part) const -> tripoint_bub_ms override {
+        return abs_to_map_local(m, veh.abs_part_location(part));
+    }
 };
 
 #endif // CATA_SRC_VEHICLE_PART_HANDLER_H

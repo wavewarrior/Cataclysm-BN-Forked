@@ -1,15 +1,15 @@
 #pragma once
 
+#include "coop_net_transport.h"
 #include "coop_proto.h"
-#include "coordinates.h"
 #include "coop_reconcile.h"
 #include "coop_rollback.h"
 #include "coop_vehicle_sync.h"
+#include "coordinates.h"
 #include "vehicle_handle.h"
 
-#include "coop_net_transport.h"
-#include <memory>
 #include <deque>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -22,149 +22,148 @@ class vehicle;
 struct coop_control_state {
     bool controlling = false;
     bool engine_on = false;
-    auto operator==( const coop_control_state & ) const -> bool = default; // *NOPAD*
+    auto operator==(const coop_control_state&) const -> bool = default;
 };
 
 /// Client-side co-op thin path.
 struct coop_client {
-        coop_client() = default;
-        ~coop_client();
-        coop_client( const coop_client & ) = delete;
-        coop_client &operator=( const coop_client & ) = delete;
+    coop_client() = default;
+    ~coop_client();
+    coop_client(const coop_client&) = delete;
+    coop_client& operator=(const coop_client&) = delete;
 
-        auto connect( const std::string& ip, uint16_t port = 8080 ) -> bool;
-        auto handshake() -> bool;
-        auto receive_world_seed() -> bool;
-        auto apply_world_seed_to_avatar() -> void;
-        auto coop_world_tick() -> void;
-        auto queue_action( const std::string& key, const std::string& ctx_json = {} ) -> void;
-        /// Convenience: build and queue a TERRAIN_CHANGE packet from typed ids.
-        /// Avoids duplicating JSON-building logic across C2b/C2c call sites.
-        auto queue_terrain_change( const tripoint_abs_ms &pos, const std::string &ter_id,
-                                   const std::string &furn_id ) -> void;
-        auto is_connected() const -> bool { return transport_ != nullptr; }
-        auto shutdown() -> void;
-        auto send_chat( const std::string& text ) -> void;
-        /// F4: send a raw JSON packet directly via transport (overmap mark, emotes, etc.)
-        auto send_raw( const std::string& json ) -> void;
-        /// C6: send the client's current abs position to the host immediately after receiving
-        /// world_seed, so spawn_proxy_npc() can place the proxy at the client's saved position.
-        auto send_join_info() -> bool; // *NOPAD*
-        /// C3 on-death sync: call from game::is_game_over() when u.is_dead_state() fires.
-        /// Sends client_status dead=true and death-drop manifest synchronously before teardown.
-        /// Safe to call multiple times — guarded by death_notified_.
-        auto notify_death() -> void;
-        // ---- Test seams (all inline; no game-world access) ----
-        /// Test seam: skip hashing the next ONE mutation event in apply_sync, inducing a
-        /// local_hash ≠ server_hash divergence so the client naturally sends resync_request.
-        auto set_skip_one_hash_event_for_test() -> void { skip_one_hash_event_for_test_ = true; }
-        /// Test seam: true if apply_sync has processed at least one full-tile sync (got_tiles).
-        auto got_full_tile_sync_for_test() const -> bool { return got_full_tile_sync_for_test_; }
-        /// Test seam: close the underlying TCP socket immediately WITHOUT sending the
-        /// protocol disconnect packet — simulates a client crash.  Host should detect
-        /// the abrupt drop via receiver_thread_ and set running_=false.
-        auto close_socket_abruptly_for_test() -> void {
-            if( transport_ ) {
-                transport_->close_abruptly();
-                transport_.reset();
-            }
+    auto connect(const std::string& ip, uint16_t port = 8080) -> bool;
+    auto handshake() -> bool;
+    auto receive_world_seed() -> bool;
+    auto apply_world_seed_to_avatar() -> void;
+    auto coop_world_tick() -> void;
+    auto queue_action(const std::string& key, const std::string& ctx_json = {}) -> void;
+    /// Convenience: build and queue a TERRAIN_CHANGE packet from typed ids.
+    /// Avoids duplicating JSON-building logic across C2b/C2c call sites.
+    auto queue_terrain_change(
+        const tripoint_abs_ms& pos, const std::string& ter_id, const std::string& furn_id) -> void;
+    auto is_connected() const -> bool { return transport_ != nullptr; }
+    auto shutdown() -> void;
+    auto send_chat(const std::string& text) -> void;
+    /// F4: send a raw JSON packet directly via transport (overmap mark, emotes, etc.)
+    auto send_raw(const std::string& json) -> void;
+    /// C6: send the client's current abs position to the host immediately after receiving
+    /// world_seed, so spawn_proxy_npc() can place the proxy at the client's saved position.
+    auto send_join_info() -> bool;
+    /// C3 on-death sync: call from game::is_game_over() when u.is_dead_state() fires.
+    /// Sends client_status dead=true and death-drop manifest synchronously before teardown.
+    /// Safe to call multiple times — guarded by death_notified_.
+    auto notify_death() -> void;
+    // ---- Test seams (all inline; no game-world access) ----
+    /// Test seam: skip hashing the next ONE mutation event in apply_sync, inducing a
+    /// local_hash ≠ server_hash divergence so the client naturally sends resync_request.
+    auto set_skip_one_hash_event_for_test() -> void { skip_one_hash_event_for_test_ = true; }
+    /// Test seam: true if apply_sync has processed at least one full-tile sync (got_tiles).
+    auto got_full_tile_sync_for_test() const -> bool { return got_full_tile_sync_for_test_; }
+    /// Test seam: close the underlying TCP socket immediately WITHOUT sending the
+    /// protocol disconnect packet — simulates a client crash.  Host should detect
+    /// the abrupt drop via receiver_thread_ and set running_=false.
+    auto close_socket_abruptly_for_test() -> void {
+        if (transport_) {
+            transport_->close_abruptly();
+            transport_.reset();
         }
-        /// Test seam: number of entries in the pending action ring buffer (Gap 4).
-        auto pending_actions_size_for_test() const -> std::size_t { return pending_actions_.size(); }
-        /// Test seam: smallest seq in the ring buffer — the oldest unconfirmed action (Gap 4).
-        auto pending_actions_front_seq_for_test() const -> uint32_t {
-            return pending_actions_.empty() ? 0u : pending_actions_.front().seq;
-        }
-        /// Test seam: set next_seq_ for Gap 6 uint32_t wrap-without-crash test.
-        auto set_next_seq_for_test( uint32_t seq ) -> void { next_seq_ = seq; }
-        /// Test seam: inject a pre-built transport for in-process testing (no connect).
-        auto set_transport_for_test( std::unique_ptr<coop_transport> t ) -> void {
-            transport_ = std::move( t );
-        }
-        auto send_tap_shoulder() -> void;
-        auto send_emote( const std::string& emote_type ) -> void;
-        /// Smoothly interpolate the host NPC position between sync packets.
-        /// Called each frame from the render loop or coop_world_tick.
-        auto interpolate_host_pos() -> tripoint_abs_ms;
-        auto attempt_reconnect( const std::string& ip, uint16_t port ) -> bool;
-        /// Vehicle the host avatar drives, resolved from the streamed pose; nullptr when none.
-        auto host_driven_vehicle() const -> const vehicle *; // *NOPAD*
+    }
+    /// Test seam: number of entries in the pending action ring buffer (Gap 4).
+    auto pending_actions_size_for_test() const -> std::size_t { return pending_actions_.size(); }
+    /// Test seam: smallest seq in the ring buffer — the oldest unconfirmed action (Gap 4).
+    auto pending_actions_front_seq_for_test() const -> uint32_t {
+        return pending_actions_.empty() ? 0u : pending_actions_.front().seq;
+    }
+    /// Test seam: set next_seq_ for Gap 6 uint32_t wrap-without-crash test.
+    auto set_next_seq_for_test(uint32_t seq) -> void { next_seq_ = seq; }
+    /// Test seam: inject a pre-built transport for in-process testing (no connect).
+    auto set_transport_for_test(std::unique_ptr<coop_transport> t) -> void {
+        transport_ = std::move(t);
+    }
+    auto send_tap_shoulder() -> void;
+    auto send_emote(const std::string& emote_type) -> void;
+    /// Smoothly interpolate the host NPC position between sync packets.
+    /// Called each frame from the render loop or coop_world_tick.
+    auto interpolate_host_pos() -> tripoint_abs_ms;
+    auto attempt_reconnect(const std::string& ip, uint16_t port) -> bool;
+    /// Vehicle the host avatar drives, resolved from the streamed pose; nullptr when none.
+    auto host_driven_vehicle() const -> const vehicle*;
 
-    private:
-        auto apply_sync( const std::string& json_buf ) -> void;
-        /// The client's current driving state, read from the local avatar.
-        auto current_control_state() const -> coop_control_state;
-        /// This side's copy of a host-streamed vehicle: mapped handle if it still resolves,
-        /// else looked up by pose anchor (a full tile sync replaced the objects), else the
-        /// mapping is dropped.
-        auto resolve_coop_vehicle( const coop_vehicle_pose &pose ) -> vehicle *; // *NOPAD*
-        auto handle_disconnect() -> void;
-        auto send_death_drop() -> void;
+private:
+    auto apply_sync(const std::string& json_buf) -> void;
+    /// The client's current driving state, read from the local avatar.
+    auto current_control_state() const -> coop_control_state;
+    /// This side's copy of a host-streamed vehicle: mapped handle if it still resolves,
+    /// else looked up by pose anchor (a full tile sync replaced the objects), else the
+    /// mapping is dropped.
+    auto resolve_coop_vehicle(const coop_vehicle_pose& pose) -> vehicle*;
+    auto handle_disconnect() -> void;
+    auto send_death_drop() -> void;
 
-        std::unique_ptr<coop_transport> transport_;
+    std::unique_ptr<coop_transport> transport_;
 
-        struct pending_action {
-            uint32_t seq = 0;
-            std::string key;
-            std::string ctx_json;
-            bool sent = false; ///< true once the packet has been written to the socket
-            std::optional<predicted_outcome> outcome; ///< Local prediction for non-movement actions
-        };
+    struct pending_action {
+        uint32_t seq = 0;
+        std::string key;
+        std::string ctx_json;
+        bool sent = false; ///< true once the packet has been written to the socket
+        std::optional<predicted_outcome> outcome; ///< Local prediction for non-movement actions
+    };
 
-        /// Predict the local outcome of a non-movement action and attach it to the pending action.
-        auto predict_action_locally( pending_action &act ) -> void;
-        /// Ring buffer of unconfirmed actions (queued + sent, kept until server confirms via
-        /// last_seq).  Entries are discarded in apply_sync() once seq ≤ last_seq_from_sync.
-        /// Main-thread only — no locking needed.
-        std::deque<pending_action> pending_actions_;
-        uint32_t next_seq_ = 1;
-        bool net_initialized_ = false;
-        bool death_notified_ = false; ///< guard for notify_death(); prevents double-send
-        /// Test seam: when true, the next event's hash mixing is skipped (see apply_sync).
-        /// Cleared automatically after the first event is skipped.
-        bool skip_one_hash_event_for_test_  = false;
-        /// Test seam: set to true the first time apply_sync processes got_tiles == true.
-        bool got_full_tile_sync_for_test_   = false;
-        // H5: host-assigned monster ID → local monster pointer.
-        std::unordered_map<int, monster *> coop_monster_map_;
+    /// Predict the local outcome of a non-movement action and attach it to the pending action.
+    auto predict_action_locally(pending_action& act) -> void;
+    /// Ring buffer of unconfirmed actions (queued + sent, kept until server confirms via
+    /// last_seq).  Entries are discarded in apply_sync() once seq ≤ last_seq_from_sync.
+    /// Main-thread only — no locking needed.
+    std::deque<pending_action> pending_actions_;
+    uint32_t next_seq_ = 1;
+    bool net_initialized_ = false;
+    bool death_notified_ = false; ///< guard for notify_death(); prevents double-send
+    /// Test seam: when true, the next event's hash mixing is skipped (see apply_sync).
+    /// Cleared automatically after the first event is skipped.
+    bool skip_one_hash_event_for_test_ = false;
+    /// Test seam: set to true the first time apply_sync processes got_tiles == true.
+    bool got_full_tile_sync_for_test_ = false;
+    // H5: host-assigned monster ID → local monster pointer.
+    std::unordered_map<int, monster*> coop_monster_map_;
 
-        /// Driving state at the last comparison; nullopt until the first tick or sync.
-        std::optional<coop_control_state> last_control_state_;
+    /// Driving state at the last comparison; nullopt until the first tick or sync.
+    std::optional<coop_control_state> last_control_state_;
 
-        // Step 6: host-streamed vehicle poses — handle by host vid, plus the host-driven one.
-        std::unordered_map<std::uint32_t, vehicle_handle> coop_vehicle_handles_;
-        vehicle_handle host_driven_vehicle_;
+    // Step 6: host-streamed vehicle poses — handle by host vid, plus the host-driven one.
+    std::unordered_map<std::uint32_t, vehicle_handle> coop_vehicle_handles_;
+    vehicle_handle host_driven_vehicle_;
 
-        // F1: host activity string received from sync — used for F5 team speed-up
-        std::string host_activity_str_;
+    // F1: host activity string received from sync — used for F5 team speed-up
+    std::string host_activity_str_;
 
-        // Last proxy and host positions received from sync — used for reconciliation
-        // and future host-avatar rendering.  Initialized to zero; valid after first sync.
-        tripoint_abs_ms sync_proxy_apos_{};
-        tripoint_abs_ms sync_host_apos_{};
-        /// Previous host position (for interpolation between sync packets)
-        tripoint_abs_ms prev_host_apos_{};
-        /// Timestamp of last host position update (ms since epoch, via SDL_GetTicks)
-        uint64_t last_host_pos_time_ = 0;
-        /// Last ping_ts from host sync — echoed back in client_status for RTT measurement.
-        uint64_t last_ping_ts_ = 0;
+    // Last proxy and host positions received from sync — used for reconciliation
+    // and future host-avatar rendering.  Initialized to zero; valid after first sync.
+    tripoint_abs_ms sync_proxy_apos_{};
+    tripoint_abs_ms sync_host_apos_{};
+    /// Previous host position (for interpolation between sync packets)
+    tripoint_abs_ms prev_host_apos_{};
+    /// Timestamp of last host position update (ms since epoch, via SDL_GetTicks)
+    uint64_t last_host_pos_time_ = 0;
+    /// Last ping_ts from host sync — echoed back in client_status for RTT measurement.
+    uint64_t last_ping_ts_ = 0;
 
-        // World seed data extracted from the packet
-        int world_seed_turn_ = 0;
-        tripoint_abs_ms world_seed_spawn_;
-        std::string world_seed_partner_name_ = "Partner";
-        /// game::seed adopted from the host so the weather generator matches.
-        unsigned int world_seed_ = 0;
+    // World seed data extracted from the packet
+    int world_seed_turn_ = 0;
+    tripoint_abs_ms world_seed_spawn_;
+    std::string world_seed_partner_name_ = "Partner";
+    /// game::seed adopted from the host so the weather generator matches.
+    unsigned int world_seed_ = 0;
 
-        // Rollback engine for hash-mismatch recovery
-        coop_rollback_engine rollback_engine_;
+    // Rollback engine for hash-mismatch recovery
+    coop_rollback_engine rollback_engine_;
 
-        // Reconnection state
-        std::string last_host_ip_;
-        uint16_t last_host_port_ = 8080;
-        std::string session_token_;
+    // Reconnection state
+    std::string last_host_ip_;
+    uint16_t last_host_port_ = 8080;
+    std::string session_token_;
 
-        int skill_sync_counter_ = 0; ///< throttle: send skills every 10 ticks
-        int reconnect_attempts_remaining_ = 0; ///< >0 = non-blocking reconnection in progress
+    int skill_sync_counter_ = 0;           ///< throttle: send skills every 10 ticks
+    int reconnect_attempts_remaining_ = 0; ///< >0 = non-blocking reconnection in progress
 };
-

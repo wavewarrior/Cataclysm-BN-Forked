@@ -4,8 +4,7 @@
 
 class Character;
 
-namespace detail
-{
+namespace detail {
 enum class mutations_ui_cmd {
     exit,
     activate,
@@ -17,10 +16,8 @@ struct mutations_ui_result {
     trait_id mut;
 };
 
-mutations_ui_result show_mutations_ui_internal( Character &who );
+mutations_ui_result show_mutations_ui_internal(Character& who);
 
 } // namespace detail
 
-void show_mutations_ui( Character &who );
-
-
+void show_mutations_ui(Character& who);

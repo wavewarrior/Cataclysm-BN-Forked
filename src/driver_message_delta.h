@@ -28,10 +28,9 @@ struct message_delta {
 /// into it). Compares content, not counts: a repeat leaves the log length unchanged, a capped
 /// log drops entries from the front while it grows at the back, and a log with a repeating
 /// pattern ("A, B, A, B") cannot be mistaken for an unchanged one.
-auto compute_message_delta( const std::vector<log_entry> &before,
-                            const std::vector<log_entry> &after ) -> message_delta;
+auto compute_message_delta(
+    const std::vector<log_entry>& before, const std::vector<log_entry>& after) -> message_delta;
 
 /// Keeps the newest `max_count` messages, each cut to `max_bytes` on a UTF-8 boundary.
 /// Returns true when anything was cut.
-auto cap_messages( std::vector<std::string> &messages, size_t max_count,
-                   size_t max_bytes ) -> bool;
+auto cap_messages(std::vector<std::string>& messages, size_t max_count, size_t max_bytes) -> bool;

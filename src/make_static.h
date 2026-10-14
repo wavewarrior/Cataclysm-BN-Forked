@@ -20,12 +20,11 @@
  *      for such type of argument,  STATIC(expr) has `const std::string &` result type.
  *      This is to support expressions like STATIC("...") instead of STATIC(std::string("..."))
  */
-#define STATIC(expr) \
-    (([]()-> const auto &{ \
-        using CachedType = std::conditional_t<std::is_same_v<std::decay_t<decltype(expr)>, const char*>, \
-        std::string, std::decay_t<decltype(expr)>>; \
-        static const CachedType _cached_expr = (expr); \
-        return _cached_expr; \
+#define STATIC(expr)                                                                \
+    (([]() -> const auto& {                                                         \
+        using CachedType = std::conditional_t<                                      \
+            std::is_same_v<std::decay_t<decltype(expr)>, const char*>, std::string, \
+            std::decay_t<decltype(expr)>>;                                          \
+        static const CachedType _cached_expr = (expr);                              \
+        return _cached_expr;                                                        \
     })())
-
-

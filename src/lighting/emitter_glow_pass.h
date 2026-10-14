@@ -63,7 +63,7 @@ class emitter_glow_pass {
 public:
     emitter_glow_pass() = default;
     emitter_glow_pass(const emitter_glow_pass&) = delete;
-    auto operator=(const emitter_glow_pass&) -> emitter_glow_pass& = delete; // *NOPAD*
+    auto operator=(const emitter_glow_pass&) -> emitter_glow_pass& = delete;
     ~emitter_glow_pass();
 
     // Build pipeline + instance buffers. `target_format` is the world_target

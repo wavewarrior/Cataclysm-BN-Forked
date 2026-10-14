@@ -7,7 +7,8 @@ enum class merge_comestible_t {
 };
 
 /**
- * Merge similar comestibles.  Legacy: default behavior.  Liquid: Merge only liquid comestibles.  All: Merge all comestibles.
+ * Merge similar comestibles.  Legacy: default behavior.  Liquid: Merge only liquid comestibles.
+ * All: Merge all comestibles.
  */
 extern merge_comestible_t merge_comestible_mode;
 
@@ -18,5 +19,3 @@ extern merge_comestible_t merge_comestible_mode;
  * 1.0: Merge comestibles regardless of its freshness.
  */
 extern float similarity_threshold;
-
-

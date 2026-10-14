@@ -1,10 +1,5 @@
 #pragma once
 
-#include <map>
-#include <set>
-#include <string>
-#include <vector>
-
 #include "calendar.h"
 #include "catalua_type_operators.h"
 #include "coordinates.h"
@@ -12,6 +7,11 @@
 #include "monster.h"
 #include "point.h"
 #include "type_id.h"
+
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
 
 class JsonIn;
 class JsonObject;
@@ -32,43 +32,38 @@ struct MonsterGroupEntry {
     std::vector<std::string> conditions;
     time_duration starts;
     time_duration ends;
-    bool lasts_forever() const {
-        return ends <= 0_turns;
-    }
+    bool lasts_forever() const { return ends <= 0_turns; }
 
-    MonsterGroupEntry( const mtype_id &id, int new_freq, int new_cost,
-                       int new_pack_min, int new_pack_max, const time_duration &new_starts, const time_duration &new_ends )
-        : name( id )
-        , frequency( new_freq )
-        , cost_multiplier( new_cost )
-        , pack_minimum( new_pack_min )
-        , pack_maximum( new_pack_max )
-        , starts( new_starts )
-        , ends( new_ends ) {
-    }
+    MonsterGroupEntry(
+        const mtype_id& id, int new_freq, int new_cost, int new_pack_min, int new_pack_max,
+        const time_duration& new_starts, const time_duration& new_ends)
+        : name(id),
+          frequency(new_freq),
+          cost_multiplier(new_cost),
+          pack_minimum(new_pack_min),
+          pack_maximum(new_pack_max),
+          starts(new_starts),
+          ends(new_ends) {}
 
-    LUA_TYPE_OPS( MonsterGroupEntry, name );
+    LUA_TYPE_OPS(MonsterGroupEntry, name);
 };
 
 struct MonsterGroupResult {
     mtype_id name;
     int pack_size;
 
-    MonsterGroupResult() : name( mtype_id::NULL_ID() ), pack_size( 0 ) {
-    }
+    MonsterGroupResult(): name(mtype_id::NULL_ID()), pack_size(0) {}
 
-    MonsterGroupResult( const mtype_id &id, int new_pack_size )
-        : name( id ), pack_size( new_pack_size ) {
-    }
+    MonsterGroupResult(const mtype_id& id, int new_pack_size): name(id), pack_size(new_pack_size) {}
 };
 
 struct MonsterGroup {
     mongroup_id name;
     mtype_id defaultMonster;
-    FreqDef  monsters;
+    FreqDef monsters;
     int evolve_chance = 0;
     int evolve_repeat = 0;
-    bool IsMonsterInGroup( const mtype_id &id ) const;
+    bool IsMonsterInGroup(const mtype_id& id) const;
     bool is_animal = false;
     // replaces this group after a period of
     // time when exploring an unexplored portion of the map
@@ -76,9 +71,9 @@ struct MonsterGroup {
     mongroup_id new_monster_group;
     time_duration monster_group_time = 0_turns;
     bool is_safe = false; /// Used for @ref mongroup::is_safe()
-    int freq_total = 0; // Default 1000 unless specified - max number to roll for spawns
+    int freq_total = 0;   // Default 1000 unless specified - max number to roll for spawns
 
-    LUA_TYPE_OPS( MonsterGroup, name );
+    LUA_TYPE_OPS(MonsterGroup, name);
 };
 
 struct mongroup {
@@ -92,7 +87,7 @@ struct mongroup {
     // the target.  Full fix requires attaching a dimension_id to the target or
     // storing it separately on mongroup.  Acceptable limitation for this PR.
     tripoint_abs_sm nemesis_target; // abs target for nemesis hordes
-    int interest = 0; //interest to target in percents
+    int interest = 0;               // interest to target in percents
     bool dying = false;
     bool horde = false;
     /** This property will be ignored if the vector is empty.
@@ -108,98 +103,90 @@ struct mongroup {
      *  anywhere.
      */
     std::string horde_behaviour;
-    bool diffuse = false;   // group size ind. of dist. from center and radius invariant
-    mongroup( const mongroup_id &ptype, const tripoint_abs_sm &ppos,
-              unsigned int prad, unsigned int ppop )
-        : type( ptype )
-        , abs_pos( ppos )
-        , radius( prad )
-        , population( ppop ) {
-    }
-    mongroup( const std::string &ptype, const tripoint_abs_sm &ppos, unsigned int prad,
-              unsigned int ppop,
-              tripoint_abs_sm ptarget, int pint, bool pdie, bool phorde, bool pdiff ) :
-        type( ptype ), abs_pos( ppos ), radius( prad ), population( ppop ), target( ptarget ),
-        interest( pint ), dying( pdie ), horde( phorde ), diffuse( pdiff ) { }
+    bool diffuse = false; // group size ind. of dist. from center and radius invariant
+    mongroup(
+        const mongroup_id& ptype, const tripoint_abs_sm& ppos, unsigned int prad, unsigned int ppop)
+        : type(ptype),
+          abs_pos(ppos),
+          radius(prad),
+          population(ppop) {}
+    mongroup(
+        const std::string& ptype, const tripoint_abs_sm& ppos, unsigned int prad, unsigned int ppop,
+        tripoint_abs_sm ptarget, int pint, bool pdie, bool phorde, bool pdiff)
+        : type(ptype),
+          abs_pos(ppos),
+          radius(prad),
+          population(ppop),
+          target(ptarget),
+          interest(pint),
+          dying(pdie),
+          horde(phorde),
+          diffuse(pdiff) {}
     mongroup() = default;
-    LUA_TYPE_OPS( mongroup, type );
+    LUA_TYPE_OPS(mongroup, type);
     bool is_safe() const;
     bool empty() const;
     void clear();
-    auto set_target( const tripoint_abs_sm &p ) -> void {
-        target = p;
-    }
-    auto set_nemesis_target( const tripoint_abs_sm &p ) -> void {
-        nemesis_target = p;
-    }
-    void wander( const overmap & );
-    void inc_interest( int inc ) {
+    auto set_target(const tripoint_abs_sm& p) -> void { target = p; }
+    auto set_nemesis_target(const tripoint_abs_sm& p) -> void { nemesis_target = p; }
+    void wander(const overmap&);
+    void inc_interest(int inc) {
         interest += inc;
-        if( interest > 100 ) {
-            interest = 100;
-        }
+        if (interest > 100) { interest = 100; }
     }
-    void dec_interest( int dec ) {
+    void dec_interest(int dec) {
         interest -= dec;
-        if( interest < 15 ) {
-            interest = 15;
-        }
+        if (interest < 15) { interest = 15; }
     }
-    void set_interest( int set ) {
-        if( set < 15 ) {
-            set = 15;
-        }
-        if( set > 100 ) {
-            set = 100;
-        }
+    void set_interest(int set) {
+        if (set < 15) { set = 15; }
+        if (set > 100) { set = 100; }
         interest = set;
     }
     float avg_speed() const;
 
-    template<typename Archive>
-    void io( Archive & );
+    template <typename Archive> void io(Archive&);
     using archive_type_tag = io::object_archive_tag;
 
-    void deserialize( JsonIn &data );
-    void deserialize_legacy( JsonIn &json );
-    void serialize( JsonOut &json ) const;
+    void deserialize(JsonIn& data);
+    void deserialize_legacy(JsonIn& json);
+    void serialize(JsonOut& json) const;
 };
 
-class MonsterGroupManager
-{
-    public:
-        static void LoadMonsterGroup( const JsonObject &jo );
-        static void LoadMonsterBlacklist( const JsonObject &jo );
-        static void LoadMonsterWhitelist( const JsonObject &jo );
-        static void FinalizeMonsterGroups();
-        static MonsterGroupResult GetResultFromGroup( const mongroup_id &group, int *quantity = nullptr,
-                bool use_pack_size = false );
-        static bool IsMonsterInGroup( const mongroup_id &group, const mtype_id &monster );
-        static bool isValidMonsterGroup( const mongroup_id &group );
-        static const mongroup_id &Monster2Group( const mtype_id &monster );
-        static std::vector<mtype_id> GetMonstersFromGroup( const mongroup_id &group );
-        static const MonsterGroup &GetMonsterGroup( const mongroup_id &group );
-        static const MonsterGroup &GetUpgradedMonsterGroup( const mongroup_id &group );
-        static std::vector<mongroup_id> get_all_group_ids();
-        /**
-         * Gets a random monster, weighted by frequency.
-         * Ignores cost multiplier.
-         */
-        static const mtype_id &GetRandomMonsterFromGroup( const mongroup_id &group );
+class MonsterGroupManager {
+public:
+    static void LoadMonsterGroup(const JsonObject& jo);
+    static void LoadMonsterBlacklist(const JsonObject& jo);
+    static void LoadMonsterWhitelist(const JsonObject& jo);
+    static void FinalizeMonsterGroups();
+    static MonsterGroupResult GetResultFromGroup(
+        const mongroup_id& group, int* quantity = nullptr, bool use_pack_size = false);
+    static bool IsMonsterInGroup(const mongroup_id& group, const mtype_id& monster);
+    static bool isValidMonsterGroup(const mongroup_id& group);
+    static const mongroup_id& Monster2Group(const mtype_id& monster);
+    static std::vector<mtype_id> GetMonstersFromGroup(const mongroup_id& group);
+    static const MonsterGroup& GetMonsterGroup(const mongroup_id& group);
+    static const MonsterGroup& GetUpgradedMonsterGroup(const mongroup_id& group);
+    static std::vector<mongroup_id> get_all_group_ids();
+    /**
+     * Gets a random monster, weighted by frequency.
+     * Ignores cost multiplier.
+     */
+    static const mtype_id& GetRandomMonsterFromGroup(const mongroup_id& group);
 
-        static void check_group_definitions();
+    static void check_group_definitions();
 
-        static void ClearMonsterGroups();
+    static void ClearMonsterGroups();
 
-        static bool monster_is_blacklisted( const mtype_id &m );
+    static bool monster_is_blacklisted(const mtype_id& m);
 
-        static bool is_animal( const mongroup_id &group );
+    static bool is_animal(const mongroup_id& group);
 
-    private:
-        static std::map<mongroup_id, MonsterGroup> monsterGroupMap;
-        using t_string_set = std::set<std::string>;
-        static t_string_set monster_blacklist;
-        static t_string_set monster_whitelist;
-        static t_string_set monster_categories_blacklist;
-        static t_string_set monster_categories_whitelist;
+private:
+    static std::map<mongroup_id, MonsterGroup> monsterGroupMap;
+    using t_string_set = std::set<std::string>;
+    static t_string_set monster_blacklist;
+    static t_string_set monster_whitelist;
+    static t_string_set monster_categories_blacklist;
+    static t_string_set monster_categories_whitelist;
 };

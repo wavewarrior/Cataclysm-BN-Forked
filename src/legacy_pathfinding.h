@@ -14,25 +14,21 @@ enum pf_special : int {
     PF_SHARP = 0x80,     // sharp items (barbed wire, etc)
 };
 
-constexpr pf_special operator | ( pf_special lhs, pf_special rhs )
-{
-    return static_cast<pf_special>( static_cast< int >( lhs ) | static_cast< int >( rhs ) );
+constexpr pf_special operator|(pf_special lhs, pf_special rhs) {
+    return static_cast<pf_special>(static_cast<int>(lhs) | static_cast<int>(rhs));
 }
 
-constexpr pf_special operator & ( pf_special lhs, pf_special rhs )
-{
-    return static_cast<pf_special>( static_cast< int >( lhs ) & static_cast< int >( rhs ) );
+constexpr pf_special operator&(pf_special lhs, pf_special rhs) {
+    return static_cast<pf_special>(static_cast<int>(lhs) & static_cast<int>(rhs));
 }
 
-inline pf_special &operator |= ( pf_special &lhs, pf_special rhs )
-{
-    lhs = static_cast<pf_special>( static_cast< int >( lhs ) | static_cast< int >( rhs ) );
+inline pf_special& operator|=(pf_special& lhs, pf_special rhs) {
+    lhs = static_cast<pf_special>(static_cast<int>(lhs) | static_cast<int>(rhs));
     return lhs;
 }
 
-inline pf_special &operator &= ( pf_special &lhs, pf_special rhs )
-{
-    lhs = static_cast<pf_special>( static_cast< int >( lhs ) & static_cast< int >( rhs ) );
+inline pf_special& operator&=(pf_special& lhs, pf_special rhs) {
+    lhs = static_cast<pf_special>(static_cast<int>(lhs) & static_cast<int>(rhs));
     return lhs;
 }
 
@@ -53,11 +49,17 @@ struct pathfinding_settings {
     bool avoid_sharp = false;
 
     pathfinding_settings() = default;
-    pathfinding_settings( const pathfinding_settings & ) = default;
-    pathfinding_settings( int bs, int md, int ml, int cc, bool aod, bool at, bool acs, bool art,
-                          bool as )
-        : bash_strength( bs ), max_dist( md ), max_length( ml ), climb_cost( cc ),
-          allow_open_doors( aod ), avoid_traps( at ), allow_climb_stairs( acs ), avoid_rough_terrain( art ),
-          avoid_sharp( as ) {}
-    pathfinding_settings &operator = ( const pathfinding_settings & ) = default;
+    pathfinding_settings(const pathfinding_settings&) = default;
+    pathfinding_settings(
+        int bs, int md, int ml, int cc, bool aod, bool at, bool acs, bool art, bool as)
+        : bash_strength(bs),
+          max_dist(md),
+          max_length(ml),
+          climb_cost(cc),
+          allow_open_doors(aod),
+          avoid_traps(at),
+          allow_climb_stairs(acs),
+          avoid_rough_terrain(art),
+          avoid_sharp(as) {}
+    pathfinding_settings& operator=(const pathfinding_settings&) = default;
 };

@@ -1,15 +1,14 @@
 #pragma once
 #ifndef CATA_SRC_HUD_ANIM_H
-#define CATA_SRC_HUD_ANIM_H
+#    define CATA_SRC_HUD_ANIM_H
 
-#include <map>
-#include <string>
+#    include "sidebar_anim.h"
 
-#include "sidebar_anim.h"
+#    include <map>
+#    include <string>
 
 // Forward
-namespace Rml
-{
+namespace Rml {
 class ElementDocument;
 }
 
@@ -22,25 +21,24 @@ class ElementDocument;
 // scale, scale_y, rotation (CSS transform). Unsupported: color_blend
 // (needs per-element base-color knowledge, Phase 3). That channel is
 // skipped with a one-time warning.
-namespace hud_anim
-{
+namespace hud_anim {
 
 // Options for feeding a HUD element into the animation system.
 struct feed_options {
-    std::string element_id; // element's id attribute in sidebar_hud document
-    std::string spec_icon; // icons.json "animations" spec key (e.g. "hud_vbar")
-    double value = 0.0; // drives sidebar_anim trigger logic
+    std::string element_id;   // element's id attribute in sidebar_hud document
+    std::string spec_icon;    // icons.json "animations" spec key (e.g. "hud_vbar")
+    double value = 0.0;       // drives sidebar_anim trigger logic
     bool is_critical = false; // enables critical-band specs
 };
 
 /// Feed one animated HUD element.
-auto feed( const feed_options &opts ) -> void;
+auto feed(const feed_options& opts) -> void;
 
 /// Element left the DOM: drop applier bookkeeping AND the registry key.
-auto forget( const std::string &element_id ) -> void;
+auto forget(const std::string& element_id) -> void;
 
 /// Per-frame applier: sample every fed element and SetProperty on the open doc.
-auto tick( Rml::ElementDocument *doc, std::uint32_t now ) -> void;
+auto tick(Rml::ElementDocument* doc, std::uint32_t now) -> void;
 
 /// Clear all state (HUD close / game load).
 auto clear() -> void;

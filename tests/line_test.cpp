@@ -161,7 +161,7 @@ static bool check_bresenham_triaxis(const tripoint& src, const tripoint& sign, i
 }
 
 static void check_bresenham_cube(const tripoint& src, int dist) {
-    tripoint sign_positive = tripoint(1, 1, 1); // NOLINT(cata-use-named-point-constants)
+    tripoint sign_positive = tripoint(1, 1, 1);
     // Positive coords
     if (!check_bresenham_triaxis(src, sign_positive, dist)) {
         WARN("Skipping negative and mixed coords due to failures.");

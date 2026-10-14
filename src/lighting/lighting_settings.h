@@ -100,8 +100,7 @@ inline auto dbg_mode_from_env() -> std::uint32_t {
 
 /// The single live owner every channel (file, keys, panel) writes and every
 /// pass reads. Seeded once from the environment.
-inline auto live_settings() -> lighting_settings& // *NOPAD*
-{
+inline auto live_settings() -> lighting_settings& {
     static lighting_settings s = [] {
         auto x = lighting_settings{};
         x.debug.debug_mode = dbg_mode_from_env();
@@ -180,7 +179,7 @@ struct knob_entry {
 auto lighting_knob_table() -> std::span<const knob_entry>;
 
 /// Look up a knob by file-channel name. Null when the name is unknown.
-auto knob_find(std::string_view name) -> const knob_entry*; // *NOPAD*
+auto knob_find(std::string_view name) -> const knob_entry*;
 
 /// The file channel: raw write, no clamp (the measurement escape hatch), bools
 /// from `value > 0.5`. Returns false for an unknown name, exactly as the old

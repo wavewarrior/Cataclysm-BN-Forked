@@ -1,9 +1,7 @@
 #pragma once
 
-namespace cata
-{
+namespace cata {
 
 void show_lua_console_impl();
 
 } // namespace cata
-

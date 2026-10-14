@@ -1,15 +1,7 @@
 #include "gamemode_defense.h" // IWYU pragma: associated
 
-#include <cassert>
-#include <cstddef>
-#include <memory>
-#include <ostream>
-#include <set>
-
-#include <RmlUi/Core.h>
-
-#include "action_time_scale.h"
 #include "action.h"
+#include "action_time_scale.h"
 #include "avatar.h"
 #include "color.h"
 #include "construction.h"
@@ -46,14 +38,21 @@
 #include "ui_manager.h"
 #include "weather.h"
 
-static const skill_id skill_barter( "barter" );
+#include <RmlUi/Core.h>
+#include <cassert>
+#include <cstddef>
+#include <memory>
+#include <ostream>
+#include <set>
 
-static const mongroup_id GROUP_NETHER( "GROUP_NETHER" );
-static const mongroup_id GROUP_ROBOT( "GROUP_ROBOT" );
-static const mongroup_id GROUP_SPIDER( "GROUP_SPIDER" );
-static const mongroup_id GROUP_TRIFFID( "GROUP_TRIFFID" );
-static const mongroup_id GROUP_VANILLA( "GROUP_VANILLA" );
-static const mongroup_id GROUP_ZOMBIE( "GROUP_ZOMBIE" );
+static const skill_id skill_barter("barter");
+
+static const mongroup_id GROUP_NETHER("GROUP_NETHER");
+static const mongroup_id GROUP_ROBOT("GROUP_ROBOT");
+static const mongroup_id GROUP_SPIDER("GROUP_SPIDER");
+static const mongroup_id GROUP_TRIFFID("GROUP_TRIFFID");
+static const mongroup_id GROUP_VANILLA("GROUP_VANILLA");
+static const mongroup_id GROUP_ZOMBIE("GROUP_ZOMBIE");
 
 // One in X chance of single-flavor wave
 static constexpr int SPECIAL_WAVE_CHANCE = 5;
@@ -61,30 +60,28 @@ static constexpr int SPECIAL_WAVE_CHANCE = 5;
 static constexpr int SPECIAL_WAVE_MIN = 5;
 
 #define SELCOL(n) (selection == (n) ? c_yellow : c_blue)
-#define TOGCOL(n, b) (selection == (n) ? ((b) ? c_light_green : c_yellow) :\
-                      ((b) ? c_green : c_dark_gray))
-#define NUMALIGN(n) ((n) >= 10000 ? 20 : ((n) >= 1000 ? 21 :\
-                     ((n) >= 100 ? 22 : ((n) >= 10 ? 23 : 24))))
+#define TOGCOL(n, b) \
+    (selection == (n) ? ((b) ? c_light_green : c_yellow) : ((b) ? c_green : c_dark_gray))
+#define NUMALIGN(n) \
+    ((n) >= 10000 ? 20 : ((n) >= 1000 ? 21 : ((n) >= 100 ? 22 : ((n) >= 10 ? 23 : 24))))
 
-std::string caravan_category_name( caravan_category cat );
-std::vector<itype_id> caravan_items( caravan_category cat );
+std::string caravan_category_name(caravan_category cat);
+std::vector<itype_id> caravan_items(caravan_category cat);
 std::set<m_flag> monflags_to_add;
 
-int caravan_price( Character &who, int price );
+int caravan_price(Character& who, int price);
 
 
-std::string defense_style_name( defense_style style );
-std::string defense_style_description( defense_style style );
-std::string defense_location_name( defense_location location );
-std::string defense_location_description( defense_location location );
+std::string defense_style_name(defense_style style);
+std::string defense_style_description(defense_style style);
+std::string defense_location_name(defense_location location);
+std::string defense_location_description(defense_location location);
 
-defense_game::defense_game()
-    : time_between_waves( 0_turns )
-{
+defense_game::defense_game(): time_between_waves(0_turns) {
     current_wave = 0;
     hunger = false;
     thirst = false;
-    sleep  = false;
+    sleep = false;
     zombies = false;
     specials = false;
     spiders = false;
@@ -92,16 +89,13 @@ defense_game::defense_game()
     robots = false;
     subspace = false;
     mercenaries = false;
-    init_to_style( DEFENSE_EASY );
+    init_to_style(DEFENSE_EASY);
 }
 
-bool defense_game::init()
-{
+bool defense_game::init() {
     calendar::turn = calendar::turn_zero + 12_hours; // Start at noon
     get_weather().update_weather();
-    if( !g->u.create( character_type::CUSTOM ) ) {
-        return false;
-    }
+    if (!g->u.create(character_type::CUSTOM)) { return false; }
     g->u.str_cur = g->u.str_max;
     g->u.per_cur = g->u.per_max;
     g->u.int_cur = g->u.int_max;
@@ -111,7 +105,7 @@ bool defense_game::init()
     current_wave = 0;
     hunger = false;
     thirst = false;
-    sleep  = false;
+    sleep = false;
     zombies = false;
     specials = false;
     spiders = false;
@@ -120,51 +114,39 @@ bool defense_game::init()
     subspace = false;
     mercenaries = false;
     allow_save = false;
-    init_to_style( DEFENSE_EASY );
+    init_to_style(DEFENSE_EASY);
     setup();
     g->u.cash = initial_cash;
     // TODO: support multiple defense games? clean up old defense game
-    defloc_pos = tripoint_om_omt( 50, 50, 0 );
+    defloc_pos = tripoint_om_omt(50, 50, 0);
     init_map();
     caravan();
     return true;
 }
 
-void defense_game::per_turn()
-{
-    if( !thirst ) {
-        g->u.set_thirst( 0 );
-    }
-    if( !hunger ) {
-        g->u.set_stored_kcal( g->u.max_stored_kcal() );
-    }
-    if( !sleep ) {
-        g->u.set_fatigue( 0 );
-    }
-    if( action_time_scale::once_every_this_tick( time_between_waves ) ) {
+void defense_game::per_turn() {
+    if (!thirst) { g->u.set_thirst(0); }
+    if (!hunger) { g->u.set_stored_kcal(g->u.max_stored_kcal()); }
+    if (!sleep) { g->u.set_fatigue(0); }
+    if (action_time_scale::once_every_this_tick(time_between_waves)) {
         current_wave++;
-        if( current_wave > 1 && current_wave % waves_between_caravans == 0 ) {
-            popup( _( "A caravan approaches!  Press spacebar…" ) );
+        if (current_wave > 1 && current_wave % waves_between_caravans == 0) {
+            popup(_("A caravan approaches!  Press spacebar…"));
             caravan();
         }
         spawn_wave();
     }
 }
 
-void defense_game::pre_action( action_id &act )
-{
+void defense_game::pre_action(action_id& act) {
     std::string action_error_message;
-    switch( act ) {
+    switch (act) {
         case ACTION_SLEEP:
-            if( !sleep ) {
-                action_error_message = _( "You don't need to sleep!" );
-            }
+            if (!sleep) { action_error_message = _("You don't need to sleep!"); }
             break;
         case ACTION_SAVE:
         case ACTION_QUICKSAVE:
-            if( !allow_save ) {
-                action_error_message = _( "You cannot save in defense mode!" );
-            }
+            if (!allow_save) { action_error_message = _("You cannot save in defense mode!"); }
             break;
         case ACTION_MOVE_FORTH:
         case ACTION_MOVE_FORTH_RIGHT:
@@ -174,111 +156,105 @@ void defense_game::pre_action( action_id &act )
         case ACTION_MOVE_BACK_LEFT:
         case ACTION_MOVE_LEFT:
         case ACTION_MOVE_FORTH_LEFT: {
-            const auto delta = get_delta_from_movement_action( act, iso_rotate::yes );
-            if( ( delta.y() < 0 && g->u.bub_pos().y() == g_half_mapsize_y && g->get_levy() <= 93 )
-                || ( delta.y() > 0 && g->u.bub_pos().y() == g_half_mapsize_y + SEEY - 1 && g->get_levy() >= 98 )
-                || ( delta.x() < 0 && g->u.bub_pos().x() == g_half_mapsize_x && g->get_levx() <= 93 )
-                || ( delta.x() > 0 && g->u.bub_pos().x() == g_half_mapsize_x + SEEX - 1 && g->get_levx() >= 98 ) ) {
-                action_error_message = string_format( _( "You cannot leave the %s behind!" ),
-                                                      defense_location_name( location ) );
+            const auto delta = get_delta_from_movement_action(act, iso_rotate::yes);
+            if ((delta.y() < 0 && g->u.bub_pos().y() == g_half_mapsize_y && g->get_levy() <= 93)
+                || (delta.y() > 0 && g->u.bub_pos().y() == g_half_mapsize_y + SEEY - 1
+                    && g->get_levy() >= 98)
+                || (delta.x() < 0 && g->u.bub_pos().x() == g_half_mapsize_x && g->get_levx() <= 93)
+                || (delta.x() > 0 && g->u.bub_pos().x() == g_half_mapsize_x + SEEX - 1
+                    && g->get_levx() >= 98)) {
+                action_error_message = string_format(
+                    _("You cannot leave the %s behind!"), defense_location_name(location));
             }
-        }
-        break;
+        } break;
         default:
             break;
     }
-    if( !action_error_message.empty() ) {
-        add_msg( m_info, action_error_message );
+    if (!action_error_message.empty()) {
+        add_msg(m_info, action_error_message);
         act = ACTION_NULL;
     }
 }
 
-void defense_game::post_action( action_id /*act*/ )
-{
+void defense_game::post_action(action_id /*act*/) {}
+
+void defense_game::game_over() {
+    popup(_("You managed to survive through wave %d!"), current_wave);
 }
 
-void defense_game::game_over()
-{
-    popup( _( "You managed to survive through wave %d!" ), current_wave );
-}
-
-void defense_game::init_mtypes()
-{
-    for( auto &type : MonsterGenerator::generator().get_all_mtypes() ) {
-        mtype *const t = const_cast<mtype *>( &type );
+void defense_game::init_mtypes() {
+    for (auto& type : MonsterGenerator::generator().get_all_mtypes()) {
+        mtype* const t = const_cast<mtype*>(&type);
         t->difficulty *= 1.5;
-        t->difficulty += ( t->difficulty / 5 );
-        t->set_flag( MF_BASHES );
-        t->set_flag( MF_SMELLS );
-        t->set_flag( MF_HEARS );
-        t->set_flag( MF_SEES );
+        t->difficulty += (t->difficulty / 5);
+        t->set_flag(MF_BASHES);
+        t->set_flag(MF_SMELLS);
+        t->set_flag(MF_HEARS);
+        t->set_flag(MF_SEES);
     }
 }
 
-void defense_game::init_constructions()
-{
+void defense_game::init_constructions() {
     // Everything takes 1 minute
-    constructions::override_build_times( 1_minutes );
+    constructions::override_build_times(1_minutes);
 }
 
-void defense_game::init_map()
-{
+void defense_game::init_map() {
     background_pane background;
     static_popup popup;
-    popup.message( _( "Please wait as the map generates [%2d%%]" ), 0 );
+    popup.message(_("Please wait as the map generates [%2d%%]"), 0);
     ui_manager::redraw();
     refresh_display();
 
-    auto &starting_om = get_primary_overmapbuffer().get( point_abs_om() );
-    for( int x = 0; x < OMAPX; x++ ) {
-        for( int y = 0; y < OMAPY; y++ ) {
-            tripoint_om_omt p( x, y, 0 );
-            starting_om.ter_set( p, oter_id( "field" ) );
-            starting_om.seen( p ) = true;
+    auto& starting_om = get_primary_overmapbuffer().get(point_abs_om());
+    for (int x = 0; x < OMAPX; x++) {
+        for (int y = 0; y < OMAPY; y++) {
+            tripoint_om_omt p(x, y, 0);
+            starting_om.ter_set(p, oter_id("field"));
+            starting_om.seen(p) = true;
         }
     }
 
-    switch( location ) {
+    switch (location) {
         case DEFLOC_NULL:
         case NUM_DEFENSE_LOCATIONS:
-            defloc_special = overmap_special_id( "house_two_story_basement" );
-            debugmsg( "Invalid defense location %d", location );
+            defloc_special = overmap_special_id("house_two_story_basement");
+            debugmsg("Invalid defense location %d", location);
             break;
 
         case DEFLOC_HOSPITAL:
-            defloc_special = overmap_special_id( "hospital" );
+            defloc_special = overmap_special_id("hospital");
             break;
 
         case DEFLOC_WORKS:
-            defloc_special = overmap_special_id( "public_works" );
+            defloc_special = overmap_special_id("public_works");
             break;
 
         case DEFLOC_MALL:
-            defloc_special = overmap_special_id( "megastore" );
+            defloc_special = overmap_special_id("megastore");
             break;
 
         case DEFLOC_BAR:
-            defloc_special = overmap_special_id( "bar" );
+            defloc_special = overmap_special_id("bar");
             break;
 
         case DEFLOC_MANSION:
-            defloc_special = overmap_special_id( "Mansion_Wild" );
+            defloc_special = overmap_special_id("Mansion_Wild");
             break;
     }
-    starting_om.place_special_forced( defloc_special, defloc_pos, om_direction::type::north );
+    starting_om.place_special_forced(defloc_special, defloc_pos, om_direction::type::north);
 
     starting_om.save();
 
     // Init the map
     int old_percent = 0;
-    for( int i = 0; i <= g_mapsize * 2; i += 2 ) {
-        for( int j = 0; j <= g_mapsize * 2; j += 2 ) {
+    for (int i = 0; i <= g_mapsize * 2; i += 2) {
+        for (int j = 0; j <= g_mapsize * 2; j += 2) {
             int mx = 100 - g_mapsize + i;
             int my = 100 - g_mapsize + j;
-            int percent = 100 * ( ( j / 2 + g_mapsize * ( i / 2 ) ) ) /
-                          ( ( g_mapsize ) * ( g_mapsize + 1 ) );
-            if( percent >= old_percent + 1 ) {
-                popup.message( _( "Please wait as the map generates [%2d%%]" ), percent );
+            int percent = 100 * ((j / 2 + g_mapsize * (i / 2))) / ((g_mapsize) * (g_mapsize + 1));
+            if (percent >= old_percent + 1) {
+                popup.message(_("Please wait as the map generates [%2d%%]"), percent);
                 ui_manager::redraw();
                 refresh_display();
                 inp_mngr.pump_events();
@@ -287,34 +263,33 @@ void defense_game::init_map()
             // Round down to the nearest even number
             mx -= mx % 2;
             my -= my % 2;
-            mapgen_constructor constructor( MAPBUFFER_REGISTRY.get(
-                                                mapbuffer_registry::primary_dimension_id() ) );
-            constructor.generate( project_to<coords::omt>( tripoint_abs_sm( mx, my, 0 ) ),
-                                  calendar::turn );
+            mapgen_constructor constructor(
+                MAPBUFFER_REGISTRY.get(mapbuffer_registry::primary_dimension_id()));
+            constructor
+                .generate(project_to<coords::omt>(tripoint_abs_sm(mx, my, 0)), calendar::turn);
             constructor.clear_spawns();
             constructor.clear_traps();
         }
     }
 
     // For this mode assume we always want overmap zero.
-    tripoint_abs_omt abs_defloc_pos = project_combine( point_abs_om(), defloc_pos );
-    g->load_map( project_to<coords::sm>( abs_defloc_pos ) );
-    Character &player_character = get_player_character();
+    tripoint_abs_omt abs_defloc_pos = project_combine(point_abs_om(), defloc_pos);
+    g->load_map(project_to<coords::sm>(abs_defloc_pos));
+    Character& player_character = get_player_character();
     const int z = player_character.bub_pos().z();
-    player_character.setpos( tripoint_bub_ms( SEEX, SEEY, z ) );
+    player_character.setpos(tripoint_bub_ms(SEEX, SEEY, z));
 
-    monster *const generator = g->place_critter_around(
-                                   mtype_id( "mon_generator" ), g->u.bub_pos(), 2 );
-    assert( generator );
+    monster* const generator =
+        g->place_critter_around(mtype_id("mon_generator"), g->u.bub_pos(), 2);
+    assert(generator);
     generator->friendly = -1;
 }
 
-void defense_game::init_to_style( defense_style new_style )
-{
+void defense_game::init_to_style(defense_style new_style) {
     style = new_style;
     hunger = false;
     thirst = false;
-    sleep  = false;
+    sleep = false;
     zombies = false;
     specials = false;
     spiders = false;
@@ -323,9 +298,9 @@ void defense_game::init_to_style( defense_style new_style )
     subspace = false;
     mercenaries = false;
 
-    switch( new_style ) {
+    switch (new_style) {
         case NUM_DEFENSE_STYLES:
-            debugmsg( "invalid defense style: %d", new_style );
+            debugmsg("invalid defense style: %d", new_style);
             break;
         case DEFENSE_EASY:
         // fall through to custom
@@ -463,18 +438,16 @@ void defense_game::init_to_style( defense_style new_style )
             thirst = true;
             sleep = true;
             break;
-
     }
 }
 
 // ── RmlUi render path (§8.1 gate-blocker backlog) ────────────────────────────
 // Slice 1: the setup settings form. Render-only — the keyboard owns every field
 // and the selection cursor; the doc is rebuilt each frame from the current values.
-namespace
-{
+namespace {
 struct defense_setup_row {
-    Rml::String text;     // field label / section header / toggle name
-    Rml::String detail;   // value + description (settings rows); On/Off (toggles)
+    Rml::String text;   // field label / section header / toggle name
+    Rml::String detail; // value + description (settings rows); On/Off (toggles)
     bool is_header = false;
     bool selected = false;
 };
@@ -486,52 +459,48 @@ struct defense_setup_data {
 
 // Slice 2: the between-wave caravan shop. Reuses defense_setup_row for both lists.
 struct defense_caravan_data {
-    Rml::String cash_rml;                       // "Your Cash: $X -> $Y" header
-    Rml::Vector<defense_setup_row> cat_rows;    // category list (left)
-    Rml::String info_rml;                       // selected item's folded info (left)
-    Rml::Vector<defense_setup_row> item_rows;   // item list (right): name xN (price)
-    bool cat_active = true;                      // which pane has focus (border)
+    Rml::String cash_rml;                     // "Your Cash: $X -> $Y" header
+    Rml::Vector<defense_setup_row> cat_rows;  // category list (left)
+    Rml::String info_rml;                     // selected item's folded info (left)
+    Rml::Vector<defense_setup_row> item_rows; // item list (right): name xN (price)
+    bool cat_active = true;                   // which pane has focus (border)
     bool items_active = false;
     Rml::DataModelHandle handle;
 };
 
 bool g_defense_setup_types_registered = false;
 
-void register_defense_setup_rml_types( Rml::DataModelConstructor &c )
-{
-    if( g_defense_setup_types_registered ) {
-        return;
-    }
+void register_defense_setup_rml_types(Rml::DataModelConstructor& c) {
+    if (g_defense_setup_types_registered) { return; }
     Rml::StructHandle<defense_setup_row> rh = c.RegisterStruct<defense_setup_row>();
-    rh.RegisterMember( "text", &defense_setup_row::text );
-    rh.RegisterMember( "detail", &defense_setup_row::detail );
-    rh.RegisterMember( "is_header", &defense_setup_row::is_header );
-    rh.RegisterMember( "selected", &defense_setup_row::selected );
+    rh.RegisterMember("text", &defense_setup_row::text);
+    rh.RegisterMember("detail", &defense_setup_row::detail);
+    rh.RegisterMember("is_header", &defense_setup_row::is_header);
+    rh.RegisterMember("selected", &defense_setup_row::selected);
     c.RegisterArray<Rml::Vector<defense_setup_row>>();
     g_defense_setup_types_registered = true;
 }
 } // namespace
 
-bool &gamemode_defense_rmlui_enabled()
-{
+bool& gamemode_defense_rmlui_enabled() {
     // Default OFF — opt in via the F4 panel. See rml_screen.h.
     static bool enabled = true;
     return enabled;
 }
 
-void defense_game::setup()
-{
+void defense_game::setup() {
     background_pane bg_pane;
 
     catacurses::window w;
 
     ui_adaptor ui;
-    ui.on_screen_resize( [&]( ui_adaptor & ui ) {
-        w = catacurses::newwin( FULL_SCREEN_HEIGHT, FULL_SCREEN_WIDTH,
-                                point( TERMX > FULL_SCREEN_WIDTH ? ( TERMX - FULL_SCREEN_WIDTH ) / 2 : 0,
-                                       TERMY > FULL_SCREEN_HEIGHT ? ( TERMY - FULL_SCREEN_HEIGHT ) / 2 : 0 ) );
-        ui.position_from_window( w );
-    } );
+    ui.on_screen_resize([&](ui_adaptor& ui) {
+        w = catacurses::newwin(
+            FULL_SCREEN_HEIGHT, FULL_SCREEN_WIDTH,
+            point(TERMX > FULL_SCREEN_WIDTH ? (TERMX - FULL_SCREEN_WIDTH) / 2 : 0,
+                  TERMY > FULL_SCREEN_HEIGHT ? (TERMY - FULL_SCREEN_HEIGHT) / 2 : 0));
+        ui.position_from_window(w);
+    });
     ui.mark_resize();
 
     int selection = 1;
@@ -543,424 +512,377 @@ void defense_game::setup()
     std::unique_ptr<defense_setup_data> rml_data;
     rml_doc rml;
     const auto sync_setup_rml = [&]() {
-        if( !rml || !rml_data ) {
-            return;
-        }
-        rml_data->hint_rml = cata_text_to_rml( colorize(
-                _( "Press direction keys to cycle, ENTER to toggle, S to start" ), c_light_red ) );
-        Rml::Vector<defense_setup_row> &rows = rml_data->rows;
+        if (!rml || !rml_data) { return; }
+        rml_data->hint_rml = cata_text_to_rml(
+            colorize(_("Press direction keys to cycle, ENTER to toggle, S to start"), c_light_red));
+        Rml::Vector<defense_setup_row>& rows = rml_data->rows;
         rows.clear();
         // SELCOL / TOGCOL, reproduced (the selected field's value turns yellow;
         // toggles colour their name by on/off + selection).
-        const auto selcol = [&]( int n ) {
-            return selection == n ? c_yellow : c_blue;
+        const auto selcol = [&](int n) { return selection == n ? c_yellow : c_blue; };
+        const auto togcol = [&](int n, bool b) {
+            return selection == n ? (b ? c_light_green : c_yellow) : (b ? c_green : c_dark_gray);
         };
-        const auto togcol = [&]( int n, bool b ) {
-            return selection == n ? ( b ? c_light_green : c_yellow ) : ( b ? c_green : c_dark_gray );
-        };
-        const auto setting = [&]( int n, const std::string & label, const std::string & value,
-        const std::string & desc ) {
-            defense_setup_row r;
-            r.selected = ( selection == n );
-            r.text = cata_text_to_rml( colorize( label, c_white ) );
-            r.detail = cata_text_to_rml( colorize( value, selcol( n ) ) + "  " +
-                                         colorize( desc, c_light_gray ) );
-            rows.emplace_back( std::move( r ) );
-        };
-        const auto header = [&]( const std::string & h ) {
+        const auto setting =
+            [&](int n, const std::string& label, const std::string& value,
+                const std::string& desc) {
+                defense_setup_row r;
+                r.selected = (selection == n);
+                r.text = cata_text_to_rml(colorize(label, c_white));
+                r.detail = cata_text_to_rml(
+                    colorize(value, selcol(n)) + "  " + colorize(desc, c_light_gray));
+                rows.emplace_back(std::move(r));
+            };
+        const auto header = [&](const std::string& h) {
             defense_setup_row r;
             r.is_header = true;
-            r.text = cata_text_to_rml( colorize( h, c_white ) );
-            rows.emplace_back( std::move( r ) );
+            r.text = cata_text_to_rml(colorize(h, c_white));
+            rows.emplace_back(std::move(r));
         };
-        const auto toggle = [&]( int n, const std::string & name, bool b ) {
+        const auto toggle = [&](int n, const std::string& name, bool b) {
             defense_setup_row r;
-            r.selected = ( selection == n );
-            r.text = cata_text_to_rml( colorize( name, togcol( n, b ) ) );
-            r.detail = cata_text_to_rml( colorize( b ? _( "On" ) : _( "Off" ), togcol( n, b ) ) );
-            rows.emplace_back( std::move( r ) );
+            r.selected = (selection == n);
+            r.text = cata_text_to_rml(colorize(name, togcol(n, b)));
+            r.detail = cata_text_to_rml(colorize(b ? _("On") : _("Off"), togcol(n, b)));
+            rows.emplace_back(std::move(r));
         };
 
-        setting( 1, _( "Scenario:" ), defense_style_name( style ), defense_style_description( style ) );
-        setting( 2, _( "Location:" ), defense_location_name( location ),
-                 defense_location_description( location ) );
-        setting( 3, _( "Initial Difficulty:" ), string_format( "%d", initial_difficulty ),
-                 _( "The difficulty of the first wave." ) );
-        setting( 4, _( "Wave Difficulty:" ), string_format( "%d", wave_difficulty ),
-                 _( "The increase of difficulty with each wave." ) );
-        setting( 5, _( "Time b/w Waves:" ), string_format( "%d", to_minutes<int>( time_between_waves ) ),
-                 _( "The time, in minutes, between waves." ) );
-        setting( 6, _( "Waves b/w Caravans:" ), string_format( "%d", waves_between_caravans ),
-                 _( "The number of waves in between caravans." ) );
-        setting( 7, _( "Initial Cash:" ), string_format( "%d", initial_cash / 100 ),
-                 _( "The amount of money the player starts with." ) );
-        setting( 8, _( "Cash for 1st Wave:" ), string_format( "%d", cash_per_wave / 100 ),
-                 _( "The cash awarded for the first wave." ) );
-        setting( 9, _( "Cash Increase:" ), string_format( "%d", cash_increase / 100 ),
-                 _( "The increase in the award each wave." ) );
-        header( _( "Enemy Selection:" ) );
-        toggle( 10, _( "Zombies" ), zombies );
-        toggle( 11, _( "Special Zombies" ), specials );
-        toggle( 12, _( "Spiders" ), spiders );
-        toggle( 13, _( "Triffids" ), triffids );
-        toggle( 14, _( "Robots" ), robots );
-        toggle( 15, _( "Subspace" ), subspace );
-        header( _( "Needs:" ) );
-        toggle( 16, _( "Food" ), hunger );
-        toggle( 17, _( "Water" ), thirst );
-        toggle( 18, _( "Sleep" ), sleep );
-        toggle( 19, _( "Mercenaries" ), mercenaries );
-        toggle( 20, _( "Allow save" ), allow_save );
+        setting(1, _("Scenario:"), defense_style_name(style), defense_style_description(style));
+        setting(2, _("Location:"), defense_location_name(location),
+                defense_location_description(location));
+        setting(3, _("Initial Difficulty:"), string_format("%d", initial_difficulty),
+                _("The difficulty of the first wave."));
+        setting(4, _("Wave Difficulty:"), string_format("%d", wave_difficulty),
+                _("The increase of difficulty with each wave."));
+        setting(5, _("Time b/w Waves:"), string_format("%d", to_minutes<int>(time_between_waves)),
+                _("The time, in minutes, between waves."));
+        setting(6, _("Waves b/w Caravans:"), string_format("%d", waves_between_caravans),
+                _("The number of waves in between caravans."));
+        setting(7, _("Initial Cash:"), string_format("%d", initial_cash / 100),
+                _("The amount of money the player starts with."));
+        setting(8, _("Cash for 1st Wave:"), string_format("%d", cash_per_wave / 100),
+                _("The cash awarded for the first wave."));
+        setting(9, _("Cash Increase:"), string_format("%d", cash_increase / 100),
+                _("The increase in the award each wave."));
+        header(_("Enemy Selection:"));
+        toggle(10, _("Zombies"), zombies);
+        toggle(11, _("Special Zombies"), specials);
+        toggle(12, _("Spiders"), spiders);
+        toggle(13, _("Triffids"), triffids);
+        toggle(14, _("Robots"), robots);
+        toggle(15, _("Subspace"), subspace);
+        header(_("Needs:"));
+        toggle(16, _("Food"), hunger);
+        toggle(17, _("Water"), thirst);
+        toggle(18, _("Sleep"), sleep);
+        toggle(19, _("Mercenaries"), mercenaries);
+        toggle(20, _("Allow save"), allow_save);
 
-        rml_data->handle.DirtyVariable( "hint_rml" );
-        rml_data->handle.DirtyVariable( "rows" );
+        rml_data->handle.DirtyVariable("hint_rml");
+        rml_data->handle.DirtyVariable("rows");
     };
 
-    ui.on_redraw( [&]( const ui_adaptor & ) {
-        if( rml ) {
+    ui.on_redraw([&](const ui_adaptor&) {
+        if (rml) {
             sync_setup_rml();
             return;
         }
-    } );
+    });
 
-    input_context ctxt( "DEFENSE_SETUP" );
-    ctxt.register_action( "UP", to_translation( "Previous option" ) );
-    ctxt.register_action( "DOWN", to_translation( "Next option" ) );
-    ctxt.register_action( "LEFT", to_translation( "Cycle option value" ) );
-    ctxt.register_action( "RIGHT", to_translation( "Cycle option value" ) );
-    ctxt.register_action( "CONFIRM", to_translation( "Toggle option" ) );
-    ctxt.register_action( "NEXT_TAB" );
-    ctxt.register_action( "PREV_TAB" );
-    ctxt.register_action( "START" );
-    ctxt.register_action( "HELP_KEYBINDINGS" );
+    input_context ctxt("DEFENSE_SETUP");
+    ctxt.register_action("UP", to_translation("Previous option"));
+    ctxt.register_action("DOWN", to_translation("Next option"));
+    ctxt.register_action("LEFT", to_translation("Cycle option value"));
+    ctxt.register_action("RIGHT", to_translation("Cycle option value"));
+    ctxt.register_action("CONFIRM", to_translation("Toggle option"));
+    ctxt.register_action("NEXT_TAB");
+    ctxt.register_action("PREV_TAB");
+    ctxt.register_action("START");
+    ctxt.register_action("HELP_KEYBINDINGS");
 
     // Open (or no-op) the RmlUi doc now that `ctxt` exists — open()'s
     // set_timeout(16) lands on it. The model is rebuilt each frame by
     // sync_setup_rml() in on_redraw (the form is live).
-    rml.open( gamemode_defense_rmlui_enabled(), "gamemode_defense", ctxt,
-    [&]( Rml::DataModelConstructor & c ) {
-        rml_data = std::make_unique<defense_setup_data>();
-        register_defense_setup_rml_types( c );
-        c.Bind( "hint_rml", &rml_data->hint_rml );
-        c.Bind( "rows", &rml_data->rows );
-        rml_data->handle = c.GetModelHandle();
-    } );
+    rml.open(gamemode_defense_rmlui_enabled(), "gamemode_defense", ctxt,
+             [&](Rml::DataModelConstructor& c) {
+                 rml_data = std::make_unique<defense_setup_data>();
+                 register_defense_setup_rml_types(c);
+                 c.Bind("hint_rml", &rml_data->hint_rml);
+                 c.Bind("rows", &rml_data->rows);
+                 rml_data->handle = c.GetModelHandle();
+             });
 
-    while( true ) {
+    while (true) {
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
 
-        if( action == "START" ) {
-            if( !zombies && !specials && !spiders && !triffids && !robots && !subspace ) {
-                popup( _( "You must choose at least one monster group!" ) );
+        if (action == "START") {
+            if (!zombies && !specials && !spiders && !triffids && !robots && !subspace) {
+                popup(_("You must choose at least one monster group!"));
             } else {
                 return;
             }
-        } else if( action == "DOWN" ) {
-            if( selection == selection_max ) {
+        } else if (action == "DOWN") {
+            if (selection == selection_max) {
                 selection = 1;
             } else {
                 selection++;
             }
-        } else if( action == "UP" ) {
-            if( selection == 1 ) {
+        } else if (action == "UP") {
+            if (selection == 1) {
                 selection = selection_max;
             } else {
                 selection--;
             }
         } else {
-            switch( selection ) {
+            switch (selection) {
                 case 1:
                     // Scenario selection
-                    if( action == "RIGHT" ) {
-                        if( style == static_cast<defense_style>( NUM_DEFENSE_STYLES - 1 ) ) {
-                            style = static_cast<defense_style>( 1 );
+                    if (action == "RIGHT") {
+                        if (style == static_cast<defense_style>(NUM_DEFENSE_STYLES - 1)) {
+                            style = static_cast<defense_style>(1);
                         } else {
-                            style = static_cast<defense_style>( style + 1 );
+                            style = static_cast<defense_style>(style + 1);
                         }
                     }
-                    if( action == "LEFT" ) {
-                        if( style == static_cast<defense_style>( 1 ) ) {
-                            style = static_cast<defense_style>( NUM_DEFENSE_STYLES - 1 );
+                    if (action == "LEFT") {
+                        if (style == static_cast<defense_style>(1)) {
+                            style = static_cast<defense_style>(NUM_DEFENSE_STYLES - 1);
                         } else {
-                            style = static_cast<defense_style>( style - 1 );
+                            style = static_cast<defense_style>(style - 1);
                         }
                     }
-                    init_to_style( style );
+                    init_to_style(style);
                     break;
 
                 case 2:
                     // Location selection
-                    if( action == "RIGHT" ) {
-                        if( location == static_cast<defense_location>( NUM_DEFENSE_LOCATIONS - 1 ) ) {
-                            location = static_cast<defense_location>( 1 );
+                    if (action == "RIGHT") {
+                        if (location == static_cast<defense_location>(NUM_DEFENSE_LOCATIONS - 1)) {
+                            location = static_cast<defense_location>(1);
                         } else {
-                            location = static_cast<defense_location>( location + 1 );
+                            location = static_cast<defense_location>(location + 1);
                         }
                     }
-                    if( action == "LEFT" ) {
-                        if( location == static_cast<defense_location>( 1 ) ) {
-                            location = static_cast<defense_location>( NUM_DEFENSE_LOCATIONS - 1 );
+                    if (action == "LEFT") {
+                        if (location == static_cast<defense_location>(1)) {
+                            location = static_cast<defense_location>(NUM_DEFENSE_LOCATIONS - 1);
                         } else {
-                            location = static_cast<defense_location>( location - 1 );
+                            location = static_cast<defense_location>(location - 1);
                         }
                     }
                     break;
 
                 case 3:
                     // Difficulty of the first wave
-                    if( action == "LEFT" && initial_difficulty > 10 ) {
-                        initial_difficulty -= 5;
-                    }
-                    if( action == "RIGHT" && initial_difficulty < 995 ) {
-                        initial_difficulty += 5;
-                    }
+                    if (action == "LEFT" && initial_difficulty > 10) { initial_difficulty -= 5; }
+                    if (action == "RIGHT" && initial_difficulty < 995) { initial_difficulty += 5; }
                     break;
 
                 case 4:
                     // Wave Difficulty
-                    if( action == "LEFT" && wave_difficulty > 10 ) {
-                        wave_difficulty -= 5;
-                    }
-                    if( action == "RIGHT" && wave_difficulty < 995 ) {
-                        wave_difficulty += 5;
-                    }
+                    if (action == "LEFT" && wave_difficulty > 10) { wave_difficulty -= 5; }
+                    if (action == "RIGHT" && wave_difficulty < 995) { wave_difficulty += 5; }
                     break;
 
                 case 5:
-                    if( action == "LEFT" && time_between_waves > 5_minutes ) {
+                    if (action == "LEFT" && time_between_waves > 5_minutes) {
                         time_between_waves -= 5_minutes;
                     }
-                    if( action == "RIGHT" && time_between_waves < 995_minutes ) {
+                    if (action == "RIGHT" && time_between_waves < 995_minutes) {
                         time_between_waves += 5_minutes;
                     }
                     break;
 
                 case 6:
-                    if( action == "LEFT" && waves_between_caravans > 1 ) {
+                    if (action == "LEFT" && waves_between_caravans > 1) {
                         waves_between_caravans -= 1;
                     }
-                    if( action == "RIGHT" && waves_between_caravans < 50 ) {
+                    if (action == "RIGHT" && waves_between_caravans < 50) {
                         waves_between_caravans += 1;
                     }
                     break;
 
                 case 7:
-                    if( action == "LEFT" && initial_cash > 0 ) {
-                        initial_cash -= 100;
-                    }
-                    if( action == "RIGHT" && initial_cash < 1000000 ) {
-                        initial_cash += 100;
-                    }
+                    if (action == "LEFT" && initial_cash > 0) { initial_cash -= 100; }
+                    if (action == "RIGHT" && initial_cash < 1000000) { initial_cash += 100; }
                     break;
 
                 case 8:
-                    if( action == "LEFT" && cash_per_wave > 0 ) {
-                        cash_per_wave -= 100;
-                    }
-                    if( action == "RIGHT" && cash_per_wave < 1000000 ) {
-                        cash_per_wave += 100;
-                    }
+                    if (action == "LEFT" && cash_per_wave > 0) { cash_per_wave -= 100; }
+                    if (action == "RIGHT" && cash_per_wave < 1000000) { cash_per_wave += 100; }
                     break;
 
                 case 9:
-                    if( action == "LEFT" && cash_increase > 0 ) {
-                        cash_increase -= 50;
-                    }
-                    if( action == "RIGHT" && cash_increase < 1000000 ) {
-                        cash_increase += 50;
-                    }
+                    if (action == "LEFT" && cash_increase > 0) { cash_increase -= 50; }
+                    if (action == "RIGHT" && cash_increase < 1000000) { cash_increase += 50; }
                     break;
 
                 case 10:
-                    if( action == "CONFIRM" ) {
+                    if (action == "CONFIRM") {
                         zombies = !zombies;
                         specials = false;
                     }
                     break;
 
                 case 11:
-                    if( action == "CONFIRM" ) {
+                    if (action == "CONFIRM") {
                         specials = !specials;
                         zombies = false;
                     }
                     break;
 
                 case 12:
-                    if( action == "CONFIRM" ) {
-                        spiders = !spiders;
-                    }
+                    if (action == "CONFIRM") { spiders = !spiders; }
                     break;
 
                 case 13:
-                    if( action == "CONFIRM" ) {
-                        triffids = !triffids;
-                    }
+                    if (action == "CONFIRM") { triffids = !triffids; }
                     break;
 
                 case 14:
-                    if( action == "CONFIRM" ) {
-                        robots = !robots;
-                    }
+                    if (action == "CONFIRM") { robots = !robots; }
                     break;
 
                 case 15:
-                    if( action == "CONFIRM" ) {
-                        subspace = !subspace;
-                    }
+                    if (action == "CONFIRM") { subspace = !subspace; }
                     break;
 
                 case 16:
-                    if( action == "CONFIRM" ) {
-                        hunger = !hunger;
-                    }
+                    if (action == "CONFIRM") { hunger = !hunger; }
                     break;
 
                 case 17:
-                    if( action == "CONFIRM" ) {
-                        thirst = !thirst;
-                    }
+                    if (action == "CONFIRM") { thirst = !thirst; }
                     break;
 
                 case 18:
-                    if( action == "CONFIRM" ) {
-                        sleep = !sleep;
-                    }
+                    if (action == "CONFIRM") { sleep = !sleep; }
                     break;
 
                 case 19:
-                    if( action == "CONFIRM" ) {
-                        mercenaries = !mercenaries;
-                    }
+                    if (action == "CONFIRM") { mercenaries = !mercenaries; }
                     break;
 
                 case 20:
-                    if( action == "CONFIRM" ) {
-                        allow_save = !allow_save;
-                    }
+                    if (action == "CONFIRM") { allow_save = !allow_save; }
                     break;
             }
         }
     }
 }
 
-std::string defense_style_name( defense_style style )
-{
+std::string defense_style_name(defense_style style) {
     // 24 Characters Max!
-    switch( style ) {
+    switch (style) {
         case DEFENSE_CUSTOM:
-            return _( "Custom" );
+            return _("Custom");
         case DEFENSE_EASY:
-            return _( "Easy" );
+            return _("Easy");
         case DEFENSE_MEDIUM:
-            return _( "Medium" );
+            return _("Medium");
         case DEFENSE_HARD:
-            return _( "Hard" );
+            return _("Hard");
         case DEFENSE_SHAUN:
-            return _( "Shaun of the Dead" );
+            return _("Shaun of the Dead");
         case DEFENSE_DAWN:
-            return _( "Dawn of the Dead" );
+            return _("Dawn of the Dead");
         case DEFENSE_SPIDERS:
-            return _( "Eight-Legged Freaks" );
+            return _("Eight-Legged Freaks");
         case DEFENSE_TRIFFIDS:
-            return _( "Day of the Triffids" );
+            return _("Day of the Triffids");
         case DEFENSE_SKYNET:
-            return _( "Skynet" );
+            return _("Skynet");
         case DEFENSE_LOVECRAFT:
-            return _( "The Call of Cthulhu" );
+            return _("The Call of Cthulhu");
         case NUM_DEFENSE_STYLES:
             break;
     }
     return "Bug!  (bug in defense.cpp:defense_style_name)";
 }
 
-std::string defense_style_description( defense_style style )
-{
+std::string defense_style_description(defense_style style) {
     // 51 Characters Max!
-    switch( style ) {
+    switch (style) {
         case DEFENSE_CUSTOM:
-            return _( "A custom game." );
+            return _("A custom game.");
         case DEFENSE_EASY:
-            return _( "Easy monsters and lots of money." );
+            return _("Easy monsters and lots of money.");
         case DEFENSE_MEDIUM:
-            return _( "Harder monsters.  You have to eat." );
+            return _("Harder monsters.  You have to eat.");
         case DEFENSE_HARD:
-            return _( "All monsters.  You have to eat and drink." );
+            return _("All monsters.  You have to eat and drink.");
         case DEFENSE_SHAUN:
-            return _( "Defend a bar against classic zombies.  Easy and fun." );
+            return _("Defend a bar against classic zombies.  Easy and fun.");
         case DEFENSE_DAWN:
-            return _( "Classic zombies.  Slower and more realistic." );
+            return _("Classic zombies.  Slower and more realistic.");
         case DEFENSE_SPIDERS:
-            return _( "Fast-paced spider-fighting fun!" );
+            return _("Fast-paced spider-fighting fun!");
         case DEFENSE_TRIFFIDS:
-            return _( "Defend your mansion against the triffids." );
+            return _("Defend your mansion against the triffids.");
         case DEFENSE_SKYNET:
-            return _( "The robots have decided that humans are the enemy!" );
+            return _("The robots have decided that humans are the enemy!");
         case DEFENSE_LOVECRAFT:
-            return _( "Ward off legions of eldritch horrors." );
+            return _("Ward off legions of eldritch horrors.");
         case NUM_DEFENSE_STYLES:
             break;
     }
     return "What the heck is this I don't even know.  (defense.cpp:defense_style_description)";
 }
 
-std::string defense_location_name( defense_location location )
-{
-    switch( location ) {
+std::string defense_location_name(defense_location location) {
+    switch (location) {
         case DEFLOC_NULL:
             return "Nowhere?!  (bug in defense.cpp:defense_location_name)";
         case DEFLOC_HOSPITAL:
-            return _( "Hospital" );
+            return _("Hospital");
         case DEFLOC_WORKS:
-            return _( "Public Works" );
+            return _("Public Works");
         case DEFLOC_MALL:
-            return _( "Megastore" );
+            return _("Megastore");
         case DEFLOC_BAR:
-            return _( "Bar" );
+            return _("Bar");
         case DEFLOC_MANSION:
-            return _( "Mansion" );
+            return _("Mansion");
         case NUM_DEFENSE_LOCATIONS:
             break;
     }
     return "a ghost's house (bug in defense.cpp:defense_location_name)";
 }
 
-std::string defense_location_description( defense_location location )
-{
-    switch( location ) {
+std::string defense_location_description(defense_location location) {
+    switch (location) {
         case DEFLOC_NULL:
             return "NULL Bug.  (defense.cpp:defense_location_description)";
         case DEFLOC_HOSPITAL:
-            return                 _( "One entrance and many rooms.  Some medical supplies." );
+            return _("One entrance and many rooms.  Some medical supplies.");
         case DEFLOC_WORKS:
-            return                 _( "Easily fortifiable building.  Lots of useful tools." );
+            return _("Easily fortifiable building.  Lots of useful tools.");
         case DEFLOC_MALL:
-            return                 _( "A large building with various supplies." );
+            return _("A large building with various supplies.");
         case DEFLOC_BAR:
-            return                 _( "A small building with plenty of alcohol." );
+            return _("A small building with plenty of alcohol.");
         case DEFLOC_MANSION:
-            return                 _( "A large house with many rooms." );
+            return _("A large house with many rooms.");
         case NUM_DEFENSE_LOCATIONS:
             break;
     }
     return "Unknown data bug.  (defense.cpp:defense_location_description)";
 }
 
-void defense_game::caravan()
-{
+void defense_game::caravan() {
     std::vector<itype_id> items[NUM_CARAVAN_CATEGORIES];
     std::vector<int> item_count[NUM_CARAVAN_CATEGORIES];
 
     // Init the items for each category
-    for( int i = 0; i < NUM_CARAVAN_CATEGORIES; i++ ) {
-        items[i] = caravan_items( static_cast<caravan_category>( i ) );
-        for( std::vector<itype_id>::iterator it = items[i].begin();
-             it != items[i].end(); ) {
-            if( current_wave == 0 || !one_in( 4 ) ) {
-                item_count[i].push_back( 0 );  // Init counts to 0 for each item
+    for (int i = 0; i < NUM_CARAVAN_CATEGORIES; i++) {
+        items[i] = caravan_items(static_cast<caravan_category>(i));
+        for (std::vector<itype_id>::iterator it = items[i].begin(); it != items[i].end();) {
+            if (current_wave == 0 || !one_in(4)) {
+                item_count[i].push_back(0); // Init counts to 0 for each item
                 it++;
             } else { // Remove the item
-                it = items[i].erase( it );
+                it = items[i].erase(it);
             }
         }
     }
@@ -971,14 +893,15 @@ void defense_game::caravan()
 
     catacurses::window w;
     ui_adaptor ui;
-    ui.on_screen_resize( [&]( ui_adaptor & ui ) {
+    ui.on_screen_resize([&](ui_adaptor& ui) {
         const int width = FULL_SCREEN_WIDTH;
         const int height = FULL_SCREEN_HEIGHT;
-        const point offset( std::max( 0, TERMX - FULL_SCREEN_WIDTH ) / 2, std::max( 0,
-                            TERMY - FULL_SCREEN_HEIGHT ) / 2 );
-        w = catacurses::newwin( height, width, offset );
-        ui.position_from_window( w );
-    } );
+        const point
+            offset(std::max(0, TERMX - FULL_SCREEN_WIDTH) / 2,
+                   std::max(0, TERMY - FULL_SCREEN_HEIGHT) / 2);
+        w = catacurses::newwin(height, width, offset);
+        ui.position_from_window(w);
+    });
     ui.mark_resize();
 
     int offset = 0;
@@ -993,447 +916,414 @@ void defense_game::caravan()
     std::unique_ptr<defense_caravan_data> rml_data;
     rml_doc rml;
     const auto sync_caravan_rml = [&]() {
-        if( !rml || !rml_data ) {
-            return;
-        }
+        if (!rml || !rml_data) { return; }
         const int cash = g->u.cash;
-        rml_data->cash_rml =
-            cata_text_to_rml( colorize( string_format( _( "Your Cash: %s" ), format_money( cash ) ),
-                                        c_white ) + colorize( " -> ", c_light_gray ) +
-                              colorize( format_money( cash - total_price ),
-                                        total_price > cash ? c_red : c_green ) );
+        rml_data->cash_rml = cata_text_to_rml(
+            colorize(string_format(_("Your Cash: %s"), format_money(cash)), c_white)
+            + colorize(" -> ", c_light_gray)
+            + colorize(format_money(cash - total_price), total_price > cash ? c_red : c_green));
 
         rml_data->cat_rows.clear();
-        for( int i = 0; i < NUM_CARAVAN_CATEGORIES; i++ ) {
+        for (int i = 0; i < NUM_CARAVAN_CATEGORIES; i++) {
             defense_setup_row r;
-            r.selected = ( i == category_selected );
-            r.text = cata_text_to_rml( colorize(
-                                           caravan_category_name( static_cast<caravan_category>( i ) ), c_white ) );
-            rml_data->cat_rows.emplace_back( std::move( r ) );
+            r.selected = (i == category_selected);
+            r.text = cata_text_to_rml(
+                colorize(caravan_category_name(static_cast<caravan_category>(i)), c_white));
+            rml_data->cat_rows.emplace_back(std::move(r));
         }
 
-        const std::vector<itype_id> &cat_items = items[category_selected];
-        const std::vector<int> &cat_counts = item_count[category_selected];
-        if( item_selected >= 0 && item_selected < static_cast<int>( cat_items.size() ) ) {
-            item &tmp = *item::spawn_temporary( cat_items[item_selected], calendar::start_of_cataclysm );
-            rml_data->info_rml = cata_text_to_rml( tmp.info_string( iteminfo_query::no_text ) );
+        const std::vector<itype_id>& cat_items = items[category_selected];
+        const std::vector<int>& cat_counts = item_count[category_selected];
+        if (item_selected >= 0 && item_selected < static_cast<int>(cat_items.size())) {
+            item& tmp =
+                *item::spawn_temporary(cat_items[item_selected], calendar::start_of_cataclysm);
+            rml_data->info_rml = cata_text_to_rml(tmp.info_string(iteminfo_query::no_text));
         } else {
             rml_data->info_rml.clear();
         }
 
         rml_data->item_rows.clear();
-        for( size_t i = 0; i < cat_items.size(); i++ ) {
+        for (size_t i = 0; i < cat_items.size(); i++) {
             defense_setup_row r;
-            r.selected = ( static_cast<int>( i ) == item_selected );
-            r.text = cata_text_to_rml( colorize( string_format( "%s x %2d",
-                                                 item::nname( cat_items[i], cat_counts[i] ), cat_counts[i] ), c_white ) );
-            if( cat_counts[i] > 0 ) {
-                const int item_price = item::spawn_temporary( cat_items[i],
-                                       calendar::start_of_cataclysm )->price( false );
-                const int price = caravan_price( g->u, item_price * cat_counts[i] );
-                r.detail = cata_text_to_rml( colorize( string_format( "(%s)", format_money( price ) ),
-                                                       price > g->u.cash ? c_red : c_green ) );
+            r.selected = (static_cast<int>(i) == item_selected);
+            r.text = cata_text_to_rml(colorize(
+                string_format("%s x %2d", item::nname(cat_items[i], cat_counts[i]), cat_counts[i]),
+                c_white));
+            if (cat_counts[i] > 0) {
+                const int item_price =
+                    item::spawn_temporary(cat_items[i], calendar::start_of_cataclysm)->price(false);
+                const int price = caravan_price(g->u, item_price * cat_counts[i]);
+                r.detail = cata_text_to_rml(
+                    colorize(string_format("(%s)", format_money(price)),
+                             price > g->u.cash ? c_red : c_green));
             }
-            rml_data->item_rows.emplace_back( std::move( r ) );
+            rml_data->item_rows.emplace_back(std::move(r));
         }
 
-        rml_data->cat_active = ( current_window == 0 );
-        rml_data->items_active = ( current_window == 1 );
+        rml_data->cat_active = (current_window == 0);
+        rml_data->items_active = (current_window == 1);
 
-        rml_data->handle.DirtyVariable( "cash_rml" );
-        rml_data->handle.DirtyVariable( "cat_rows" );
-        rml_data->handle.DirtyVariable( "info_rml" );
-        rml_data->handle.DirtyVariable( "item_rows" );
-        rml_data->handle.DirtyVariable( "cat_active" );
-        rml_data->handle.DirtyVariable( "items_active" );
+        rml_data->handle.DirtyVariable("cash_rml");
+        rml_data->handle.DirtyVariable("cat_rows");
+        rml_data->handle.DirtyVariable("info_rml");
+        rml_data->handle.DirtyVariable("item_rows");
+        rml_data->handle.DirtyVariable("cat_active");
+        rml_data->handle.DirtyVariable("items_active");
     };
 
-    ui.on_redraw( [&]( const ui_adaptor & ) {
-        if( rml ) {
+    ui.on_redraw([&](const ui_adaptor&) {
+        if (rml) {
             sync_caravan_rml();
             return;
         }
-    } );
+    });
 
-    input_context ctxt( "CARAVAN" );
+    input_context ctxt("CARAVAN");
     ctxt.register_cardinal();
-    ctxt.register_action( "CONFIRM" );
-    ctxt.register_action( "QUIT" );
-    ctxt.register_action( "NEXT_TAB" );
-    ctxt.register_action( "HELP" );
-    ctxt.register_action( "HELP_KEYBINDINGS" );
+    ctxt.register_action("CONFIRM");
+    ctxt.register_action("QUIT");
+    ctxt.register_action("NEXT_TAB");
+    ctxt.register_action("HELP");
+    ctxt.register_action("HELP_KEYBINDINGS");
 
     // Open (or no-op) the RmlUi doc — open()'s set_timeout(16) lands on `ctxt`.
     // The model is rebuilt each frame by sync_caravan_rml() in on_redraw.
-    rml.open( gamemode_defense_rmlui_enabled(), "gamemode_defense_caravan", ctxt,
-    [&]( Rml::DataModelConstructor & c ) {
-        rml_data = std::make_unique<defense_caravan_data>();
-        register_defense_setup_rml_types( c );
-        c.Bind( "cash_rml", &rml_data->cash_rml );
-        c.Bind( "cat_rows", &rml_data->cat_rows );
-        c.Bind( "info_rml", &rml_data->info_rml );
-        c.Bind( "item_rows", &rml_data->item_rows );
-        c.Bind( "cat_active", &rml_data->cat_active );
-        c.Bind( "items_active", &rml_data->items_active );
-        rml_data->handle = c.GetModelHandle();
-    } );
+    rml.open(gamemode_defense_rmlui_enabled(), "gamemode_defense_caravan", ctxt,
+             [&](Rml::DataModelConstructor& c) {
+                 rml_data = std::make_unique<defense_caravan_data>();
+                 register_defense_setup_rml_types(c);
+                 c.Bind("cash_rml", &rml_data->cash_rml);
+                 c.Bind("cat_rows", &rml_data->cat_rows);
+                 c.Bind("info_rml", &rml_data->info_rml);
+                 c.Bind("item_rows", &rml_data->item_rows);
+                 c.Bind("cat_active", &rml_data->cat_active);
+                 c.Bind("items_active", &rml_data->items_active);
+                 rml_data->handle = c.GetModelHandle();
+             });
 
     bool done = false;
     bool cancel = false;
-    while( !done ) {
+    while (!done) {
         ui_manager::redraw();
         const std::string action = ctxt.handle_input();
-        if( action == "HELP" ) {
-            popup_top( _( "CARAVAN:\n"
-                          "Start by selecting a category using your favorite up/down keys.\n"
-                          "Switch between category selection and item selecting by pressing %s.\n"
-                          "Pick an item with the up/down keys, press left/right to buy 1 less/more.\n"
-                          "Press %s to buy everything in your cart, %s to buy nothing." ),
-                       ctxt.get_desc( "NEXT_TAB" ),
-                       ctxt.get_desc( "CONFIRM" ),
-                       ctxt.get_desc( "QUIT" )
-                     );
-        } else if( action == "DOWN" ) {
-            if( current_window == 0 ) { // Categories
+        if (action == "HELP") {
+            popup_top(
+                _("CARAVAN:\n"
+                  "Start by selecting a category using your favorite up/down keys.\n"
+                  "Switch between category selection and item selecting by pressing %s.\n"
+                  "Pick an item with the up/down keys, press left/right to buy 1 less/more.\n"
+                  "Press %s to buy everything in your cart, %s to buy nothing."),
+                ctxt.get_desc("NEXT_TAB"), ctxt.get_desc("CONFIRM"), ctxt.get_desc("QUIT"));
+        } else if (action == "DOWN") {
+            if (current_window == 0) { // Categories
                 category_selected++;
-                if( category_selected == NUM_CARAVAN_CATEGORIES ) {
+                if (category_selected == NUM_CARAVAN_CATEGORIES) {
                     category_selected = CARAVAN_CART;
                 }
                 offset = 0;
                 item_selected = 0;
-            } else if( !items[category_selected].empty() ) { // Items
-                if( item_selected < static_cast<int>( items[category_selected].size() ) - 1 ) {
+            } else if (!items[category_selected].empty()) { // Items
+                if (item_selected < static_cast<int>(items[category_selected].size()) - 1) {
                     item_selected++;
                 } else {
                     item_selected = 0;
                     offset = 0;
                 }
-                if( item_selected > offset + 12 ) {
-                    offset++;
-                }
+                if (item_selected > offset + 12) { offset++; }
             }
-        } else if( action == "UP" ) {
-            if( current_window == 0 ) { // Categories
-                if( category_selected == 0 ) {
+        } else if (action == "UP") {
+            if (current_window == 0) { // Categories
+                if (category_selected == 0) {
                     category_selected = NUM_CARAVAN_CATEGORIES - 1;
                 } else {
                     category_selected--;
                 }
-                if( category_selected == NUM_CARAVAN_CATEGORIES ) {
+                if (category_selected == NUM_CARAVAN_CATEGORIES) {
                     category_selected = CARAVAN_CART;
                 }
                 offset = 0;
                 item_selected = 0;
-            } else if( !items[category_selected].empty() ) { // Items
-                if( item_selected > 0 ) {
+            } else if (!items[category_selected].empty()) { // Items
+                if (item_selected > 0) {
                     item_selected--;
                 } else {
                     item_selected = items[category_selected].size() - 1;
                     offset = item_selected - 12;
-                    if( offset < 0 ) {
-                        offset = 0;
-                    }
+                    if (offset < 0) { offset = 0; }
                 }
-                if( item_selected < offset ) {
-                    offset--;
-                }
+                if (item_selected < offset) { offset--; }
             }
-        } else if( action == "RIGHT" ) {
-            if( current_window == 1 && !items[category_selected].empty() ) {
+        } else if (action == "RIGHT") {
+            if (current_window == 1 && !items[category_selected].empty()) {
                 item_count[category_selected][item_selected]++;
                 itype_id tmp_itm = items[category_selected][item_selected];
-                int item_price = item::spawn_temporary( tmp_itm, calendar::start_of_cataclysm )->price( false );
-                total_price += caravan_price( g->u, item_price );
-                if( category_selected == CARAVAN_CART ) { // Find the item in its category
-                    for( int i = 1; i < NUM_CARAVAN_CATEGORIES; i++ ) {
-                        for( size_t j = 0; j < items[i].size(); j++ ) {
-                            if( items[i][j] == tmp_itm ) {
-                                item_count[i][j]++;
-                            }
+                int item_price =
+                    item::spawn_temporary(tmp_itm, calendar::start_of_cataclysm)->price(false);
+                total_price += caravan_price(g->u, item_price);
+                if (category_selected == CARAVAN_CART) { // Find the item in its category
+                    for (int i = 1; i < NUM_CARAVAN_CATEGORIES; i++) {
+                        for (size_t j = 0; j < items[i].size(); j++) {
+                            if (items[i][j] == tmp_itm) { item_count[i][j]++; }
                         }
                     }
                 } else { // Add / increase the item in the shopping cart
                     bool found_item = false;
-                    for( unsigned i = 0; i < items[0].size() && !found_item; i++ ) {
-                        if( items[0][i] == tmp_itm ) {
+                    for (unsigned i = 0; i < items[0].size() && !found_item; i++) {
+                        if (items[0][i] == tmp_itm) {
                             found_item = true;
                             item_count[0][i]++;
                         }
                     }
-                    if( !found_item ) {
-                        items[0].push_back( items[category_selected][item_selected] );
-                        item_count[0].push_back( 1 );
+                    if (!found_item) {
+                        items[0].push_back(items[category_selected][item_selected]);
+                        item_count[0].push_back(1);
                     }
                 }
             }
-        } else if( action == "LEFT" ) {
-            if( current_window == 1 && !items[category_selected].empty() &&
-                item_count[category_selected][item_selected] > 0 ) {
+        } else if (action == "LEFT") {
+            if (current_window == 1 && !items[category_selected].empty()
+                && item_count[category_selected][item_selected] > 0) {
                 item_count[category_selected][item_selected]--;
                 itype_id tmp_itm = items[category_selected][item_selected];
-                int item_price = item::spawn_temporary( tmp_itm, calendar::start_of_cataclysm )->price( false );
-                total_price -= caravan_price( g->u, item_price );
-                if( category_selected == CARAVAN_CART ) { // Find the item in its category
-                    for( int i = 1; i < NUM_CARAVAN_CATEGORIES; i++ ) {
-                        for( size_t j = 0; j < items[i].size(); j++ ) {
-                            if( items[i][j] == tmp_itm ) {
-                                item_count[i][j]--;
-                            }
+                int item_price =
+                    item::spawn_temporary(tmp_itm, calendar::start_of_cataclysm)->price(false);
+                total_price -= caravan_price(g->u, item_price);
+                if (category_selected == CARAVAN_CART) { // Find the item in its category
+                    for (int i = 1; i < NUM_CARAVAN_CATEGORIES; i++) {
+                        for (size_t j = 0; j < items[i].size(); j++) {
+                            if (items[i][j] == tmp_itm) { item_count[i][j]--; }
                         }
                     }
                 } else { // Decrease / remove the item in the shopping cart
                     bool found_item = false;
-                    for( unsigned i = 0; i < items[0].size() && !found_item; i++ ) {
-                        if( items[0][i] == tmp_itm ) {
+                    for (unsigned i = 0; i < items[0].size() && !found_item; i++) {
+                        if (items[0][i] == tmp_itm) {
                             found_item = true;
                             item_count[0][i]--;
-                            if( item_count[0][i] == 0 ) {
-                                item_count[0].erase( item_count[0].begin() + i );
-                                items[0].erase( items[0].begin() + i );
+                            if (item_count[0][i] == 0) {
+                                item_count[0].erase(item_count[0].begin() + i);
+                                items[0].erase(items[0].begin() + i);
                             }
                         }
                     }
                 }
             }
-        } else if( action == "NEXT_TAB" ) {
-            current_window = ( current_window + 1 ) % 2;
-        } else if( action == "QUIT" ) {
-            if( query_yn( _( "Really buy nothing?" ) ) ) {
+        } else if (action == "NEXT_TAB") {
+            current_window = (current_window + 1) % 2;
+        } else if (action == "QUIT") {
+            if (query_yn(_("Really buy nothing?"))) {
                 cancel = true;
                 done = true;
             }
-        } else if( action == "CONFIRM" ) {
-            if( total_price > g->u.cash ) {
-                popup( _( "You can't afford those items!" ) );
-            } else if( ( items[0].empty() && query_yn( _( "Really buy nothing?" ) ) ) ||
-                       ( !items[0].empty() &&
-                         query_yn( vgettext( "Buy %d item, leaving you with %s?",
-                                             "Buy %d items, leaving you with %s?",
-                                             items[0].size() ),
-                                   items[0].size(),
-                                   format_money( g->u.cash - total_price ) ) ) ) {
+        } else if (action == "CONFIRM") {
+            if (total_price > g->u.cash) {
+                popup(_("You can't afford those items!"));
+            } else if (
+                (items[0].empty() && query_yn(_("Really buy nothing?")))
+                || (!items[0].empty()
+                    && query_yn(vgettext("Buy %d item, leaving you with %s?",
+                                         "Buy %d items, leaving you with %s?", items[0].size()),
+                                items[0].size(), format_money(g->u.cash - total_price)))) {
                 done = true;
             }
         } // "switch" on (action)
 
     } // while (!done)
 
-    if( !cancel ) {
+    if (!cancel) {
         g->u.cash -= total_price;
         bool dropped_some = false;
-        for( size_t i = 0; i < items[0].size(); i++ ) {
-            for( int j = 0; j < item_count[0][i]; j++ ) {
-                detached_ptr<item> tmp = item::in_its_container( item::spawn( items[0][i] ) );
+        for (size_t i = 0; i < items[0].size(); i++) {
+            for (int j = 0; j < item_count[0][i]; j++) {
+                detached_ptr<item> tmp = item::in_its_container(item::spawn(items[0][i]));
 
                 // Guns bought from the caravan should always come with an empty
                 // magazine.
-                if( tmp->is_gun() && !tmp->magazine_integral() ) {
-                    tmp->put_in( item::spawn( tmp->magazine_default() ) );
+                if (tmp->is_gun() && !tmp->magazine_integral()) {
+                    tmp->put_in(item::spawn(tmp->magazine_default()));
                 }
 
-                if( g->u.can_pick_volume( *tmp ) && g->u.can_pick_weight( *tmp ) ) {
-                    g->u.i_add( std::move( tmp ) );
+                if (g->u.can_pick_volume(*tmp) && g->u.can_pick_weight(*tmp)) {
+                    g->u.i_add(std::move(tmp));
                 } else { // Could fit it in the inventory!
                     dropped_some = true;
-                    get_map().add_item_or_charges( g->u.bub_pos(), std::move( tmp ) );
+                    get_map().add_item_or_charges(g->u.bub_pos(), std::move(tmp));
                 }
             }
         }
-        if( dropped_some ) {
-            add_msg( _( "You drop some items." ) );
-        }
+        if (dropped_some) { add_msg(_("You drop some items.")); }
     }
 }
 
-std::string caravan_category_name( caravan_category cat )
-{
-    switch( cat ) {
+std::string caravan_category_name(caravan_category cat) {
+    switch (cat) {
         case CARAVAN_CART:
-            return _( "Shopping Cart" );
+            return _("Shopping Cart");
         case CARAVAN_MELEE:
-            return _( "Melee Weapons" );
+            return _("Melee Weapons");
         case CARAVAN_RANGED:
-            return _( "Ranged Weapons" );
+            return _("Ranged Weapons");
         case CARAVAN_AMMUNITION:
-            return _( "Ammuniton" );
+            return _("Ammuniton");
         case CARAVAN_COMPONENTS:
-            return _( "Crafting & Construction Components" );
+            return _("Crafting & Construction Components");
         case CARAVAN_FOOD:
-            return _( "Food & Drugs" );
+            return _("Food & Drugs");
         case CARAVAN_CLOTHES:
-            return _( "Clothing & Armor" );
+            return _("Clothing & Armor");
         case CARAVAN_TOOLS:
-            return _( "Tools, Traps & Grenades" );
+            return _("Tools, Traps & Grenades");
         case NUM_CARAVAN_CATEGORIES:
             break; // error message below
     }
     return "BUG (defense.cpp:caravan_category_name)";
 }
 
-std::vector<itype_id> caravan_items( caravan_category cat )
-{
+std::vector<itype_id> caravan_items(caravan_category cat) {
     std::vector<itype_id> ret;
     std::string group_id;
-    switch( cat ) {
+    switch (cat) {
         case CARAVAN_CART:
             return ret;
 
         case CARAVAN_MELEE:
-            group_id = "defense_caravan_melee" ;
+            group_id = "defense_caravan_melee";
             break;
 
         case CARAVAN_RANGED:
-            group_id = "defense_caravan_ranged" ;
+            group_id = "defense_caravan_ranged";
             break;
 
         case CARAVAN_AMMUNITION:
-            group_id = "defense_caravan_ammunition" ;
+            group_id = "defense_caravan_ammunition";
             break;
 
         case CARAVAN_COMPONENTS:
-            group_id = "defense_caravan_components" ;
+            group_id = "defense_caravan_components";
             break;
 
         case CARAVAN_FOOD:
-            group_id = "defense_caravan_food" ;
+            group_id = "defense_caravan_food";
             break;
 
         case CARAVAN_CLOTHES:
-            group_id = "defense_caravan_clothes" ;
+            group_id = "defense_caravan_clothes";
             break;
 
         case CARAVAN_TOOLS:
-            group_id = "defense_caravan_tools" ;
+            group_id = "defense_caravan_tools";
             break;
 
         case NUM_CARAVAN_CATEGORIES:
-            debugmsg( "Invalid caravan category %d", cat );
+            debugmsg("Invalid caravan category %d", cat);
             return ret;
     }
 
-    std::vector<detached_ptr<item>> item_list = item_group::items_from( item_group_id( group_id ) );
+    std::vector<detached_ptr<item>> item_list = item_group::items_from(item_group_id(group_id));
 
-    for( auto &it : item_list ) {
+    for (auto& it : item_list) {
         itype_id item_type = it->typeId();
-        ret.emplace_back( item_type );
+        ret.emplace_back(item_type);
         // Add the default magazine types for each gun.
-        if( it->is_gun() && !it->magazine_integral() ) {
-            ret.emplace_back( it->magazine_default() );
-        }
+        if (it->is_gun() && !it->magazine_integral()) { ret.emplace_back(it->magazine_default()); }
     }
     return ret;
 }
 
-int caravan_price( Character &who, int price )
-{
+int caravan_price(Character& who, int price) {
     ///\EFFECT_BARTER reduces caravan prices, 5% per point, up to 50%
-    if( who.get_skill_level( skill_barter ) > 10 ) {
-        return static_cast<int>( static_cast<double>( price ) * .5 );
+    if (who.get_skill_level(skill_barter) > 10) {
+        return static_cast<int>(static_cast<double>(price) * .5);
     }
-    return price * ( 1.0 - who.get_skill_level( skill_barter ) * .05 );
+    return price * (1.0 - who.get_skill_level(skill_barter) * .05);
 }
 
-void defense_game::spawn_wave()
-{
-    add_msg( m_info, "********" );
+void defense_game::spawn_wave() {
+    add_msg(m_info, "********");
     int diff = initial_difficulty + current_wave * wave_difficulty;
-    bool themed_wave = one_in( SPECIAL_WAVE_CHANCE ); // All a single monster type
-    g->u.cash += cash_per_wave + ( current_wave - 1 ) * cash_increase;
+    bool themed_wave = one_in(SPECIAL_WAVE_CHANCE); // All a single monster type
+    g->u.cash += cash_per_wave + (current_wave - 1) * cash_increase;
     std::vector<mtype_id> valid = pick_monster_wave();
-    while( diff > 0 ) {
+    while (diff > 0) {
         // Clear out any monsters that exceed our remaining difficulty
-        for( auto it = valid.begin(); it != valid.end(); ) {
-            const mtype &mt = it->obj();
-            if( mt.difficulty > diff ) {
-                it = valid.erase( it );
+        for (auto it = valid.begin(); it != valid.end();) {
+            const mtype& mt = it->obj();
+            if (mt.difficulty > diff) {
+                it = valid.erase(it);
             } else {
                 it++;
             }
         }
-        if( valid.empty() ) {
-            add_msg( m_info, _( "Welcome to Wave %d!" ), current_wave );
-            add_msg( m_info, "********" );
+        if (valid.empty()) {
+            add_msg(m_info, _("Welcome to Wave %d!"), current_wave);
+            add_msg(m_info, "********");
             return;
         }
-        const mtype &type = random_entry( valid ).obj();
-        if( themed_wave ) {
+        const mtype& type = random_entry(valid).obj();
+        if (themed_wave) {
             int num = diff / type.difficulty;
-            if( num >= SPECIAL_WAVE_MIN ) {
+            if (num >= SPECIAL_WAVE_MIN) {
                 // TODO: Do we want a special message here?
-                for( int i = 0; i < num; i++ ) {
-                    spawn_wave_monster( type.id );
-                }
-                add_msg( m_info,  special_wave_message( type.nname( 100 ) ) );
-                add_msg( m_info, "********" );
+                for (int i = 0; i < num; i++) { spawn_wave_monster(type.id); }
+                add_msg(m_info, special_wave_message(type.nname(100)));
+                add_msg(m_info, "********");
                 return;
             } else {
-                themed_wave = false;    // No partially-themed waves
+                themed_wave = false; // No partially-themed waves
             }
         }
         diff -= type.difficulty;
-        spawn_wave_monster( type.id );
+        spawn_wave_monster(type.id);
     }
-    add_msg( m_info, _( "Welcome to Wave %d!" ), current_wave );
-    add_msg( m_info, "********" );
+    add_msg(m_info, _("Welcome to Wave %d!"), current_wave);
+    add_msg(m_info, "********");
 }
 
-std::vector<mtype_id> defense_game::pick_monster_wave()
-{
+std::vector<mtype_id> defense_game::pick_monster_wave() {
     std::vector<mongroup_id> valid;
     std::vector<mtype_id> ret;
 
-    if( zombies || specials ) {
-        if( specials ) {
-            valid.push_back( GROUP_ZOMBIE );
+    if (zombies || specials) {
+        if (specials) {
+            valid.push_back(GROUP_ZOMBIE);
         } else {
-            valid.push_back( GROUP_VANILLA );
+            valid.push_back(GROUP_VANILLA);
         }
     }
-    if( spiders ) {
-        valid.push_back( GROUP_SPIDER );
-    }
-    if( triffids ) {
-        valid.push_back( GROUP_TRIFFID );
-    }
-    if( robots ) {
-        valid.push_back( GROUP_ROBOT );
-    }
-    if( subspace ) {
-        valid.push_back( GROUP_NETHER );
-    }
+    if (spiders) { valid.push_back(GROUP_SPIDER); }
+    if (triffids) { valid.push_back(GROUP_TRIFFID); }
+    if (robots) { valid.push_back(GROUP_ROBOT); }
+    if (subspace) { valid.push_back(GROUP_NETHER); }
 
-    if( valid.empty() ) {
-        debugmsg( "Couldn't find a valid monster group for defense!" );
+    if (valid.empty()) {
+        debugmsg("Couldn't find a valid monster group for defense!");
     } else {
-        ret = MonsterGroupManager::GetMonstersFromGroup( random_entry( valid ) );
+        ret = MonsterGroupManager::GetMonstersFromGroup(random_entry(valid));
     }
 
     return ret;
 }
 
-void defense_game::spawn_wave_monster( const mtype_id &type )
-{
-    for( int tries = 0; tries < 1000; tries++ ) {
+void defense_game::spawn_wave_monster(const mtype_id& type) {
+    for (int tries = 0; tries < 1000; tries++) {
         point_bub_ms pnt;
-        if( location == DEFLOC_HOSPITAL || location == DEFLOC_MALL ) {
+        if (location == DEFLOC_HOSPITAL || location == DEFLOC_MALL) {
             // Always spawn to the north!
-            pnt = point_bub_ms( rng( g_half_mapsize_x, g_half_mapsize_x + SEEX ), SEEY );
-        } else if( one_in( 2 ) ) {
-            pnt = point_bub_ms( rng( g_half_mapsize_x, g_half_mapsize_x + SEEX ), rng( 1, SEEY ) );
-            if( one_in( 2 ) ) {
-                pnt = point_bub_ms( pnt.x(), -pnt.y() ) + point_rel_ms( 0, g_mapsize_y - 1 );
+            pnt = point_bub_ms(rng(g_half_mapsize_x, g_half_mapsize_x + SEEX), SEEY);
+        } else if (one_in(2)) {
+            pnt = point_bub_ms(rng(g_half_mapsize_x, g_half_mapsize_x + SEEX), rng(1, SEEY));
+            if (one_in(2)) {
+                pnt = point_bub_ms(pnt.x(), -pnt.y()) + point_rel_ms(0, g_mapsize_y - 1);
             }
         } else {
-            pnt = point_bub_ms( rng( 1, SEEX ), rng( g_half_mapsize_y, g_half_mapsize_y + SEEY ) );
-            if( one_in( 2 ) ) {
-                pnt = point_bub_ms( -pnt.x(), pnt.y() ) + point_rel_ms( g_mapsize_x - 1, 0 );
+            pnt = point_bub_ms(rng(1, SEEX), rng(g_half_mapsize_y, g_half_mapsize_y + SEEY));
+            if (one_in(2)) {
+                pnt = point_bub_ms(-pnt.x(), pnt.y()) + point_rel_ms(g_mapsize_x - 1, 0);
             }
         }
-        monster *const mon = g->place_critter_at( type, tripoint_bub_ms( pnt, g->get_levz() ) );
-        if( !mon ) {
-            continue;
-        }
-        monster &tmp = *mon;
+        monster* const mon = g->place_critter_at(type, tripoint_bub_ms(pnt, g->get_levz()));
+        if (!mon) { continue; }
+        monster& tmp = *mon;
         tmp.wander_pos = g->u.bub_pos();
         tmp.wandf = 150;
         // We want to kill!
@@ -1443,43 +1333,40 @@ void defense_game::spawn_wave_monster( const mtype_id &type )
     }
 }
 
-std::string defense_game::special_wave_message( std::string name )
-{
+std::string defense_game::special_wave_message(std::string name) {
     std::string ret;
-    ret += string_format( _( "Wave %d: " ), current_wave );
+    ret += string_format(_("Wave %d: "), current_wave);
 
     // Capitalize
-    capitalize_letter( name );
-    for( size_t i = 2; i < name.size(); i++ ) {
-        if( name[i - 1] == ' ' ) {
-            capitalize_letter( name, i );
-        }
+    capitalize_letter(name);
+    for (size_t i = 2; i < name.size(); i++) {
+        if (name[i - 1] == ' ') { capitalize_letter(name, i); }
     }
 
-    switch( rng( 1, 8 ) ) {
+    switch (rng(1, 8)) {
         case 1:
-            ret += string_format( _( "Invasion of the %s!" ), name );
+            ret += string_format(_("Invasion of the %s!"), name);
             break;
         case 2:
-            ret += string_format( _( "Attack of the %s!" ), name );
+            ret += string_format(_("Attack of the %s!"), name);
             break;
         case 3:
-            ret += string_format( _( "%s Attack!" ), name );
+            ret += string_format(_("%s Attack!"), name);
             break;
         case 4:
-            ret += string_format( _( "%s from Hell!" ), name );
+            ret += string_format(_("%s from Hell!"), name);
             break;
         case 5:
-            ret += string_format( _( "Beware!  %s!" ), name );
+            ret += string_format(_("Beware!  %s!"), name);
             break;
         case 6:
-            ret += string_format( _( "The Day of the %s!" ), name );
+            ret += string_format(_("The Day of the %s!"), name);
             break;
         case 7:
-            ret += string_format( _( "Revenge of the %s!" ), name );
+            ret += string_format(_("Revenge of the %s!"), name);
             break;
         case 8:
-            ret += string_format( _( "Rise of the %s!" ), name );
+            ret += string_format(_("Rise of the %s!"), name);
             break;
     }
 

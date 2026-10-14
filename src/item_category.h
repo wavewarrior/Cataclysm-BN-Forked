@@ -1,12 +1,12 @@
 #pragma once
 
-#include <optional>
-#include <string>
-#include <vector>
-
 #include "flat_set.h"
 #include "translations.h"
 #include "type_id.h"
+
+#include <optional>
+#include <string>
+#include <vector>
 
 class JsonIn;
 class JsonObject;
@@ -18,8 +18,8 @@ struct zone_priority_data {
     zone_type_id id;
     cata::flat_set<flag_id> flags;
 
-    void deserialize( JsonIn &jsin );
-    void load( JsonObject &jo );
+    void deserialize(JsonIn& jsin);
+    void load(JsonObject& jo);
 };
 /**
  * Contains metadata for one category of items
@@ -28,55 +28,56 @@ struct zone_priority_data {
  * contains the info about one such category.  Actual categories are normally added
  * by class @ref Item_factory from definitions in the JSON data files.
  */
-class item_category
-{
-    private:
-        /** Name of category for displaying to the user */
-        translation name_;
-        /** Used to sort categories when displaying.  Lower values are shown first. */
-        int sort_rank_ = 0;
+class item_category {
+private:
+    /** Name of category for displaying to the user */
+    translation name_;
+    /** Used to sort categories when displaying.  Lower values are shown first. */
+    int sort_rank_ = 0;
 
-        std::optional<zone_type_id> zone_;
-        std::vector<zone_priority_data> zone_priority_;
+    std::optional<zone_type_id> zone_;
+    std::vector<zone_priority_data> zone_priority_;
 
-    public:
-        /** Unique ID of this category, used when loading from JSON. */
-        item_category_id id;
+public:
+    /** Unique ID of this category, used when loading from JSON. */
+    item_category_id id;
 
-        item_category() = default;
-        /**
-         * @param id @ref id_
-         * @param name @ref name_
-         * @param sort_rank @ref sort_rank_
-         */
-        item_category( const item_category_id &id, const translation &name, int sort_rank )
-            : name_( name ), sort_rank_( sort_rank ), id( id ) {}
-        item_category( const std::string &id, const translation &name, int sort_rank )
-            : name_( name ), sort_rank_( sort_rank ), id( item_category_id( id ) ) {}
+    item_category() = default;
+    /**
+     * @param id @ref id_
+     * @param name @ref name_
+     * @param sort_rank @ref sort_rank_
+     */
+    item_category(const item_category_id& id, const translation& name, int sort_rank)
+        : name_(name),
+          sort_rank_(sort_rank),
+          id(id) {}
+    item_category(const std::string& id, const translation& name, int sort_rank)
+        : name_(name),
+          sort_rank_(sort_rank),
+          id(item_category_id(id)) {}
 
-        std::string name() const;
-        item_category_id get_id() const;
-        std::optional<zone_type_id> priority_zone( const item &it ) const;
-        std::optional<zone_type_id> zone() const;
-        int sort_rank() const;
+    std::string name() const;
+    item_category_id get_id() const;
+    std::optional<zone_type_id> priority_zone(const item& it) const;
+    std::optional<zone_type_id> zone() const;
+    int sort_rank() const;
 
-        /**
-         * Comparison operators
-         *
-         * Used for sorting.  Will result in sorting by @ref sort_rank, then by @ref name, then by @ref id.
-         */
-        /*@{*/
-        bool operator<( const item_category &rhs ) const;
-        bool operator==( const item_category &rhs ) const;
-        bool operator!=( const item_category &rhs ) const;
-        /*@}*/
+    /**
+     * Comparison operators
+     *
+     * Used for sorting.  Will result in sorting by @ref sort_rank, then by @ref name, then by @ref
+     * id.
+     */
+    /*@{*/
+    bool operator<(const item_category& rhs) const;
+    bool operator==(const item_category& rhs) const;
+    bool operator!=(const item_category& rhs) const;
+    /*@}*/
 
-        // generic_factory stuff
-        bool was_loaded = false;
+    // generic_factory stuff
+    bool was_loaded = false;
 
-        static void load_item_cat( const JsonObject &jo, const std::string &src );
-        void load( const JsonObject &jo, const std::string & );
+    static void load_item_cat(const JsonObject& jo, const std::string& src);
+    void load(const JsonObject& jo, const std::string&);
 };
-
-
-

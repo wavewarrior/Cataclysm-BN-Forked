@@ -1,18 +1,16 @@
 #pragma once
 
-#include <array>
-
-#include <string>
-#include <memory>
-
 #include "color_loader.h"
 #include "point.h"
 #include "sdl_wrappers.h"
 
+#include <array>
+#include <memory>
+#include <string>
+
 class cata_tiles;
 
-namespace catacurses
-{
+namespace catacurses {
 enum base_color : short;
 class window;
 } // namespace catacurses
@@ -25,8 +23,8 @@ extern std::array<SDL_Color, color_loader<SDL_Color>::COLOR_NAMES_COUNT> windows
 // may be displayed. Actually, this is supposed to be called from init.cpp,
 // and only from there.
 void load_tileset();
-void rescale_tileset( float size );
-bool save_screenshot( const std::string &file_path );
+void rescale_tileset(float size);
+bool save_screenshot(const std::string& file_path);
 void toggle_fullscreen_window();
 extern void repoint_overmap_tilecontext();
 struct window_dimensions {
@@ -36,18 +34,17 @@ struct window_dimensions {
     point window_pos_pixel;
     point window_size_pixel;
 };
-window_dimensions get_window_dimensions( const catacurses::window &win );
+window_dimensions get_window_dimensions(const catacurses::window& win);
 // Get dimensional info of an imaginary normal catacurses::window with the given
 // position and size. Unlike real catacurses::window, size can be zero.
-window_dimensions get_window_dimensions( point pos, point size );
+window_dimensions get_window_dimensions(point pos, point size);
 auto get_sdl_window_size() -> point;
 auto get_sdl_font_size() -> point;
 
-const SDL_Renderer_Ptr &get_sdl_renderer();
-const SDL_Window_Ptr &get_sdl_window();
-bool handle_resize( int w, int h );
+const SDL_Renderer_Ptr& get_sdl_renderer();
+const SDL_Window_Ptr& get_sdl_window();
+bool handle_resize(int w, int h);
 
 /// Installs the renderer returned by get_sdl_renderer(); tests must provide one
 /// before loading tilesets (the game sets it up in init_interface()).
-auto set_sdl_renderer( SDL_Renderer_Ptr r ) -> void;
-
+auto set_sdl_renderer(SDL_Renderer_Ptr r) -> void;

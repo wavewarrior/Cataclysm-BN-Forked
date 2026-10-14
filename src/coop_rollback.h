@@ -19,21 +19,21 @@ struct coop_rollback_entry {
 };
 
 struct coop_rollback_engine {
-        /// Construct with a maximum ring-buffer capacity (default 100 events).
-        explicit coop_rollback_engine( int capacity = 100 );
+    /// Construct with a maximum ring-buffer capacity (default 100 events).
+    explicit coop_rollback_engine(int capacity = 100);
 
-        /// Record an applied event for potential rollback.
-        auto push( int tick, const coop_recorded_event& recorded ) -> void;
+    /// Record an applied event for potential rollback.
+    auto push(int tick, const coop_recorded_event& recorded) -> void;
 
-        /// Reverse all events newer than `target_tick`, delegating the inverse of
-        /// each to the World event interpreter.  Returns the number of events
-        /// rolled back.
-        auto rollback_to( map& target, int target_tick ) -> int;
+    /// Reverse all events newer than `target_tick`, delegating the inverse of
+    /// each to the World event interpreter.  Returns the number of events
+    /// rolled back.
+    auto rollback_to(map& target, int target_tick) -> int;
 
-        /// Current number of entries in the buffer.
-        auto size() const -> std::size_t { return entries_.size(); }
+    /// Current number of entries in the buffer.
+    auto size() const -> std::size_t { return entries_.size(); }
 
-    private:
-        std::deque<coop_rollback_entry> entries_;
-        int capacity_;
+private:
+    std::deque<coop_rollback_entry> entries_;
+    int capacity_;
 };

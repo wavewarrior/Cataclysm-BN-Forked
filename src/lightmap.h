@@ -1,13 +1,13 @@
 #pragma once
 
+#include "hsv_color.h"
+
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <optional>
 #include <ostream>
 #include <string_view>
-
-#include "hsv_color.h"
 
 static constexpr float LIGHT_SOURCE_LOCAL = 0.1f;
 static constexpr float LIGHT_SOURCE_BRIGHT = 10.0f;
@@ -51,74 +51,62 @@ struct light_color_rgb {
 
     bool is_colored() const { return r > 0.0f || g > 0.0f || b > 0.0f; }
 
-    light_color_rgb &operator+=( const light_color_rgb &rhs ) {
+    light_color_rgb& operator+=(const light_color_rgb& rhs) {
         r += rhs.r;
         g += rhs.g;
         b += rhs.b;
         return *this;
     }
 
-    light_color_rgb operator*( float scale ) const {
-        return { r * scale, g * scale, b * scale };
-    }
+    light_color_rgb operator*(float scale) const { return {r * scale, g * scale, b * scale}; }
 
-    bool operator==( const light_color_rgb &rhs ) const {
+    bool operator==(const light_color_rgb& rhs) const {
         return r == rhs.r && g == rhs.g && b == rhs.b;
     }
-    bool operator!=( const light_color_rgb &rhs ) const { return !( *this == rhs ); }
+    bool operator!=(const light_color_rgb& rhs) const { return !(*this == rhs); }
 
     // HSV → RGB conversion (H in degrees [0,360), S/V in [0,1])
-    static light_color_rgb from_hsv( float h, float s, float v );
+    static light_color_rgb from_hsv(float h, float s, float v);
 };
 
 // Dawn/dusk tint: returns cached warm color for twilight or empty outside.
-light_color_rgb dawn_dusk_color_for_lightmap( std::string_view dimension );
+light_color_rgb dawn_dusk_color_for_lightmap(std::string_view dimension);
 
 // Converts a JSON light colour ( std::optional<RGBColor>, 0-255, a == 0 means unset )
 // to the normalised energy form the CPU colour lane uses.  Mirrors color_is_set() in
 // src/compute/gpu_lm.cpp so the CPU and GPU light paths agree on what counts as
 // "no colour".
-auto light_color_from_json( const std::optional<RGBColor> &color ) -> light_color_rgb;
+auto light_color_from_json(const std::optional<RGBColor>& color) -> light_color_rgb;
 
-#define LIGHT_RANGE(b) static_cast<int>( -std::log(LIGHT_AMBIENT_LOW / static_cast<float>(b)) * (1.0 / LIGHT_TRANSPARENCY_OPEN_AIR) )
+#define LIGHT_RANGE(b)                                       \
+    static_cast<int>(                                        \
+        -std::log(LIGHT_AMBIENT_LOW / static_cast<float>(b)) \
+        * (1.0 / LIGHT_TRANSPARENCY_OPEN_AIR))
 
 enum class lit_level : int {
     DARK = 0,
-    LOW, // Hard to see
+    LOW,         // Hard to see
     BRIGHT_ONLY, // bright but indistinct
     LIT,
-    BRIGHT, // Probably only for light sources
+    BRIGHT,    // Probably only for light sources
     MEMORIZED, // Not a light level but behaves similarly
-    BLANK // blank space, not an actual light level
+    BLANK      // blank space, not an actual light level
 };
 
-template<typename T>
-constexpr bool operator>( const T &lhs, const lit_level &rhs )
-{
-    return lhs > static_cast<T>( rhs );
+template <typename T> constexpr bool operator>(const T& lhs, const lit_level& rhs) {
+    return lhs > static_cast<T>(rhs);
 }
 
-template<typename T>
-constexpr bool operator<=( const T &lhs, const lit_level &rhs )
-{
-    return !operator>( lhs, rhs );
+template <typename T> constexpr bool operator<=(const T& lhs, const lit_level& rhs) {
+    return !operator>(lhs, rhs);
 }
 
-template<typename T>
-constexpr bool operator!=( const lit_level &lhs, const T &rhs )
-{
-    return static_cast<T>( lhs ) != rhs;
+template <typename T> constexpr bool operator!=(const lit_level& lhs, const T& rhs) {
+    return static_cast<T>(lhs) != rhs;
 }
 
-inline std::ostream &operator<<( std::ostream &os, const lit_level &ll )
-{
-    return os << static_cast<int>( ll );
+inline std::ostream& operator<<(std::ostream& os, const lit_level& ll) {
+    return os << static_cast<int>(ll);
 }
 
-enum vision_adjustment {
-    VISION_ADJUST_NONE,
-    VISION_ADJUST_SOLID,
-    VISION_ADJUST_HIDDEN
-};
-
-
+enum vision_adjustment { VISION_ADJUST_NONE, VISION_ADJUST_SOLID, VISION_ADJUST_HIDDEN };

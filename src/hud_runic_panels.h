@@ -1,10 +1,10 @@
 #pragma once
 #ifndef CATA_SRC_HUD_RUNIC_PANELS_H
-#define CATA_SRC_HUD_RUNIC_PANELS_H
+#    define CATA_SRC_HUD_RUNIC_PANELS_H
 
-#include <string>
+#    include "hud_runic.h"
 
-#include "hud_runic.h"
+#    include <string>
 
 class avatar;
 
@@ -55,9 +55,9 @@ class avatar;
 /// treatment — a gold left edge over a dark fill — and gains a second row of
 /// chips naming the reason, so bleeding and bitten land against the limb
 /// rather than in a bar at the other end of the screen.
-auto hud_soma( avatar &u, const hud_runic::layout &l ) -> std::string;
+auto hud_soma(avatar& u, const hud_runic::layout& l) -> std::string;
 
 /// Right column under the radar: mission bearing, current target, arms.
-auto hud_dock( avatar &u, const hud_runic::layout &l ) -> std::string;
+auto hud_dock(avatar& u, const hud_runic::layout& l) -> std::string;
 
 #endif // CATA_SRC_HUD_RUNIC_PANELS_H

@@ -1,59 +1,51 @@
 #pragma once
 
+#include "clone_ptr.h"
+
 #include <memory>
 #include <string>
 #include <utility>
-
-#include "clone_ptr.h"
 
 class JsonObject;
 class monster;
 
 using mattack_id = std::string;
-using mon_action_attack = bool ( * )( monster * );
+using mon_action_attack = bool (*)(monster*);
 
-class mattack_actor
-{
-    protected:
-        mattack_actor() = default;
-    public:
-        mattack_actor( const mattack_id &new_id ) : id( new_id ) { }
+class mattack_actor {
+protected:
+    mattack_actor() = default;
 
-        mattack_id id;
-        bool was_loaded = false;
+public:
+    mattack_actor(const mattack_id& new_id): id(new_id) {}
 
-        int cooldown = 0;
+    mattack_id id;
+    bool was_loaded = false;
 
-        void load( const JsonObject &jo, const std::string &src );
+    int cooldown = 0;
 
-        virtual ~mattack_actor() = default;
-        virtual bool call( monster & ) const = 0;
-        virtual std::unique_ptr<mattack_actor> clone() const = 0;
-        virtual void load_internal( const JsonObject &jo, const std::string &src ) = 0;
-        virtual void finalize() {};
+    void load(const JsonObject& jo, const std::string& src);
+
+    virtual ~mattack_actor() = default;
+    virtual bool call(monster&) const = 0;
+    virtual std::unique_ptr<mattack_actor> clone() const = 0;
+    virtual void load_internal(const JsonObject& jo, const std::string& src) = 0;
+    virtual void finalize() {};
 };
 
 struct mtype_special_attack {
-    protected:
-        // TODO: Remove friend
-        friend struct mtype;
-        cata::clone_ptr<mattack_actor> actor;
+protected:
+    // TODO: Remove friend
+    friend struct mtype;
+    cata::clone_ptr<mattack_actor> actor;
 
-    public:
-        mtype_special_attack( const mattack_id &id, mon_action_attack f );
-        mtype_special_attack( std::unique_ptr<mattack_actor> f ) : actor( std::move( f ) ) { }
+public:
+    mtype_special_attack(const mattack_id& id, mon_action_attack f);
+    mtype_special_attack(std::unique_ptr<mattack_actor> f): actor(std::move(f)) {}
 
-        const mattack_actor &operator*() const {
-            return *actor;
-        }
+    const mattack_actor& operator*() const { return *actor; }
 
-        const mattack_actor *operator->() const {
-            return actor.get();
-        }
+    const mattack_actor* operator->() const { return actor.get(); }
 
-        const mattack_actor *get() const {
-            return actor.get();
-        }
+    const mattack_actor* get() const { return actor.get(); }
 };
-
-

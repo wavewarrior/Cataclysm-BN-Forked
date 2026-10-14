@@ -1,36 +1,32 @@
 #pragma once
 
 #include "catalua_type_operators.h"
+#include "type_id.h"
 
 #include <string>
 #include <utility>
 
-#include "type_id.h"
-
 class JsonObject;
 
-class ammunition_type
-{
-        friend class DynamicDataLoader;
-    public:
-        ammunition_type() = default;
-        explicit ammunition_type( std::string name ) : name_( std::move( name ) ) { }
+class ammunition_type {
+    friend class DynamicDataLoader;
 
-        std::string name() const;
+public:
+    ammunition_type() = default;
+    explicit ammunition_type(std::string name): name_(std::move(name)) {}
 
-        const itype_id &default_ammotype() const {
-            return default_ammotype_;
-        }
+    std::string name() const;
 
-    private:
-        std::string name_;
-        itype_id default_ammotype_;
+    const itype_id& default_ammotype() const { return default_ammotype_; }
 
-        static void load_ammunition_type( const JsonObject &jsobj );
-        static void reset();
-        static void check_consistency();
+private:
+    std::string name_;
+    itype_id default_ammotype_;
 
-    public:
-        LUA_TYPE_OPS( ammunition_type, default_ammotype_ );
+    static void load_ammunition_type(const JsonObject& jsobj);
+    static void reset();
+    static void check_consistency();
+
+public:
+    LUA_TYPE_OPS(ammunition_type, default_ammotype_);
 };
-

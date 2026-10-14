@@ -18,9 +18,9 @@
 #include <vector>
 
 #if defined(_WIN32)
-#include <io.h>
+#    include <io.h>
 #else
-#include <unistd.h>
+#    include <unistd.h>
 #endif
 
 #include "action.h"
@@ -45,113 +45,97 @@
 #include "rng.h"
 #include "ui_manager.h"
 
-namespace
-{
+namespace {
 
 using driver_items::outcome;
 
 /// `read(2)`/`write(2)` on a raw descriptor; MSVC spells them `_read`/`_write` with `int` counts.
-auto fd_read( int fd, char *buf, std::size_t len ) -> std::int64_t
-{
+auto fd_read(int fd, char* buf, std::size_t len) -> std::int64_t {
 #if defined(_WIN32)
-    return _read( fd, buf, static_cast<unsigned int>( len ) );
+    return _read(fd, buf, static_cast<unsigned int>(len));
 #else
-    return ::read( fd, buf, len );
+    return ::read(fd, buf, len);
 #endif
 }
 
-auto fd_write( int fd, const char *buf, std::size_t len ) -> std::int64_t
-{
+auto fd_write(int fd, const char* buf, std::size_t len) -> std::int64_t {
 #if defined(_WIN32)
-    return _write( fd, buf, static_cast<unsigned int>( len ) );
+    return _write(fd, buf, static_cast<unsigned int>(len));
 #else
-    return ::write( fd, buf, len );
+    return ::write(fd, buf, len);
 #endif
 }
 
 /// Buffered line reader over a raw descriptor. `read_line` is false at EOF or on a read error.
-class line_reader
-{
-    public:
-        explicit line_reader( int fd ) : fd_( fd ) {}
+class line_reader {
+public:
+    explicit line_reader(int fd): fd_(fd) {}
 
-        auto read_line( std::string &out ) -> bool {
-            size_t nl = buf_.find( '\n' );
-            while( nl == std::string::npos ) {
-                char chunk[4096];
-                const auto n = fd_read( fd_, chunk, sizeof( chunk ) );
-                if( n <= 0 ) {
-                    return false;
-                }
-                buf_.append( chunk, static_cast<size_t>( n ) );
-                nl = buf_.find( '\n' );
-            }
-            out = buf_.substr( 0, nl );
-            buf_.erase( 0, nl + 1 );
-            if( !out.empty() && out.back() == '\r' ) {
-                out.pop_back();
-            }
-            return true;
+    auto read_line(std::string& out) -> bool {
+        size_t nl = buf_.find('\n');
+        while (nl == std::string::npos) {
+            char chunk[4096];
+            const auto n = fd_read(fd_, chunk, sizeof(chunk));
+            if (n <= 0) { return false; }
+            buf_.append(chunk, static_cast<size_t>(n));
+            nl = buf_.find('\n');
         }
+        out = buf_.substr(0, nl);
+        buf_.erase(0, nl + 1);
+        if (!out.empty() && out.back() == '\r') { out.pop_back(); }
+        return true;
+    }
 
-    private:
-        int fd_;
-        std::string buf_;
+private:
+    int fd_;
+    std::string buf_;
 };
 
-auto write_all( int fd, const std::string &s ) -> void
-{
-    const char *ptr = s.data();
+auto write_all(int fd, const std::string& s) -> void {
+    const char* ptr = s.data();
     auto left = s.size();
-    while( left > 0 ) {
-        const auto w = fd_write( fd, ptr, left );
-        if( w <= 0 ) {
-            return;
-        }
+    while (left > 0) {
+        const auto w = fd_write(fd, ptr, left);
+        if (w <= 0) { return; }
         ptr += w;
-        left -= static_cast<size_t>( w );
+        left -= static_cast<size_t>(w);
     }
 }
 
 /// `id` is empty when the request carried none that could be read.
-auto begin_response( JsonOut &jo, const std::optional<int> &id,
-                     std::string_view status ) -> void
-{
+auto begin_response(JsonOut& jo, const std::optional<int>& id, std::string_view status) -> void {
     jo.start_object();
-    jo.member( "id" );
-    if( id ) {
-        jo.write( *id );
+    jo.member("id");
+    if (id) {
+        jo.write(*id);
     } else {
         jo.write_null();
     }
-    jo.member( "status", std::string( status ) );
+    jo.member("status", std::string(status));
 }
 
-auto error_line( const std::optional<int> &id, const std::string &why ) -> std::string
-{
+auto error_line(const std::optional<int>& id, const std::string& why) -> std::string {
     std::ostringstream os;
-    JsonOut jo( os, false );
-    begin_response( jo, id, "error" );
-    jo.member( "error", why );
+    JsonOut jo(os, false);
+    begin_response(jo, id, "error");
+    jo.member("error", why);
     jo.end_object();
     return os.str() + "\n";
 }
 
-auto ping_line( int id ) -> std::string
-{
+auto ping_line(int id) -> std::string {
     std::ostringstream os;
-    JsonOut jo( os, false );
-    begin_response( jo, id, "ok" );
-    jo.member( "ready", true );
+    JsonOut jo(os, false);
+    begin_response(jo, id, "ok");
+    jo.member("ready", true);
     jo.end_object();
     return os.str() + "\n";
 }
 
-auto quit_line( int id ) -> std::string
-{
+auto quit_line(int id) -> std::string {
     std::ostringstream os;
-    JsonOut jo( os, false );
-    begin_response( jo, id, "ok" );
+    JsonOut jo(os, false);
+    begin_response(jo, id, "ok");
     jo.end_object();
     return os.str() + "\n";
 }
@@ -212,30 +196,27 @@ struct action_result {
 };
 
 /// How a request reads while a screen waits for a key.
-auto modal_result( bool time_passed = false ) -> action_result
-{
-    action_result result = { .time_passed = time_passed };
-    if( modal ) {
+auto modal_result(bool time_passed = false) -> action_result {
+    action_result result = {.time_passed = time_passed};
+    if (modal) {
         result.outcome = driver_items::outcome::awaiting_input;
         result.prompt = modal->prompt;
     }
     return result;
 }
 
-auto log_window() -> std::vector<log_entry>
-{
-    const auto recent = Messages::recent_messages_rich( message_window );
+auto log_window() -> std::vector<log_entry> {
+    const auto recent = Messages::recent_messages_rich(message_window);
     std::vector<log_entry> entries;
-    entries.reserve( recent.size() );
-    for( const Messages::rich_message &message : recent ) {
-        entries.push_back( { .seq = message.seq, .text = message.text } );
+    entries.reserve(recent.size());
+    for (const Messages::rich_message& message : recent) {
+        entries.push_back({.seq = message.seq, .text = message.text});
     }
     return entries;
 }
 
-auto take_snapshot() -> snapshot
-{
-    return { .pos = get_avatar().abs_pos(), .turn = calendar::turn, .messages = log_window() };
+auto take_snapshot() -> snapshot {
+    return {.pos = get_avatar().abs_pos(), .turn = calendar::turn, .messages = log_window()};
 }
 
 /// Whether an observation carries the attached view. The response to `view` itself does not: it
@@ -246,131 +227,118 @@ enum class view_mode { attach, none };
 /// when that request began, what the request did, and what else the response carries.
 struct observation {
     int id = 0;
-    const snapshot &before;
-    const action_result &result;
+    const snapshot& before;
+    const action_result& result;
     /// Adds members of its own to the response (a query's answer) and says whether it had to
     /// cut something to stay within the size ceiling.
-    std::function<bool( JsonOut & )> payload = nullptr;
+    std::function<bool(JsonOut&)> payload = nullptr;
     view_mode views = view_mode::attach;
 };
 
 /// Observation response: the contract's common payload. Reads the world, never advances it.
-auto observation_line( const observation &asked ) -> std::string
-{
+auto observation_line(const observation& asked) -> std::string {
     const auto id = asked.id;
-    const snapshot &before = asked.before;
-    const action_result &result = asked.result;
-    const std::function<bool( JsonOut & )> &payload = asked.payload;
+    const snapshot& before = asked.before;
+    const action_result& result = asked.result;
+    const std::function<bool(JsonOut&)>& payload = asked.payload;
     const auto views = asked.views;
-    const avatar &u = get_avatar();
-    message_delta delta = compute_message_delta( before.messages, log_window() );
-    const bool capped = cap_messages( delta.fresh, max_new_messages, max_message_bytes );
+    const avatar& u = get_avatar();
+    message_delta delta = compute_message_delta(before.messages, log_window());
+    const bool capped = cap_messages(delta.fresh, max_new_messages, max_message_bytes);
     bool truncated = delta.lost || capped;
     // Death ends the Episode, so it outranks whatever the action itself reported.
     const bool dead = u.is_dead_state();
 
     std::ostringstream os;
-    JsonOut jo( os, false );
-    begin_response( jo, id, "ok" );
-    jo.member( "boundary", std::string( !dead &&
-                                        result.outcome == driver_items::outcome::awaiting_input ?
-                                        "needs_input" : "turn_complete" ) );
-    jo.member( "turn", to_turn<int>( calendar::turn ) );
-    jo.member( "time_passed", result.time_passed );
-    jo.member( "moved", u.abs_pos() != before.pos );
-    jo.member( "new_messages" );
+    JsonOut jo(os, false);
+    begin_response(jo, id, "ok");
+    jo.member(
+        "boundary",
+        std::string(
+            !dead && result.outcome == driver_items::outcome::awaiting_input
+                ? "needs_input"
+                : "turn_complete"));
+    jo.member("turn", to_turn<int>(calendar::turn));
+    jo.member("time_passed", result.time_passed);
+    jo.member("moved", u.abs_pos() != before.pos);
+    jo.member("new_messages");
     jo.start_array();
-    for( const std::string &message : delta.fresh ) {
-        jo.write( message );
-    }
+    for (const std::string& message : delta.fresh) { jo.write(message); }
     jo.end_array();
-    jo.member( "prompt" );
-    if( result.prompt.empty() ) {
+    jo.member("prompt");
+    if (result.prompt.empty()) {
         jo.write_null();
     } else {
-        jo.write( std::string( result.prompt ) );
+        jo.write(std::string(result.prompt));
     }
-    jo.member( "hp", u.hp_percentage() );
-    jo.member( "pain", u.get_pain() );
-    jo.member( "stamina", u.get_stamina() );
-    jo.member( "hunger", u.get_stored_kcal() );
-    jo.member( "thirst", u.get_thirst() );
-    if( payload ) {
-        truncated |= payload( jo );
-    }
-    if( attached_view_radius > 0 && views == view_mode::attach ) {
+    jo.member("hp", u.hp_percentage());
+    jo.member("pain", u.get_pain());
+    jo.member("stamina", u.get_stamina());
+    jo.member("hunger", u.get_stored_kcal());
+    jo.member("thirst", u.get_thirst());
+    if (payload) { truncated |= payload(jo); }
+    if (attached_view_radius > 0 && views == view_mode::attach) {
         // The view takes what the rest of the response leaves of the ceiling: it shrinks, and
         // says so, before the response outgrows it.
-        const size_t used = static_cast<size_t>( os.tellp() );
-        const size_t left = max_response_bytes > used + reserved_tail_bytes ?
-                            max_response_bytes - used - reserved_tail_bytes : 0;
-        jo.member( "view" );
+        const size_t used = static_cast<size_t>(os.tellp());
+        const size_t left =
+            max_response_bytes > used + reserved_tail_bytes
+                ? max_response_bytes - used - reserved_tail_bytes
+                : 0;
+        jo.member("view");
         jo.start_object();
-        const bool cut = driver_view::write_view( jo, attached_view_radius, left );
-        if( cut ) {
-            jo.member( "truncated", true );
-        }
+        const bool cut = driver_view::write_view(jo, attached_view_radius, left);
+        if (cut) { jo.member("truncated", true); }
         jo.end_object();
         truncated |= cut;
     }
-    const std::string_view outcome_text = dead ? std::string_view( "died" ) :
-                                          driver_items::outcome_name( result.outcome );
-    jo.member( "outcome", std::string( outcome_text ) );
-    if( !dead && ( result.outcome == driver_items::outcome::interrupted ||
-                   result.outcome == driver_items::outcome::unsupported ||
-                   ( result.outcome == driver_items::outcome::refused && !result.reason.empty() ) ) ) {
-        jo.member( "reason", std::string( result.reason ) );
+    const std::string_view outcome_text =
+        dead ? std::string_view("died") : driver_items::outcome_name(result.outcome);
+    jo.member("outcome", std::string(outcome_text));
+    if (!dead
+        && (result.outcome == driver_items::outcome::interrupted
+            || result.outcome == driver_items::outcome::unsupported
+            || (result.outcome == driver_items::outcome::refused && !result.reason.empty()))) {
+        jo.member("reason", std::string(result.reason));
     }
-    if( !dead && !result.detail.empty() ) {
-        jo.member( "detail", result.detail );
-    }
-    if( !dead && result.turns ) {
-        jo.member( "turns", *result.turns );
-    }
-    if( !dead && !result.progress.empty() ) {
-        jo.member( "progress", result.progress );
-    }
-    if( truncated ) {
-        jo.member( "truncated", true );
-    }
+    if (!dead && !result.detail.empty()) { jo.member("detail", result.detail); }
+    if (!dead && result.turns) { jo.member("turns", *result.turns); }
+    if (!dead && !result.progress.empty()) { jo.member("progress", result.progress); }
+    if (truncated) { jo.member("truncated", true); }
     jo.end_object();
     return os.str() + "\n";
 }
 
-auto state_line( int id ) -> std::string
-{
-    return observation_line( { .id = id, .before = take_snapshot(), .result = modal_result() } );
+auto state_line(int id) -> std::string {
+    return observation_line({.id = id, .before = take_snapshot(), .result = modal_result()});
 }
 
-auto seed_line( int id, unsigned int seed ) -> std::string
-{
-    rng_set_engine_seed( seed );
+auto seed_line(int id, unsigned int seed) -> std::string {
+    rng_set_engine_seed(seed);
     std::ostringstream os;
-    JsonOut jo( os, false );
-    begin_response( jo, id, "ok" );
-    jo.member( "seed", seed );
+    JsonOut jo(os, false);
+    begin_response(jo, id, "ok");
+    jo.member("seed", seed);
     jo.end_object();
     return os.str() + "\n";
 }
 
-auto set_time_line( int id, const driver_time::pinned &clock ) -> std::string
-{
+auto set_time_line(int id, const driver_time::pinned& clock) -> std::string {
     std::ostringstream os;
-    JsonOut jo( os, false );
-    begin_response( jo, id, "ok" );
-    jo.member( "turn", clock.turn );
-    jo.member( "date", clock.date );
-    jo.member( "time", clock.time );
+    JsonOut jo(os, false);
+    begin_response(jo, id, "ok");
+    jo.member("turn", clock.turn);
+    jo.member("date", clock.date);
+    jo.member("time", clock.time);
     jo.end_object();
     return os.str() + "\n";
 }
 
-auto attach_view_line( int id, int radius ) -> std::string
-{
+auto attach_view_line(int id, int radius) -> std::string {
     std::ostringstream os;
-    JsonOut jo( os, false );
-    begin_response( jo, id, "ok" );
-    jo.member( "attach_view", radius );
+    JsonOut jo(os, false);
+    begin_response(jo, id, "ok");
+    jo.member("attach_view", radius);
     jo.end_object();
     return os.str() + "\n";
 }
@@ -378,11 +346,10 @@ auto attach_view_line( int id, int radius ) -> std::string
 /// Runs world steps until the avatar has moves again, at most `turn_budget` of them.
 /// Whatever is left of the avatar's turn is forfeited first, as the co-op host does for a
 /// client that queued no further action.
-auto advance_to_turn_boundary( int &turn_budget ) -> void
-{
-    auto &u = get_avatar();
-    u.moves = std::min( u.moves, 0 );
-    while( u.moves <= 0 && turn_budget > 0 && !u.is_dead_state() ) {
+auto advance_to_turn_boundary(int& turn_budget) -> void {
+    auto& u = get_avatar();
+    u.moves = std::min(u.moves, 0);
+    while (u.moves <= 0 && turn_budget > 0 && !u.is_dead_state()) {
         g->post_action_world_step();
         --turn_budget;
     }
@@ -401,27 +368,23 @@ struct step_report {
 /// Starts the modal fiber the action queued, if any, and runs it to its first wait for a key.
 /// The first resume only starts the fiber, so it carries no key. Returns true, and records the
 /// screen, while it waits; a screen that finished without asking is simply gone.
-auto prime_modal( const std::string &action ) -> bool
-{
+auto prime_modal(const std::string& action) -> bool {
     const bool queued = g->modal_fiber_.has_value();
-    if( !queued ) {
-        return false;
-    }
-    g->modal_fiber_->resume( input_event() );
-    if( g->modal_fiber_->done() ) {
+    if (!queued) { return false; }
+    g->modal_fiber_->resume(input_event());
+    if (g->modal_fiber_->done()) {
         g->modal_fiber_.reset();
         return false;
     }
-    modal = open_modal{ .prompt = action, .moves_before = get_avatar().moves };
+    modal = open_modal{.prompt = action, .moves_before = get_avatar().moves};
     return true;
 }
 
 /// A world saved mid-turn leaves the avatar without moves: the first action completes
 /// that partial turn before it can act.
-auto complete_partial_turn( int &turn_budget ) -> void
-{
-    avatar &u = get_avatar();
-    while( u.moves <= 0 && turn_budget > 0 && !u.is_dead_state() ) {
+auto complete_partial_turn(int& turn_budget) -> void {
+    avatar& u = get_avatar();
+    while (u.moves <= 0 && turn_budget > 0 && !u.is_dead_state()) {
         g->post_action_world_step();
         --turn_budget;
     }
@@ -430,21 +393,18 @@ auto complete_partial_turn( int &turn_budget ) -> void
 /// Hands one action to the game as if its key was pressed, then lets the world respond.
 /// An action that spends no moves (a blocked move, a cancelled menu) does not advance the world,
 /// and one that opens a screen waits for its answer first: see `modal`.
-auto perform_action( const std::string &action, int &turn_budget ) -> step_report
-{
-    avatar &u = get_avatar();
+auto perform_action(const std::string& action, int& turn_budget) -> step_report {
+    avatar& u = get_avatar();
     const int budget_before = turn_budget;
-    complete_partial_turn( turn_budget );
+    complete_partial_turn(turn_budget);
     step_report report;
     report.safe_mode_stopped = g->safe_mode == SAFE_MODE_STOP;
-    if( u.moves > 0 && !u.is_dead_state() ) {
+    if (u.moves > 0 && !u.is_dead_state()) {
         const int moves_before = u.moves;
-        g->handle_action_from( action );
+        g->handle_action_from(action);
         report.spent = u.moves < moves_before;
         // A screen that waits for its answer holds the world still; its answer decides the rest.
-        if( !prime_modal( action ) && report.spent ) {
-            advance_to_turn_boundary( turn_budget );
-        }
+        if (!prime_modal(action) && report.spent) { advance_to_turn_boundary(turn_budget); }
     }
     report.turns = budget_before - turn_budget;
     return report;
@@ -459,76 +419,60 @@ struct typed_request {
 };
 
 /// True while the avatar has an activity under way or is asleep.
-auto activity_running() -> bool
-{
-    const avatar &u = get_avatar();
-    return ( u.activity && *u.activity ) || u.in_sleep_state();
+auto activity_running() -> bool {
+    const avatar& u = get_avatar();
+    return (u.activity && *u.activity) || u.in_sleep_state();
 }
 
 /// While alive, the game cannot batch an activity's turns into one world step (it skips ahead
 /// in five-minute windows otherwise, which would make a turn limit approximate). A queued
 /// screenshot is what turns that batching off, and nothing in the driver takes one.
-class single_turn_steps
-{
-    public:
-        single_turn_steps() : was_queued( g->queue_screenshot ) {
-            g->queue_screenshot = true;
-        }
-        single_turn_steps( const single_turn_steps & ) = delete;
-        single_turn_steps &operator=( const single_turn_steps & ) = delete;
-        ~single_turn_steps() {
-            g->queue_screenshot = was_queued;
-        }
-    private:
-        bool was_queued;
+class single_turn_steps {
+public:
+    single_turn_steps(): was_queued(g->queue_screenshot) { g->queue_screenshot = true; }
+    single_turn_steps(const single_turn_steps&) = delete;
+    single_turn_steps& operator=(const single_turn_steps&) = delete;
+    ~single_turn_steps() { g->queue_screenshot = was_queued; }
+
+private:
+    bool was_queued;
 };
 
 /// Runs the avatar's activity, a turn at a time, until it ends, the game interrupts it, or
 /// `max_turns` turns have passed (never more than the per-request cap). An activity still
 /// running at the limit is stopped, so a request never leaves one behind.
-auto run_activity( int max_turns, action_result result ) -> action_result
-{
-    avatar &u = get_avatar();
-    if( !activity_running() ) {
-        return result;
-    }
-    const int limit = max_turns > 0 ? std::min( max_turns, max_turns_per_request ) :
-                      max_turns_per_request;
+auto run_activity(int max_turns, action_result result) -> action_result {
+    avatar& u = get_avatar();
+    if (!activity_running()) { return result; }
+    const int limit =
+        max_turns > 0 ? std::min(max_turns, max_turns_per_request) : max_turns_per_request;
     int budget = limit;
     interruption.reset();
     {
         const single_turn_steps one_turn_at_a_time;
-        while( budget > 0 && !u.is_dead_state() && activity_running() ) {
+        while (budget > 0 && !u.is_dead_state() && activity_running()) {
             // The moves the last world step handed out go to the activity, as the main loop does.
-            while( u.moves > 0 && u.activity && *u.activity ) {
-                u.activity->do_turn( u );
-            }
-            if( !activity_running() || u.is_dead_state() ) {
-                break;
-            }
-            advance_to_turn_boundary( budget );
+            while (u.moves > 0 && u.activity && *u.activity) { u.activity->do_turn(u); }
+            if (!activity_running() || u.is_dead_state()) { break; }
+            advance_to_turn_boundary(budget);
         }
     }
     result.time_passed = result.time_passed || budget < limit;
     result.turns = limit - budget;
-    if( u.is_dead_state() ) {
-        return result;
-    }
-    if( activity_running() ) {
-        if( u.activity && *u.activity ) {
-            if( const std::optional<std::string> progress = u.activity->get_progress_message( u ) ) {
-                std::vector<std::string> one{ *progress };
-                cap_messages( one, 1, max_message_bytes );
+    if (u.is_dead_state()) { return result; }
+    if (activity_running()) {
+        if (u.activity && *u.activity) {
+            if (const std::optional<std::string> progress = u.activity->get_progress_message(u)) {
+                std::vector<std::string> one{*progress};
+                cap_messages(one, 1, max_message_bytes);
                 result.progress = one.front();
             }
             u.cancel_activity();
         }
-        if( u.in_sleep_state() ) {
-            u.wake_up();
-        }
+        if (u.in_sleep_state()) { u.wake_up(); }
         result.outcome = outcome::interrupted;
         result.reason = "turn_cap";
-    } else if( interruption ) {
+    } else if (interruption) {
         result.outcome = outcome::interrupted;
         result.reason = *interruption;
     }
@@ -539,91 +483,80 @@ auto run_activity( int max_turns, action_result result ) -> action_result
 /// A typed command, run on the avatar directly. What it spent in moves lets the world advance,
 /// as after any other action, and an activity it started runs to its end. A rejection costs
 /// nothing and carries the game's message.
-auto run_typed( const typed_request &request, const snapshot &before ) -> action_result
-{
-    avatar &u = get_avatar();
+auto run_typed(const typed_request& request, const snapshot& before) -> action_result {
+    avatar& u = get_avatar();
     int budget = max_turns_per_request;
-    complete_partial_turn( budget );
-    driver_items::command_result done = { .outcome = outcome::refused, .detail = "the avatar cannot act" };
+    complete_partial_turn(budget);
+    driver_items::command_result done =
+        {.outcome = outcome::refused, .detail = "the avatar cannot act"};
     const bool was_busy = activity_running();
     const int moves_before = u.moves;
-    if( u.moves > 0 && !u.is_dead_state() ) {
-        done = request.run();
-    }
+    if (u.moves > 0 && !u.is_dead_state()) { done = request.run(); }
     const bool spent = u.moves < moves_before;
     const bool started = done.outcome == outcome::completed && !was_busy && activity_running();
-    if( spent && !started ) {
-        advance_to_turn_boundary( budget );
-    }
-    action_result result = { .time_passed = spent || budget < max_turns_per_request,
-                             .outcome = done.outcome, .reason = done.reason,
-                             .detail = std::move( done.detail )
-                           };
-    if( result.outcome == outcome::refused && result.detail.empty() ) {
+    if (spent && !started) { advance_to_turn_boundary(budget); }
+    action_result result =
+        {.time_passed = spent || budget < max_turns_per_request,
+         .outcome = done.outcome,
+         .reason = done.reason,
+         .detail = std::move(done.detail)};
+    if (result.outcome == outcome::refused && result.detail.empty()) {
         // The game rejected it with a message of its own: report that one.
-        const std::vector<std::string> said = compute_message_delta( before.messages, log_window() ).fresh;
+        const std::vector<std::string> said =
+            compute_message_delta(before.messages, log_window()).fresh;
         result.detail = said.empty() ? "the game would not do that" : said.back();
     }
-    return started ? run_activity( request.max_turns, std::move( result ) ) : result;
+    return started ? run_activity(request.max_turns, std::move(result)) : result;
 }
 
 /// `dir` is a compass point or `up`/`down`; empty when it is none of them.
-auto move_action_name( const std::string &dir ) -> std::string
-{
-    static const std::vector<std::string> known = { "n", "ne", "e", "se", "s", "sw", "w", "nw", "up", "down" };
-    return std::ranges::find( known, dir ) == known.end() ? std::string() : "move_" + dir;
+auto move_action_name(const std::string& dir) -> std::string {
+    static const std::vector<std::string> known =
+        {"n", "ne", "e", "se", "s", "sw", "w", "nw", "up", "down"};
+    return std::ranges::find(known, dir) == known.end() ? std::string() : "move_" + dir;
 }
 
 /// The item command a request names, if it names one.
-auto item_command_named( const std::string &name ) -> std::optional<driver_items::command>
-{
+auto item_command_named(const std::string& name) -> std::optional<driver_items::command> {
     using driver_items::command;
     static const std::map<std::string, command> known = {
-        { "pickup", command::pickup }, { "drop", command::drop }, { "wield", command::wield },
-        { "wear", command::wear }, { "take_off", command::take_off }, { "eat", command::eat },
-        { "drink", command::eat }, { "use", command::use }, { "read", command::read },
-        { "reload", command::reload },
+        {"pickup", command::pickup}, {"drop", command::drop},         {"wield", command::wield},
+        {"wear", command::wear},     {"take_off", command::take_off}, {"eat", command::eat},
+        {"drink", command::eat},     {"use", command::use},           {"read", command::read},
+        {"reload", command::reload},
     };
-    const auto found = known.find( name );
-    return found == known.end() ? std::nullopt : std::make_optional( found->second );
+    const auto found = known.find(name);
+    return found == known.end() ? std::nullopt : std::make_optional(found->second);
 }
 
-auto run_move( const std::string &action, const snapshot &before ) -> action_result
-{
+auto run_move(const std::string& action, const snapshot& before) -> action_result {
     int budget = max_turns_per_request;
-    const step_report step = perform_action( action, budget );
+    const step_report step = perform_action(action, budget);
     action_result result;
     result.time_passed = step.spent || step.turns > 0;
-    if( modal ) {
-        return modal_result( result.time_passed );
-    }
-    if( !step.spent && get_avatar().abs_pos() == before.pos ) {
+    if (modal) { return modal_result(result.time_passed); }
+    if (!step.spent && get_avatar().abs_pos() == before.pos) {
         // Nothing was spent and nothing moved: the game said no, or the world did.
         result.outcome = step.safe_mode_stopped ? outcome::refused : outcome::blocked;
     }
     return result;
 }
 
-auto run_wait( int turns ) -> action_result
-{
+auto run_wait(int turns) -> action_result {
     int budget = max_turns_per_request;
     action_result result;
-    for( int done = 0; done < turns; ++done ) {
-        if( budget <= 0 ) {
+    for (int done = 0; done < turns; ++done) {
+        if (budget <= 0) {
             result.outcome = outcome::interrupted;
             result.reason = "turn_cap";
             break;
         }
-        const step_report step = perform_action( "pause", budget );
+        const step_report step = perform_action("pause", budget);
         result.time_passed = result.time_passed || step.spent || step.turns > 0;
-        if( modal ) {
-            return modal_result( result.time_passed );
-        }
-        if( get_avatar().is_dead_state() ) {
-            break;
-        }
-        if( !step.spent ) {
-            if( done == 0 ) {
+        if (modal) { return modal_result(result.time_passed); }
+        if (get_avatar().is_dead_state()) { break; }
+        if (!step.spent) {
+            if (done == 0) {
                 result.outcome = step.safe_mode_stopped ? outcome::refused : outcome::no_effect;
             } else {
                 result.outcome = outcome::interrupted;
@@ -637,36 +570,32 @@ auto run_wait( int turns ) -> action_result
 
 /// The bounds a request's whole-number member must lie in.
 struct integer_bounds {
-    const JsonObject &jo;
-    const std::string &name;
+    const JsonObject& jo;
+    const std::string& name;
     int64_t min = 0;
     int64_t max = std::numeric_limits<int64_t>::max();
 };
 
 /// A whole-number member of `jo` within the bounds; empty when it is fractional or out of
 /// range. Throws, like any bad request, when the member is missing or not a number.
-auto bounded_integer( const integer_bounds &asked ) -> std::optional<int64_t>
-{
+auto bounded_integer(const integer_bounds& asked) -> std::optional<int64_t> {
     // get_int would silently truncate 1.5, so read the number as a float and check it.
-    const double value = asked.jo.get_float( asked.name );
-    if( value != std::floor( value ) || value < static_cast<double>( asked.min ) ||
-        value > static_cast<double>( asked.max ) ) {
+    const double value = asked.jo.get_float(asked.name);
+    if (value != std::floor(value) || value < static_cast<double>(asked.min)
+        || value > static_cast<double>(asked.max)) {
         return std::nullopt;
     }
-    return static_cast<int64_t>( value );
+    return static_cast<int64_t>(value);
 }
 
 /// The `max_turns` a request names: 0 when it names none, empty when it is not a whole number
 /// of at least 1.
 // *INDENT-OFF*
-auto requested_turns( const JsonObject &jo ) -> std::optional<int>
-{
-    if( !jo.has_member( "max_turns" ) ) {
-        return 0;
-    }
-    const std::optional<int64_t> turns = bounded_integer( { .jo = jo, .name = "max_turns", .min = 1,
-                                       .max = std::numeric_limits<int>::max() } );
-    return turns ? std::optional<int>( static_cast<int>( *turns ) ) : std::nullopt;
+auto requested_turns(const JsonObject& jo) -> std::optional<int> {
+    if (!jo.has_member("max_turns")) { return 0; }
+    const std::optional<int64_t> turns = bounded_integer(
+        {.jo = jo, .name = "max_turns", .min = 1, .max = std::numeric_limits<int>::max()});
+    return turns ? std::optional<int>(static_cast<int>(*turns)) : std::nullopt;
 }
 // *INDENT-ON*
 
@@ -682,103 +611,88 @@ bool driver_serving = false;
 /// Where `run_scene` looks for Scenes; empty means the driver's default. Set when the loop starts.
 std::string scenes_directory;
 
-auto parse_deny_list( JsonIn &jsin ) -> std::map<std::string, std::string>
-{
+auto parse_deny_list(JsonIn& jsin) -> std::map<std::string, std::string> {
     auto denied = std::map<std::string, std::string>();
     auto jo = jsin.get_object();
     jo.allow_omitted_members();
-    auto entries = jo.get_array( "deny" );
-    for( size_t i = 0; i < entries.size(); ++i ) {
-        auto entry = entries.get_object( i );
-        denied[entry.get_string( "action" )] = entry.get_string( "why", "" );
+    auto entries = jo.get_array("deny");
+    for (size_t i = 0; i < entries.size(); ++i) {
+        auto entry = entries.get_object(i);
+        denied[entry.get_string("action")] = entry.get_string("why", "");
     }
     return denied;
 }
 
 /// Fills `deny_list` from the data file; the error says which file could not be read. A driver
 /// that does not know what hangs it must not start.
-auto load_deny_list( const std::string &path ) -> std::expected<void, std::string>
-{
+auto load_deny_list(const std::string& path) -> std::expected<void, std::string> {
     deny_list.clear();
-    const auto read = read_from_file_json( path, []( JsonIn & jsin ) {
-        deny_list = parse_deny_list( jsin );
-    } );
-    if( !read ) {
-        return std::unexpected( "cannot load the deny list " + path );
-    }
+    const auto read = read_from_file_json(path, [](JsonIn& jsin) {
+        deny_list = parse_deny_list(jsin);
+    });
+    if (!read) { return std::unexpected("cannot load the deny list " + path); }
     return {};
 }
 
 /// Runs `run`, and turns a read that would have blocked the game into outcome `unsupported`
 /// instead of a hang. Whatever the aborted action left half-open is dropped.
-auto guarded( const snapshot &before, const std::function<action_result()> &run ) -> action_result
-{
+auto guarded(const snapshot& before, const std::function<action_result()>& run) -> action_result {
     const int timeout = inp_mngr.get_timeout();
     try {
         return run();
-    } catch( const driver_blocking_read &err ) {
+    } catch (const driver_blocking_read& err) {
         // handle_input restores the read timeout only when it returns, not when it unwinds.
-        inp_mngr.set_timeout( timeout );
+        inp_mngr.set_timeout(timeout);
         g->modal_fiber_.reset();
         modal.reset();
-        return { .time_passed = calendar::turn != before.turn, .outcome = outcome::unsupported,
-                 .reason = "blocking_read", .detail = err.what() };
+        return {.time_passed = calendar::turn != before.turn,
+                .outcome = outcome::unsupported,
+                .reason = "blocking_read",
+                .detail = err.what()};
     }
 }
 
 /// A raw action, as if its key had been pressed: refused if listed, otherwise handed to the
 /// game, which may open a screen that waits for `key`.
-auto run_action( const std::string &action, const snapshot &before ) -> action_result
-{
-    if( const auto denied = deny_list.find( action ); denied != deny_list.end() ) {
-        return { .outcome = outcome::unsupported, .reason = "deny_list", .detail = denied->second };
+auto run_action(const std::string& action, const snapshot& before) -> action_result {
+    if (const auto denied = deny_list.find(action); denied != deny_list.end()) {
+        return {.outcome = outcome::unsupported, .reason = "deny_list", .detail = denied->second};
     }
     int budget = max_turns_per_request;
-    const step_report step = perform_action( action, budget );
+    const step_report step = perform_action(action, budget);
     const bool time_passed = step.spent || step.turns > 0;
-    if( modal ) {
-        return modal_result( time_passed );
-    }
+    if (modal) { return modal_result(time_passed); }
     // Anything the player could see change counts; only a silent nothing is `no_effect`.
-    const bool changed = time_passed || get_avatar().abs_pos() != before.pos ||
-                         !compute_message_delta( before.messages, log_window() ).fresh.empty();
-    return { .time_passed = time_passed,
-             .outcome = changed ? outcome::completed : outcome::no_effect };
+    const bool changed =
+        time_passed || get_avatar().abs_pos() != before.pos
+        || !compute_message_delta(before.messages, log_window()).fresh.empty();
+    return {.time_passed = time_passed,
+            .outcome = changed ? outcome::completed : outcome::no_effect};
 }
 
 /// The key a request names: one printable character, or a key name such as `ESC` or `RETURN`.
 /// Empty when it names no key.
-auto key_event( const std::string &key ) -> std::optional<input_event>
-{
+auto key_event(const std::string& key) -> std::optional<input_event> {
     const bool printable = key.size() == 1 && key[0] >= ' ' && key[0] <= '~';
-    const int code = printable ? key[0] : key.empty() ? 0 : inp_mngr.get_keycode( key );
-    if( code <= 0 ) {
-        return std::nullopt;
-    }
-    input_event evt( code, input_event_t::keyboard );
-    if( printable ) {
-        evt.text = key;
-    }
+    const int code = printable ? key[0] : key.empty() ? 0 : inp_mngr.get_keycode(key);
+    if (code <= 0) { return std::nullopt; }
+    input_event evt(code, input_event_t::keyboard);
+    if (printable) { evt.text = key; }
     return evt;
 }
 
 /// Answers the open screen with one key. When the screen closes, whatever it spent in moves
 /// lets the world advance, as it would after any other action.
-auto run_key( const input_event &evt, const snapshot &before ) -> action_result
-{
+auto run_key(const input_event& evt, const snapshot& before) -> action_result {
     const int moves_before = modal->moves_before;
-    g->modal_fiber_->resume( evt );
-    if( !g->modal_fiber_->done() ) {
-        return modal_result( calendar::turn != before.turn );
-    }
+    g->modal_fiber_->resume(evt);
+    if (!g->modal_fiber_->done()) { return modal_result(calendar::turn != before.turn); }
     g->modal_fiber_.reset();
     modal.reset();
     int budget = max_turns_per_request;
     const bool spent = get_avatar().moves < moves_before;
-    if( spent ) {
-        advance_to_turn_boundary( budget );
-    }
-    return { .time_passed = spent || budget < max_turns_per_request };
+    if (spent) { advance_to_turn_boundary(budget); }
+    return {.time_passed = spent || budget < max_turns_per_request};
 }
 
 /// Draws the game into the window and presents it, so a fresh frame exists while the driver
@@ -786,14 +700,13 @@ auto run_key( const input_event &evt, const snapshot &before ) -> action_result
 /// input loop does it. Events are pumped first (a keypress is dropped) to keep the window
 /// responsive and to apply a resize before the draw. A failed draw leaves the window as it was
 /// and never fails the request that follows.
-auto present_frame() -> void
-{
+auto present_frame() -> void {
     try {
         inp_mngr.pump_events();
         g->invalidate_main_ui_adaptor();
         ui_manager::redraw_invalidated();
         refresh_display();
-    } catch( const std::exception &err ) {
+    } catch (const std::exception& err) {
         std::cerr << "driver: the frame could not be drawn: " << err.what() << "\n";
     }
 }
@@ -801,334 +714,373 @@ auto present_frame() -> void
 // *INDENT-OFF*
 /// The response to `capture`: the frame and map of this turn, a refusal when the window gives no
 /// frame, or the protocol error that says why the request cannot be served. Takes no game time.
-auto capture_line( int id, const JsonObject &jo, bool windowed ) -> std::string
-{
-    if( !windowed ) {
-        return error_line( id, "capture needs the windowed mode: start the game with "
-                           "--driver-windowed (a Trial with mode = \"windowed\")" );
+auto capture_line(int id, const JsonObject& jo, bool windowed) -> std::string {
+    if (!windowed) {
+        return error_line(id, "capture needs the windowed mode: start the game with "
+                              "--driver-windowed (a Trial with mode = \"windowed\")");
     }
-    const std::string dir = jo.has_string( "dir" ) ? jo.get_string( "dir" ) : std::string();
+    const std::string dir = jo.has_string("dir") ? jo.get_string("dir") : std::string();
     // A `mode` that is not text reads as an empty one, which names no mode.
     std::optional<std::string> mode_text;
-    if( jo.has_member( "mode" ) ) {
-        mode_text = jo.has_string( "mode" ) ? jo.get_string( "mode" ) : std::string();
+    if (jo.has_member("mode")) {
+        mode_text = jo.has_string("mode") ? jo.get_string("mode") : std::string();
     }
-    const driver_capture::parsed_request parsed = driver_capture::parse_request( dir, mode_text,
-            to_turn<int>( calendar::turn ) );
-    if( !parsed.value ) {
-        return error_line( id, parsed.error );
-    }
+    const driver_capture::parsed_request parsed =
+        driver_capture::parse_request(dir, mode_text, to_turn<int>(calendar::turn));
+    if (!parsed.value) { return error_line(id, parsed.error); }
     const snapshot before = take_snapshot();
-    const driver_capture::result taken = driver_capture::capture( *parsed.value, present_frame );
-    if( !taken.error.empty() ) {
-        return error_line( id, taken.error );
-    }
+    const driver_capture::result taken = driver_capture::capture(*parsed.value, present_frame);
+    if (!taken.error.empty()) { return error_line(id, taken.error); }
     action_result observed = modal_result();
-    if( taken.no_drawable ) {
+    if (taken.no_drawable) {
         observed.outcome = outcome::refused;
         observed.reason = "no_drawable";
-        observed.detail = "the window is hidden or minimised, or the screen is locked: there is no "
-                          "frame to capture. Nothing was written.";
+        observed.detail =
+            "the window is hidden or minimised, or the screen is locked: there is no "
+            "frame to capture. Nothing was written.";
     }
-    const auto payload = [&taken]( JsonOut & out ) -> bool {
-        if( taken.written ) {
-            driver_capture::write( out, *taken.written );
-        }
+    const auto payload = [&taken](JsonOut& out) -> bool {
+        if (taken.written) { driver_capture::write(out, *taken.written); }
         return false;
     };
-    return observation_line( { .id = id, .before = before, .result = observed, .payload = payload } );
+    return observation_line({.id = id, .before = before, .result = observed, .payload = payload});
 }
 // *INDENT-ON*
 
 } // namespace
 
-auto run_driver_loop( int in_fd, const driver_options &options ) -> bool
-{
-    const std::string path = options.deny_list_path.empty() ?
-                             PATH_INFO::datadir() + default_deny_list_name : options.deny_list_path;
-    if( const auto loaded = load_deny_list( path ); !loaded ) {
+auto run_driver_loop(int in_fd, const driver_options& options) -> bool {
+    const std::string path =
+        options.deny_list_path.empty()
+            ? PATH_INFO::datadir() + default_deny_list_name
+            : options.deny_list_path;
+    if (const auto loaded = load_deny_list(path); !loaded) {
         std::cerr << "driver: " << loaded.error() << "\n";
         return false;
     }
     scenes_directory = options.scenes_dir;
     driver_serving = true;
     attached_view_radius = 0;
-    line_reader in( in_fd );
+    line_reader in(in_fd);
     // Every response below goes to `fd`.
     const auto fd = options.reply_fd >= 0 ? options.reply_fd : in_fd;
     std::string line;
-    while( true ) {
-        if( options.windowed ) {
-            present_frame();
-        }
-        if( !in.read_line( line ) ) {
-            break;
-        }
-        if( line.empty() ) {
-            continue;
-        }
+    while (true) {
+        if (options.windowed) { present_frame(); }
+        if (!in.read_line(line)) { break; }
+        if (line.empty()) { continue; }
         std::optional<int> id;
         try {
-            std::istringstream ss( line );
-            JsonIn jsin( ss );
+            std::istringstream ss(line);
+            JsonIn jsin(ss);
             JsonObject jo = jsin.get_object();
             jo.allow_omitted_members();
-            id = jo.get_int( "id" );
-            const std::string cmd = jo.get_string( "cmd" );
-            const std::optional<driver_items::command> item_kind = item_command_named( cmd );
-            const std::optional<driver_combat::command> combat_kind = driver_combat::command_named( cmd );
-            if( modal && ( cmd == "move" || cmd == "wait" || cmd == "action" || cmd == "craft" ||
-                           cmd == "sleep" || cmd == "run_scene" || item_kind || combat_kind ) ) {
-                write_all( fd, error_line( id, "a menu is open (prompt '" + modal->prompt +
-                                           "'): answer it with key" ) );
+            id = jo.get_int("id");
+            const std::string cmd = jo.get_string("cmd");
+            const std::optional<driver_items::command> item_kind = item_command_named(cmd);
+            const std::optional<driver_combat::command> combat_kind = driver_combat::command_named(
+                cmd);
+            if (modal
+                && (cmd == "move" || cmd == "wait" || cmd == "action" || cmd == "craft"
+                    || cmd == "sleep" || cmd == "run_scene" || item_kind || combat_kind)) {
+                write_all(fd, error_line(id, "a menu is open (prompt '" + modal->prompt
+                                                 + "'): answer it with key"));
                 continue;
             }
-            if( cmd == "ping" ) {
-                write_all( fd, ping_line( *id ) );
-            } else if( cmd == "state" ) {
-                write_all( fd, state_line( *id ) );
-            } else if( cmd == "move" ) {
-                const std::string action = move_action_name( jo.get_string( "dir" ) );
-                if( action.empty() ) {
-                    write_all( fd, error_line( id, "unknown direction" ) );
+            if (cmd == "ping") {
+                write_all(fd, ping_line(*id));
+            } else if (cmd == "state") {
+                write_all(fd, state_line(*id));
+            } else if (cmd == "move") {
+                const std::string action = move_action_name(jo.get_string("dir"));
+                if (action.empty()) {
+                    write_all(fd, error_line(id, "unknown direction"));
                     continue;
                 }
                 const snapshot before = take_snapshot();
-                write_all( fd, observation_line( { .id = *id, .before = before,
-                                                   .result = guarded( before, [&]()
-                {
-                    return run_move( action, before );
-                } ) } ) );
-            } else if( cmd == "wait" ) {
-                const std::optional<int64_t> turns = bounded_integer( { .jo = jo, .name = "turns",
-                                                     .min = 1, .max = std::numeric_limits<int>::max() } );
-                if( !turns ) {
-                    write_all( fd, error_line( id, "turns must be a whole number, at least 1" ) );
+                write_all(
+                    fd,
+                    observation_line(
+                        {.id = *id,
+                         .before = before,
+                         .result = guarded(before, [&]() { return run_move(action, before); })}));
+            } else if (cmd == "wait") {
+                const std::optional<int64_t> turns = bounded_integer(
+                    {.jo = jo, .name = "turns", .min = 1, .max = std::numeric_limits<int>::max()});
+                if (!turns) {
+                    write_all(fd, error_line(id, "turns must be a whole number, at least 1"));
                     continue;
                 }
                 const snapshot before = take_snapshot();
-                write_all( fd, observation_line( { .id = *id, .before = before,
-                                                   .result = guarded( before, [&]()
-                {
-                    return run_wait( static_cast<int>( *turns ) );
-                } ) } ) );
-            } else if( cmd == "action" ) {
-                const std::string name = jo.get_string( "name" );
-                if( look_up_action( name ) == ACTION_NULL ) {
-                    write_all( fd, error_line( id, "unknown action '" + name + "'" ) );
+                write_all(
+                    fd,
+                    observation_line(
+                        {.id = *id,
+                         .before = before,
+                         .result = guarded(before, [&]() {
+                             return run_wait(static_cast<int>(*turns));
+                         })}));
+            } else if (cmd == "action") {
+                const std::string name = jo.get_string("name");
+                if (look_up_action(name) == ACTION_NULL) {
+                    write_all(fd, error_line(id, "unknown action '" + name + "'"));
                     continue;
                 }
                 const snapshot before = take_snapshot();
-                write_all( fd, observation_line( { .id = *id, .before = before,
-                                                   .result = guarded( before, [&]()
-                {
-                    return run_action( name, before );
-                } ) } ) );
-            } else if( cmd == "key" ) {
-                const std::string key = jo.get_string( "key" );
-                if( !modal ) {
-                    write_all( fd, error_line( id, "no menu is open: key answers an open menu" ) );
+                write_all(
+                    fd,
+                    observation_line(
+                        {.id = *id,
+                         .before = before,
+                         .result = guarded(before, [&]() { return run_action(name, before); })}));
+            } else if (cmd == "key") {
+                const std::string key = jo.get_string("key");
+                if (!modal) {
+                    write_all(fd, error_line(id, "no menu is open: key answers an open menu"));
                     continue;
                 }
-                const std::optional<input_event> evt = key_event( key );
-                if( !evt ) {
-                    write_all( fd, error_line( id, "unknown key '" + key + "'" ) );
-                    continue;
-                }
-                const snapshot before = take_snapshot();
-                write_all( fd, observation_line( { .id = *id, .before = before,
-                                                   .result = guarded( before, [&]()
-                {
-                    return run_key( *evt, before );
-                } ) } ) );
-            } else if( cmd == "query" ) {
-                const std::string topic = jo.get_string( "topic" );
-                const auto asked = driver_items::topic_named( topic );
-                if( !asked ) {
-                    write_all( fd, error_line( id, "unknown topic '" + topic +
-                                               "': query takes inventory or effects" ) );
-                    continue;
-                }
-                write_all( fd, observation_line( { .id = *id, .before = take_snapshot(),
-                                                   .result = modal_result(), .payload = [&]( JsonOut & out )
-                {
-                    return driver_items::write_query( out, *asked );
-                } } ) );
-            } else if( combat_kind ) {
-                const driver_combat::parsed_target target = driver_combat::parse_target( jo, *combat_kind );
-                if( !target.error.empty() ) {
-                    write_all( fd, error_line( id, target.error ) );
-                    continue;
-                }
-                const std::optional<int> max_turns = requested_turns( jo );
-                if( !max_turns ) {
-                    write_all( fd, error_line( id, "max_turns must be a whole number, at least 1" ) );
+                const std::optional<input_event> evt = key_event(key);
+                if (!evt) {
+                    write_all(fd, error_line(id, "unknown key '" + key + "'"));
                     continue;
                 }
                 const snapshot before = take_snapshot();
-                write_all( fd, observation_line( { .id = *id, .before = before,
-                                                   .result = guarded( before, [&]()
-                {
-                    return run_typed( { .run = [&]() {
-                        return driver_combat::run_command( *combat_kind, target );
-                    }, .max_turns = *max_turns }, before );
-                } ) } ) );
-            } else if( item_kind ) {
-                const auto found = driver_items::find_item( jo.get_string( "item" ) );
-                if( !found ) {
-                    write_all( fd, error_line( id, found.error() ) );
+                write_all(
+                    fd,
+                    observation_line(
+                        {.id = *id,
+                         .before = before,
+                         .result = guarded(before, [&]() { return run_key(*evt, before); })}));
+            } else if (cmd == "query") {
+                const std::string topic = jo.get_string("topic");
+                const auto asked = driver_items::topic_named(topic);
+                if (!asked) {
+                    write_all(fd, error_line(id, "unknown topic '" + topic
+                                                     + "': query takes inventory or effects"));
                     continue;
                 }
-                const std::optional<int> max_turns = requested_turns( jo );
-                if( !max_turns ) {
-                    write_all( fd, error_line( id, "max_turns must be a whole number, at least 1" ) );
+                write_all(
+                    fd,
+                    observation_line(
+                        {.id = *id,
+                         .before = take_snapshot(),
+                         .result = modal_result(),
+                         .payload = [&](JsonOut& out) {
+                             return driver_items::write_query(out, *asked);
+                         }}));
+            } else if (combat_kind) {
+                const driver_combat::parsed_target target =
+                    driver_combat::parse_target(jo, *combat_kind);
+                if (!target.error.empty()) {
+                    write_all(fd, error_line(id, target.error));
+                    continue;
+                }
+                const std::optional<int> max_turns = requested_turns(jo);
+                if (!max_turns) {
+                    write_all(fd, error_line(id, "max_turns must be a whole number, at least 1"));
+                    continue;
+                }
+                const snapshot before = take_snapshot();
+                write_all(
+                    fd,
+                    observation_line(
+                        {.id = *id,
+                         .before = before,
+                         .result = guarded(before, [&]() {
+                             return run_typed(
+                                 {.run =
+                                      [&]() {
+                                          return driver_combat::run_command(*combat_kind, target);
+                                      },
+                                  .max_turns = *max_turns},
+                                 before);
+                         })}));
+            } else if (item_kind) {
+                const auto found = driver_items::find_item(jo.get_string("item"));
+                if (!found) {
+                    write_all(fd, error_line(id, found.error()));
+                    continue;
+                }
+                const std::optional<int> max_turns = requested_turns(jo);
+                if (!max_turns) {
+                    write_all(fd, error_line(id, "max_turns must be a whole number, at least 1"));
                     continue;
                 }
                 const driver_items::command_options options = {
-                    .anyway = jo.get_bool( "anyway", false ),
-                    .method = jo.get_string( "method", "" ),
+                    .anyway = jo.get_bool("anyway", false),
+                    .method = jo.get_string("method", ""),
                 };
                 const snapshot before = take_snapshot();
-                write_all( fd, observation_line( { .id = *id, .before = before,
-                                                   .result = guarded( before, [&]()
-                {
-                    return run_typed( { .run = [&]() {
-                        return driver_items::run_command( *item_kind, *found, options );
-                    }, .max_turns = *max_turns }, before );
-                } ) } ) );
-            } else if( cmd == "craft" ) {
-                const std::string recipe = jo.get_string( "recipe" );
-                if( const auto known = driver_items::recipe_error( recipe ); !known ) {
-                    write_all( fd, error_line( id, known.error() ) );
+                write_all(
+                    fd,
+                    observation_line(
+                        {.id = *id,
+                         .before = before,
+                         .result = guarded(before, [&]() {
+                             return run_typed(
+                                 {.run =
+                                      [&]() {
+                                          return driver_items::
+                                              run_command(*item_kind, *found, options);
+                                      },
+                                  .max_turns = *max_turns},
+                                 before);
+                         })}));
+            } else if (cmd == "craft") {
+                const std::string recipe = jo.get_string("recipe");
+                if (const auto known = driver_items::recipe_error(recipe); !known) {
+                    write_all(fd, error_line(id, known.error()));
                     continue;
                 }
-                const std::optional<int> max_turns = requested_turns( jo );
-                if( !max_turns ) {
-                    write_all( fd, error_line( id, "max_turns must be a whole number, at least 1" ) );
-                    continue;
-                }
-                const snapshot before = take_snapshot();
-                write_all( fd, observation_line( { .id = *id, .before = before,
-                                                   .result = guarded( before, [&]()
-                {
-                    return run_typed( { .run = [&]() {
-                        return driver_items::run_craft( recipe );
-                    }, .max_turns = *max_turns }, before );
-                } ) } ) );
-            } else if( cmd == "sleep" ) {
-                const std::optional<int> max_turns = requested_turns( jo );
-                if( !max_turns ) {
-                    write_all( fd, error_line( id, "max_turns must be a whole number, at least 1" ) );
+                const std::optional<int> max_turns = requested_turns(jo);
+                if (!max_turns) {
+                    write_all(fd, error_line(id, "max_turns must be a whole number, at least 1"));
                     continue;
                 }
                 const snapshot before = take_snapshot();
-                write_all( fd, observation_line( { .id = *id, .before = before,
-                                                   .result = guarded( before, [&]()
-                {
-                    return run_typed( { .run = []() {
-                        return driver_items::run_sleep();
-                    }, .max_turns = *max_turns }, before );
-                } ) } ) );
-            } else if( cmd == "view" ) {
-                // Read-only, so it answers while a screen waits for a key as well as when none does.
-                const std::optional<int64_t> radius = jo.has_member( "radius" ) ?
-                                                      bounded_integer( { .jo = jo, .name = "radius", .min = 1,
-                                                          .max = driver_view::max_radius } ) :
-                                                      std::optional<int64_t>( driver_view::default_radius );
-                if( !radius ) {
-                    write_all( fd, error_line( id, "radius must be a whole number from 1 to " +
-                                               std::to_string( driver_view::max_radius ) ) );
-                    continue;
-                }
-                write_all( fd, observation_line( { .id = *id, .before = take_snapshot(),
-                                                   .result = modal_result(), .payload = [&]( JsonOut & out )
-                {
-                    return driver_view::write_view( out, static_cast<int>( *radius ) );
-                }, .views = view_mode::none } ) );
-            } else if( cmd == "run_scene" ) {
-                const std::string name = jo.has_string( "name" ) ? jo.get_string( "name" ) : std::string();
-                if( !driver_scene::valid_name( name ) ) {
-                    write_all( fd, error_line( id, "name must be the name of a Scene: letters, digits, _ and -" ) );
-                    continue;
-                }
-                const std::string dir = scenes_directory.empty() ? driver_scene::default_dir() : scenes_directory;
-                const std::string file = driver_scene::find( dir, name );
-                if( file.empty() ) {
-                    write_all( fd, error_line( id, "unknown scene '" + name + "': no " + name + ".lua in " + dir ) );
+                write_all(
+                    fd,
+                    observation_line(
+                        {.id = *id,
+                         .before = before,
+                         .result = guarded(before, [&]() {
+                             return run_typed(
+                                 {.run = [&]() { return driver_items::run_craft(recipe); },
+                                  .max_turns = *max_turns},
+                                 before);
+                         })}));
+            } else if (cmd == "sleep") {
+                const std::optional<int> max_turns = requested_turns(jo);
+                if (!max_turns) {
+                    write_all(fd, error_line(id, "max_turns must be a whole number, at least 1"));
                     continue;
                 }
                 const snapshot before = take_snapshot();
-                driver_scene::result scene = driver_scene::run( file );
-                write_all( fd, observation_line( { .id = *id, .before = before,
-                .result = modal_result(), .payload = [&]( JsonOut & out ) -> bool {
-                    return driver_scene::write( out, std::move( scene ) );
-                } } ) );
-            } else if( cmd == "capture" ) {
-                write_all( fd, capture_line( *id, jo, options.windowed ) );
-            } else if( cmd == "attach_view" ) {
-                const std::optional<int64_t> radius = bounded_integer( { .jo = jo, .name = "radius",
-                                                      .max = driver_view::max_radius } );
-                if( !radius ) {
-                    write_all( fd, error_line( id, "radius must be a whole number from 0 to " +
-                                               std::to_string( driver_view::max_radius ) +
-                                               "; 0 attaches no view" ) );
+                write_all(
+                    fd,
+                    observation_line(
+                        {.id = *id,
+                         .before = before,
+                         .result = guarded(before, [&]() {
+                             return run_typed(
+                                 {.run = []() { return driver_items::run_sleep(); },
+                                  .max_turns = *max_turns},
+                                 before);
+                         })}));
+            } else if (cmd == "view") {
+                // Read-only, so it answers while a screen waits for a key as well as when none
+                // does.
+                const std::optional<int64_t> radius =
+                    jo.has_member("radius")
+                        ? bounded_integer(
+                              {.jo = jo, .name = "radius", .min = 1, .max = driver_view::max_radius})
+                        : std::optional<int64_t>(driver_view::default_radius);
+                if (!radius) {
+                    write_all(fd, error_line(id, "radius must be a whole number from 1 to "
+                                                     + std::to_string(driver_view::max_radius)));
                     continue;
                 }
-                attached_view_radius = static_cast<int>( *radius );
-                write_all( fd, attach_view_line( *id, attached_view_radius ) );
-            } else if( cmd == "seed" ) {
-                const std::optional<int64_t> seed = bounded_integer( { .jo = jo, .name = "seed",
-                                                    .max = std::numeric_limits<unsigned int>::max() } );
-                if( !seed ) {
-                    write_all( fd, error_line( id, "seed must be a whole number from 0 to 4294967295" ) );
+                write_all(
+                    fd,
+                    observation_line(
+                        {.id = *id,
+                         .before = take_snapshot(),
+                         .result = modal_result(),
+                         .payload =
+                             [&](JsonOut& out) {
+                                 return driver_view::write_view(out, static_cast<int>(*radius));
+                             },
+                         .views = view_mode::none}));
+            } else if (cmd == "run_scene") {
+                const std::string name =
+                    jo.has_string("name") ? jo.get_string("name") : std::string();
+                if (!driver_scene::valid_name(name)) {
+                    write_all(
+                        fd,
+                        error_line(id,
+                                   "name must be the name of a Scene: letters, digits, _ and -"));
                     continue;
                 }
-                write_all( fd, seed_line( *id, static_cast<unsigned int>( *seed ) ) );
-            } else if( cmd == "set_time" ) {
+                const std::string dir =
+                    scenes_directory.empty() ? driver_scene::default_dir() : scenes_directory;
+                const std::string file = driver_scene::find(dir, name);
+                if (file.empty()) {
+                    write_all(fd, error_line(id, "unknown scene '" + name + "': no " + name
+                                                     + ".lua in " + dir));
+                    continue;
+                }
+                const snapshot before = take_snapshot();
+                driver_scene::result scene = driver_scene::run(file);
+                write_all(
+                    fd,
+                    observation_line(
+                        {.id = *id,
+                         .before = before,
+                         .result = modal_result(),
+                         .payload = [&](JsonOut& out) -> bool {
+                             return driver_scene::write(out, std::move(scene));
+                         }}));
+            } else if (cmd == "capture") {
+                write_all(fd, capture_line(*id, jo, options.windowed));
+            } else if (cmd == "attach_view") {
+                const std::optional<int64_t> radius = bounded_integer(
+                    {.jo = jo, .name = "radius", .max = driver_view::max_radius});
+                if (!radius) {
+                    write_all(
+                        fd,
+                        error_line(id, "radius must be a whole number from 0 to "
+                                           + std::to_string(driver_view::max_radius)
+                                           + "; 0 attaches no view"));
+                    continue;
+                }
+                attached_view_radius = static_cast<int>(*radius);
+                write_all(fd, attach_view_line(*id, attached_view_radius));
+            } else if (cmd == "seed") {
+                const std::optional<int64_t> seed = bounded_integer(
+                    {.jo = jo, .name = "seed", .max = std::numeric_limits<unsigned int>::max()});
+                if (!seed) {
+                    write_all(fd,
+                              error_line(id, "seed must be a whole number from 0 to 4294967295"));
+                    continue;
+                }
+                write_all(fd, seed_line(*id, static_cast<unsigned int>(*seed)));
+            } else if (cmd == "set_time") {
                 auto asked = driver_time::request{};
-                if( jo.has_member( "date" ) ) {
-                    if( !jo.has_string( "date" ) ) {
-                        write_all( fd, error_line( id, "date must be a YYYY-SS-DD string" ) );
+                if (jo.has_member("date")) {
+                    if (!jo.has_string("date")) {
+                        write_all(fd, error_line(id, "date must be a YYYY-SS-DD string"));
                         continue;
                     }
-                    asked.date = jo.get_string( "date" );
+                    asked.date = jo.get_string("date");
                 }
-                if( jo.has_member( "time" ) ) {
-                    if( !jo.has_string( "time" ) ) {
-                        write_all( fd, error_line( id, "time must be an HH:MM string" ) );
+                if (jo.has_member("time")) {
+                    if (!jo.has_string("time")) {
+                        write_all(fd, error_line(id, "time must be an HH:MM string"));
                         continue;
                     }
-                    asked.time = jo.get_string( "time" );
+                    asked.time = jo.get_string("time");
                 }
-                const auto clock = driver_time::pin( asked );
-                write_all( fd, clock ? set_time_line( *id, *clock ) : error_line( id, clock.error() ) );
-            } else if( cmd == "quit" ) {
-                write_all( fd, quit_line( *id ) );
+                const auto clock = driver_time::pin(asked);
+                write_all(fd, clock ? set_time_line(*id, *clock) : error_line(id, clock.error()));
+            } else if (cmd == "quit") {
+                write_all(fd, quit_line(*id));
                 break;
             } else {
-                write_all( fd, error_line( id, "unknown cmd '" + cmd + "'" ) );
+                write_all(fd, error_line(id, "unknown cmd '" + cmd + "'"));
             }
-        } catch( const std::exception &err ) {
-            write_all( fd, error_line( id, std::string( "bad request: " ) + err.what() ) );
+        } catch (const std::exception& err) {
+            write_all(fd, error_line(id, std::string("bad request: ") + err.what()));
         }
     }
     driver_serving = false;
     return true;
 }
 
-auto driver_mode_active() -> bool
-{
-    return driver_serving;
-}
+auto driver_mode_active() -> bool { return driver_serving; }
 
-auto driver_note_interruption( std::string_view reason ) -> void
-{
-    if( driver_serving && !interruption ) {
-        interruption = reason;
-    }
+auto driver_note_interruption(std::string_view reason) -> void {
+    if (driver_serving && !interruption) { interruption = reason; }
 }
 
 driver_blocking_read::driver_blocking_read()
-    : std::runtime_error( "the game waited for a key with no menu to answer it" )
-{
-}
+    : std::runtime_error("the game waited for a key with no menu to answer it") {}

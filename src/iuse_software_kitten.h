@@ -1,10 +1,10 @@
 #pragma once
 
-#include <string>
-
 #include "color.h"
 #include "cursesdef.h"
 #include "point.h"
+
+#include <string>
 
 class ui_adaptor;
 
@@ -16,41 +16,39 @@ struct kobject {
 
 static constexpr int MAXMESSAGES = 1200;
 
-class robot_finds_kitten
-{
-    public:
-        bool ret;
-        robot_finds_kitten();
-    private:
-        std::string getmessage( int idx ) const;
-        void show_rml() const;
-        void process_input();
-        catacurses::window bkatwin;
-        kobject robot;
-        kobject kitten;
-        kobject empty;
-        static constexpr int numbogus = 20;
-        kobject bogus[MAXMESSAGES];
-        static constexpr int rfkLINES = 20;
-        static constexpr int rfkCOLS = 60;
-        int rfkscreen[rfkCOLS][rfkLINES];
-        int nummessages;
-        int bogus_messages[MAXMESSAGES];
+class robot_finds_kitten {
+public:
+    bool ret;
+    robot_finds_kitten();
 
-        enum class ui_state {
-            instructions,
-            main,
-            invalid_input,
-            bogus_message,
-            end_animation,
-            exit,
-        };
-        ui_state current_ui_state = ui_state::instructions;
+private:
+    std::string getmessage(int idx) const;
+    void show_rml() const;
+    void process_input();
+    catacurses::window bkatwin;
+    kobject robot;
+    kobject kitten;
+    kobject empty;
+    static constexpr int numbogus = 20;
+    kobject bogus[MAXMESSAGES];
+    static constexpr int rfkLINES = 20;
+    static constexpr int rfkCOLS = 60;
+    int rfkscreen[rfkCOLS][rfkLINES];
+    int nummessages;
+    int bogus_messages[MAXMESSAGES];
 
-        int bogus_message_idx = 0;
-        int end_animation_frame = 0;
-        static constexpr int num_end_animation_frames = 6;
-        bool end_animation_last_input_left_or_up = false;
+    enum class ui_state {
+        instructions,
+        main,
+        invalid_input,
+        bogus_message,
+        end_animation,
+        exit,
+    };
+    ui_state current_ui_state = ui_state::instructions;
+
+    int bogus_message_idx = 0;
+    int end_animation_frame = 0;
+    static constexpr int num_end_animation_frames = 6;
+    bool end_animation_last_input_left_or_up = false;
 };
-
-

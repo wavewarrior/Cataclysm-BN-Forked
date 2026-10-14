@@ -1,92 +1,89 @@
 #pragma once
 
+#include "cuboid_rectangle.h"
+#include "cursesdef.h"
+#include "enums.h"
+#include "input.h"
+#include "point.h"
+#include "worldfactory.h"
+
 #include <cstddef>
 #include <string>
 #include <vector>
 
-#include "cuboid_rectangle.h"
-#include "cursesdef.h"
-#include "input.h"
-#include "point.h"
-#include "worldfactory.h"
-#include "enums.h"
+class main_menu {
+    friend class sound_on_move_uilist_callback;
 
-class main_menu
-{
-        friend class sound_on_move_uilist_callback;
-    public:
-        main_menu() : ctxt( "MAIN_MENU" ) { }
-        // Shows the main menu and returns whether a game was started or not
-        bool opening_screen();
+public:
+    main_menu(): ctxt("MAIN_MENU") {}
+    // Shows the main menu and returns whether a game was started or not
+    bool opening_screen();
 
-    private:
-        // ASCII art that says "Cataclysm Dark Days Ahead"
-        std::vector<std::string> mmenu_title;
-        std::string mmenu_motd;
-        std::string mmenu_credits;
-        int mmenu_motd_len;
-        int mmenu_credits_len;
-        std::vector<std::string> vMenuItems; // MOTD, New Game, Load Game, etc.
-        std::vector<std::string> vWorldSubItems;
-        std::vector<std::string> vNewGameSubItems;
-        std::vector<std::string> vNewGameHints;
-        std::vector<char> vWorldHotkeys;
-        std::vector<std::string> vSettingsSubItems;
-        std::vector<std::string> vSettingsHints;
-        std::vector< std::vector<std::string> > vSettingsHotkeys;
-        std::vector< std::vector<std::string> > vMenuHotkeys; // hotkeys for the vMenuItems
-        std::vector< std::vector<std::string> > vNewGameHotkeys;
-        std::string vdaytip; //tip of the day
+private:
+    // ASCII art that says "Cataclysm Dark Days Ahead"
+    std::vector<std::string> mmenu_title;
+    std::string mmenu_motd;
+    std::string mmenu_credits;
+    int mmenu_motd_len;
+    int mmenu_credits_len;
+    std::vector<std::string> vMenuItems; // MOTD, New Game, Load Game, etc.
+    std::vector<std::string> vWorldSubItems;
+    std::vector<std::string> vNewGameSubItems;
+    std::vector<std::string> vNewGameHints;
+    std::vector<char> vWorldHotkeys;
+    std::vector<std::string> vSettingsSubItems;
+    std::vector<std::string> vSettingsHints;
+    std::vector<std::vector<std::string>> vSettingsHotkeys;
+    std::vector<std::vector<std::string>> vMenuHotkeys; // hotkeys for the vMenuItems
+    std::vector<std::vector<std::string>> vNewGameHotkeys;
+    std::string vdaytip; // tip of the day
 
-        /**
-         * Does what it sounds like, but this function also exists in order to gracefully handle
-         * the case where the player goes to the 'Settings' tab and changes the language.
-        */
-        void init_strings();
-        /** Helper function for @ref init_strings */
-        std::vector<std::string> load_file( const std::string &path,
-                                            const std::string &alt_text ) const;
+    /**
+     * Does what it sounds like, but this function also exists in order to gracefully handle
+     * the case where the player goes to the 'Settings' tab and changes the language.
+     */
+    void init_strings();
+    /** Helper function for @ref init_strings */
+    std::vector<std::string> load_file(const std::string& path, const std::string& alt_text) const;
 
-        // Play a sound whenever the user moves left or right in the main menu or its tabs
-        void on_move() const;
+    // Play a sound whenever the user moves left or right in the main menu or its tabs
+    void on_move() const;
 
-        // Play a sound *once* when an error occurs in the main menu or its tabs; sets errflag
-        void on_error();
+    // Play a sound *once* when an error occurs in the main menu or its tabs; sets errflag
+    void on_error();
 
-        // Tab functions. They return whether a game was started or not. The ones that can never
-        // start a game have a void return type.
-        bool new_character_tab();
-        bool load_character_tab( const std::string &worldname );
-        void world_tab( const std::string &worldname );
+    // Tab functions. They return whether a game was started or not. The ones that can never
+    // start a game have a void return type.
+    bool new_character_tab();
+    bool load_character_tab(const std::string& worldname);
+    void world_tab(const std::string& worldname);
 
-        /*
-         * Load character templates from template folder
-         */
-        void load_char_templates();
+    /*
+     * Load character templates from template folder
+     */
+    void load_char_templates();
 
-        // These variables are shared between @opening_screen and the tab functions.
-        // TODO: But this is an ugly short-term solution.
-        input_context ctxt;
-        int sel1 = 1;
-        int sel2 = 1;
-        point LAST_TERM;
-        catacurses::window w_open;
-        point menu_offset;
-        std::vector<std::string> templates;
-        int extra_w = 0;
-        std::vector<save_t> savegames;
-        std::vector<std::pair<inclusive_rectangle<point>, std::pair<int, int >>> main_menu_sub_button_map;
-        std::vector<std::pair<inclusive_rectangle<point>, int >> main_menu_button_map;
+    // These variables are shared between @opening_screen and the tab functions.
+    // TODO: But this is an ugly short-term solution.
+    input_context ctxt;
+    int sel1 = 1;
+    int sel2 = 1;
+    point LAST_TERM;
+    catacurses::window w_open;
+    point menu_offset;
+    std::vector<std::string> templates;
+    int extra_w = 0;
+    std::vector<save_t> savegames;
+    std::vector<std::pair<inclusive_rectangle<point>, std::pair<int, int>>>
+        main_menu_sub_button_map;
+    std::vector<std::pair<inclusive_rectangle<point>, int>> main_menu_button_map;
 
-        void init_windows();
+    void init_windows();
 
-        holiday get_holiday_from_time();
+    holiday get_holiday_from_time();
 
-        holiday current_holiday = holiday::none;
+    holiday current_holiday = holiday::none;
 
-        static std::string halloween_spider();
-        std::string halloween_graves();
+    static std::string halloween_spider();
+    std::string halloween_graves();
 };
-
-
-

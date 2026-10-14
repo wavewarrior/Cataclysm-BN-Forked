@@ -80,5 +80,5 @@ struct coop_session {
     }
 
     /// Global singleton — constructed on first use, never destroyed.
-    static auto get() -> coop_session&; // *NOPAD*
+    static auto get() -> coop_session&;
 };

@@ -7,47 +7,41 @@
 #include <vector>
 
 TEST_CASE("rectangle_containment_raw", "[point]") {
-    // NOLINTNEXTLINE(cata-use-named-point-constants)
     half_open_rectangle<point> r1(point(0, 0), point(2, 2));
-    CHECK(!r1.contains(point(0, -1))); // NOLINT(cata-use-named-point-constants)
-    CHECK(r1.contains(point(0, 0)));   // NOLINT(cata-use-named-point-constants)
-    CHECK(r1.contains(point(0, 1)));   // NOLINT(cata-use-named-point-constants)
+    CHECK(!r1.contains(point(0, -1)));
+    CHECK(r1.contains(point(0, 0)));
+    CHECK(r1.contains(point(0, 1)));
     CHECK(!r1.contains(point(0, 2)));
     CHECK(!r1.contains(point(0, 3)));
 
-    // NOLINTNEXTLINE(cata-use-named-point-constants)
     inclusive_rectangle<point> r2(point(0, 0), point(2, 2));
-    CHECK(!r2.contains(point(0, -1))); // NOLINT(cata-use-named-point-constants)
-    CHECK(r2.contains(point(0, 0)));   // NOLINT(cata-use-named-point-constants)
-    CHECK(r2.contains(point(0, 1)));   // NOLINT(cata-use-named-point-constants)
+    CHECK(!r2.contains(point(0, -1)));
+    CHECK(r2.contains(point(0, 0)));
+    CHECK(r2.contains(point(0, 1)));
     CHECK(r2.contains(point(0, 2)));
     CHECK(!r2.contains(point(0, 3)));
 }
 
 TEST_CASE("rectangle_containment_coord", "[point]") {
-    // NOLINTNEXTLINE(cata-use-named-point-constants)
     half_open_rectangle<point_abs_omt> r1(point_abs_omt(0, 0), point_abs_omt(2, 2));
-    CHECK(!r1.contains(point_abs_omt(0, -1))); // NOLINT(cata-use-named-point-constants)
-    CHECK(r1.contains(point_abs_omt(0, 0)));   // NOLINT(cata-use-named-point-constants)
-    CHECK(r1.contains(point_abs_omt(0, 1)));   // NOLINT(cata-use-named-point-constants)
+    CHECK(!r1.contains(point_abs_omt(0, -1)));
+    CHECK(r1.contains(point_abs_omt(0, 0)));
+    CHECK(r1.contains(point_abs_omt(0, 1)));
     CHECK(!r1.contains(point_abs_omt(0, 2)));
     CHECK(!r1.contains(point_abs_omt(0, 3)));
 
-    // NOLINTNEXTLINE(cata-use-named-point-constants)
     inclusive_rectangle<point_abs_omt> r2(point_abs_omt(0, 0), point_abs_omt(2, 2));
-    CHECK(!r2.contains(point_abs_omt(0, -1))); // NOLINT(cata-use-named-point-constants)
-    CHECK(r2.contains(point_abs_omt(0, 0)));   // NOLINT(cata-use-named-point-constants)
-    CHECK(r2.contains(point_abs_omt(0, 1)));   // NOLINT(cata-use-named-point-constants)
+    CHECK(!r2.contains(point_abs_omt(0, -1)));
+    CHECK(r2.contains(point_abs_omt(0, 0)));
+    CHECK(r2.contains(point_abs_omt(0, 1)));
     CHECK(r2.contains(point_abs_omt(0, 2)));
     CHECK(!r2.contains(point_abs_omt(0, 3)));
 }
 
 TEST_CASE("rectangle_overlapping", "[point]") {
     SECTION("inclusive") {
-        // NOLINTNEXTLINE(cata-use-named-point-constants)
         inclusive_rectangle<point> r1(point(0, 0), point(2, 2));
         inclusive_rectangle<point> r2(point(2, 2), point(3, 3));
-        // NOLINTNEXTLINE(cata-use-named-point-constants)
         inclusive_rectangle<point> r3(point(0, 0), point(2, 1));
         inclusive_rectangle<point> r4(point(-2, -4), point(4, -1));
         inclusive_rectangle<point> r5(point(-1, -3), point(0, -2));
@@ -79,10 +73,8 @@ TEST_CASE("rectangle_overlapping", "[point]") {
     }
 
     SECTION("half_open") {
-        // NOLINTNEXTLINE(cata-use-named-point-constants)
         half_open_rectangle<point> r1(point(0, 0), point(2, 2));
         half_open_rectangle<point> r2(point(2, 2), point(3, 3));
-        // NOLINTNEXTLINE(cata-use-named-point-constants)
         half_open_rectangle<point> r3(point(0, 0), point(2, 1));
         half_open_rectangle<point> r4(point(-2, -4), point(4, -1));
         half_open_rectangle<point> r5(point(-1, -3), point(0, -2));
@@ -117,16 +109,14 @@ TEST_CASE("rectangle_overlapping", "[point]") {
 TEST_CASE("cuboid_shrinks", "[point]") {
     half_open_cuboid<tripoint> b(tripoint_zero, tripoint(3, 3, 3));
     CAPTURE(b);
-    CHECK(b.contains(tripoint(1, 0, 0))); // NOLINT(cata-use-named-point-constants)
+    CHECK(b.contains(tripoint(1, 0, 0)));
     CHECK(b.contains(tripoint(2, 1, 2)));
-    b.shrink(tripoint(1, 1, 0)); // NOLINT(cata-use-named-point-constants)
+    b.shrink(tripoint(1, 1, 0));
     CAPTURE(b);
     // Shrank in the x and y directions
-    // NOLINTNEXTLINE(cata-use-named-point-constants)
     CHECK(!b.contains(tripoint(1, 0, 0)));
     CHECK(!b.contains(tripoint(2, 1, 2)));
     // Didn't shrink in the z direction
-    // NOLINTNEXTLINE(cata-use-named-point-constants)
     CHECK(b.contains(tripoint(1, 1, 0)));
     CHECK(b.contains(tripoint(1, 1, 2)));
 }

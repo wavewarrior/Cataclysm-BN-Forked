@@ -1,13 +1,13 @@
 #pragma once
 #ifndef CATA_SRC_CONTEXT_MENU_H
-#define CATA_SRC_CONTEXT_MENU_H
+#    define CATA_SRC_CONTEXT_MENU_H
 
-#include <optional>
-#include <string>
-#include <vector>
+#    include "action.h"
+#    include "point.h"
 
-#include "action.h"
-#include "point.h"
+#    include <optional>
+#    include <string>
+#    include <vector>
 
 /// One selectable row of a floating context menu (see show_context_menu).
 struct context_action {
@@ -28,7 +28,7 @@ struct context_action {
 /// Returns the chosen action, or std::nullopt if dismissed, if `actions` is
 /// empty, or if RmlUi isn't ready to render it (this component is RmlUi-only
 /// and has no curses fallback).
-auto show_context_menu( const point &screen_pos,
-                        const std::vector<context_action> &actions ) -> std::optional<action_id>;
+auto show_context_menu(const point& screen_pos, const std::vector<context_action>& actions)
+    -> std::optional<action_id>;
 
 #endif // CATA_SRC_CONTEXT_MENU_H

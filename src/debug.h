@@ -45,25 +45,25 @@
 
 // Includes                                                         {{{1
 // ---------------------------------------------------------------------
+#include "string_formatter.h"
+
+#include <functional>
 #include <iostream>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <type_traits>
 #include <utility>
-#include <functional>
-
-#include "string_formatter.h"
-template<typename T> struct enum_traits;
-template<typename E> class enum_bitset;
+template <typename T> struct enum_traits;
+template <typename E> class enum_bitset;
 
 #define STRING2(x) #x
 #define STRING(x) STRING2(x)
 
 #if defined(__GNUC__)
-#define __FUNCTION_NAME__ __PRETTY_FUNCTION__
+#    define __FUNCTION_NAME__ __PRETTY_FUNCTION__
 #else
-#define __FUNCTION_NAME__ __func__
+#    define __FUNCTION_NAME__ __func__
 #endif
 
 
@@ -96,8 +96,7 @@ enum class DL : int {
     Num,
 };
 
-template <>
-struct enum_traits<DL> {
+template <> struct enum_traits<DL> {
     static constexpr DL last = DL::Num;
 };
 
@@ -130,8 +129,7 @@ enum class DC : int {
     Num,
 };
 
-template <>
-struct enum_traits<DC> {
+template <> struct enum_traits<DC> {
     static constexpr DC last = DC::Num;
 };
 
@@ -140,7 +138,8 @@ enum class DebugOutput {
     file,
 };
 
-#define debugmsg_of(debug_level, ...) realDebugmsg(__FILE__, STRING(__LINE__), __FUNCTION_NAME__, debug_level, __VA_ARGS__)
+#define debugmsg_of(debug_level, ...) \
+    realDebugmsg(__FILE__, STRING(__LINE__), __FUNCTION_NAME__, debug_level, __VA_ARGS__)
 
 /**
  * Debug message of level DL::Error and class DC::DebugMsg, also includes the source
@@ -149,14 +148,15 @@ enum class DebugOutput {
  */
 #define debugmsg(...) debugmsg_of(DL::Error, __VA_ARGS__)
 // Don't use this, use debugmsg instead.
-void realDebugmsg( const char *filename, const char *line, const char *funcname,
-                   const DL debug_level, const std::string &text );
-template<typename ...Args>
-inline void realDebugmsg( const char *const filename, const char *const line,
-                          const char *const funcname, const DL debug_level, const char *const mes, Args &&... args )
-{
-    return realDebugmsg( filename, line, funcname, debug_level, string_format( mes,
-                         std::forward<Args>( args )... ) );
+void realDebugmsg(
+    const char* filename, const char* line, const char* funcname, const DL debug_level,
+    const std::string& text);
+template <typename... Args>
+inline void realDebugmsg(
+    const char* const filename, const char* const line, const char* const funcname,
+    const DL debug_level, const char* const mes, Args&&... args) {
+    return realDebugmsg(
+        filename, line, funcname, debug_level, string_format(mes, std::forward<Args>(args)...));
 }
 
 // A fatal error for use in constexpr functions
@@ -167,15 +167,19 @@ inline void realDebugmsg( const char *const filename, const char *const line,
 // actually be returned, it's just needed for the type), and then
 // args as if to debugmsg for the remaining args.
 #if defined(__GNUC__) && __GNUC__ < 6
-#define constexpr_fatal(ret, ...) \
-    do { return false ? ( ret ) : ( abort(), ( ret ) ); } while(false)
+#    define constexpr_fatal(ret, ...) \
+        do { return false ? (ret) : (abort(), (ret)); } while (false)
 #else
-#define constexpr_fatal(ret, ...) \
-    do { debugmsg(__VA_ARGS__); abort(); return ( ret ); } while(false)
+#    define constexpr_fatal(ret, ...) \
+        do {                          \
+            debugmsg(__VA_ARGS__);    \
+            abort();                  \
+            return (ret);             \
+        } while (false)
 #endif
 
 /** Initializes the debugging system, called exactly once from main() */
-void setupDebug( DebugOutput );
+void setupDebug(DebugOutput);
 /** Opposite of setupDebug, shuts the debugging system down. */
 void deinitDebug();
 
@@ -184,12 +188,12 @@ void deinitDebug();
 /**
  * Set debug levels that should be logged.
  */
-void setDebugLogLevels( const enum_bitset<DL> &mask, bool silent = false );
+void setDebugLogLevels(const enum_bitset<DL>& mask, bool silent = false);
 
 /**
  * Set debug classes that should be logged.
  */
-void setDebugLogClasses( const enum_bitset<DC> &mask, bool silent = false );
+void setDebugLogClasses(const enum_bitset<DC>& mask, bool silent = false);
 
 /**
  * @return true if any error has been logged in this run.
@@ -206,7 +210,7 @@ void debug_reset_ignored_messages();
  * used to test debugmsg calls in the unit tests
  * @return std::string debugmsg
  */
-std::string capture_debugmsg_during( const std::function<void()> &func );
+std::string capture_debugmsg_during(const std::function<void()>& func);
 
 /**
  * Should be called after catacurses::stdscr is initialized.
@@ -235,8 +239,7 @@ std::optional<int> get_os_bitness();
 // Debug Only                                                       {{{1
 // ---------------------------------------------------------------------
 
-namespace detail
-{
+namespace detail {
 /**
  * Debug log guard.
  *
@@ -248,28 +251,25 @@ namespace detail
  * uninterrupted unit.  The single-argument constructor is used for the
  * null/filtered case and holds no lock.
  */
-class DebugLogGuard
-{
-        std::ostream *s;
-        std::unique_lock<std::mutex> lock_;
-    public:
-        // Active logging: takes ownership of the debug-log mutex lock.
-        DebugLogGuard( std::ostream &s, std::unique_lock<std::mutex> lock )
-            : s( &s ), lock_( std::move( lock ) ) {}
-        // Null/filtered: no lock held.
-        explicit DebugLogGuard( std::ostream &s ) : s( &s ) {}
-        ~DebugLogGuard();
+class DebugLogGuard {
+    std::ostream* s;
+    std::unique_lock<std::mutex> lock_;
 
-        std::ostream &operator*() {
-            return *s;
-        }
-        const std::ostream &operator*() const {
-            return *s;
-        }
+public:
+    // Active logging: takes ownership of the debug-log mutex lock.
+    DebugLogGuard(std::ostream& s, std::unique_lock<std::mutex> lock)
+        : s(&s),
+          lock_(std::move(lock)) {}
+    // Null/filtered: no lock held.
+    explicit DebugLogGuard(std::ostream& s): s(&s) {}
+    ~DebugLogGuard();
+
+    std::ostream& operator*() { return *s; }
+    const std::ostream& operator*() const { return *s; }
 };
 
-DebugLogGuard realDebugLog( DL lev, DC cl, const char *filename,
-                            const char *line, const char *funcname );
+DebugLogGuard realDebugLog(
+    DL lev, DC cl, const char* filename, const char* line, const char* funcname);
 } // namespace detail
 
 /**
@@ -286,14 +286,14 @@ DebugLogGuard realDebugLog( DL lev, DC cl, const char *filename,
 /**
  * Write a stack backtrace to the given ostream
  */
-void debug_write_backtrace( std::ostream &out );
-#if defined(_WIN32)
+void debug_write_backtrace(std::ostream& out);
+#    if defined(_WIN32)
 /**
  * Sets the CONTEXT* from the crash's EXCEPTION_POINTERS for accurate stack
  * walking. Pass nullptr to clear. Must be called before debug_write_backtrace.
  */
-void set_crash_exception_context( void *context );
-#endif
+void set_crash_exception_context(void* context);
+#    endif
 #endif
 
 // vim:tw=72:sw=4:fdm=marker:fdl=0:

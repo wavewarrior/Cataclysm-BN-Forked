@@ -4,8 +4,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace behavior
-{
+namespace behavior {
 enum status_t : char;
 
 /**
@@ -15,13 +14,10 @@ enum status_t : char;
  * Specialized oracles, such as a character_oracle_t, provide some number of predicates to retrieve
  * information about the referenced entity.
  */
-class oracle_t
-{
-};
+class oracle_t {};
 
-status_t return_running( const oracle_t * );
+status_t return_running(const oracle_t*);
 
-extern std::unordered_map<std::string, std::function<status_t( const oracle_t * )>> predicate_map;
+extern std::unordered_map<std::string, std::function<status_t(const oracle_t*)>> predicate_map;
 
 } // namespace behavior
-

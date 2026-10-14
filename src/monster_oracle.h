@@ -5,24 +5,20 @@
 
 class monster;
 
-namespace behavior
-{
+namespace behavior {
 
-class monster_oracle_t : public oracle_t
-{
-    public:
-        monster_oracle_t( const monster *subject ) {
-            this->subject = subject;
-        }
-        /**
-         * Predicates used by AI to determine goals.
-         */
-        status_t has_special() const;
-        status_t not_hallucination() const;
-        status_t items_available() const;
-    private:
-        const monster *subject;
+class monster_oracle_t: public oracle_t {
+public:
+    monster_oracle_t(const monster* subject) { this->subject = subject; }
+    /**
+     * Predicates used by AI to determine goals.
+     */
+    status_t has_special() const;
+    status_t not_hallucination() const;
+    status_t items_available() const;
+
+private:
+    const monster* subject;
 };
 
 } // namespace behavior
-

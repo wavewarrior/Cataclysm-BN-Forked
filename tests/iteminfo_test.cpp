@@ -286,11 +286,11 @@ TEST_CASE("armor coverage and protection values", "[item][iteminfo][armor]") {
             "--\n"
             "<color_c_white>Covers</color>:"
             " The <color_c_cyan>torso</color>."
-            " The <color_c_cyan>arms</color>. \n"); // NOLINT(cata-text-style)
+            " The <color_c_cyan>arms</color>. \n");
         test_info_equals(
             longshirt, q_vec({iteminfo_parts::ARMOR_LAYER}),
             "--\n"
-            "Layer: <color_c_light_blue>Normal</color>. \n"); // NOLINT(cata-text-style)
+            "Layer: <color_c_light_blue>Normal</color>. \n");
 
         // Warmth display
         REQUIRE(longshirt.get_warmth() == 5);
@@ -374,12 +374,12 @@ TEST_CASE("armor coverage and protection values", "[item][iteminfo][armor]") {
             "<color_c_white>Covers</color>:"
             " The <color_c_cyan>torso</color>."
             " The <color_c_cyan>arms</color>."
-            " The <color_c_cyan>legs</color>. \n"); // NOLINT(cata-text-style)
+            " The <color_c_cyan>legs</color>. \n");
 
         test_info_equals(
             swat_armor, q_vec({iteminfo_parts::ARMOR_LAYER}),
             "--\n"
-            "Layer: <color_c_light_blue>Normal</color>. \n"); // NOLINT(cata-text-style)
+            "Layer: <color_c_light_blue>Normal</color>. \n");
 
         REQUIRE(swat_armor.get_avg_coverage() == 95);
         REQUIRE(swat_armor.get_warmth() == 35);
@@ -473,12 +473,12 @@ TEST_CASE("armor coverage and protection values", "[item][iteminfo][armor]") {
             faux_fur_pants, q_vec({iteminfo_parts::ARMOR_BODYPARTS}),
             "--\n"
             "<color_c_white>Covers</color>:"
-            " The <color_c_cyan>legs</color>. \n"); // NOLINT(cata-text-style)
+            " The <color_c_cyan>legs</color>. \n");
 
         test_info_equals(
             faux_fur_pants, q_vec({iteminfo_parts::ARMOR_LAYER}),
             "--\n"
-            "Layer: <color_c_light_blue>Normal</color>. \n"); // NOLINT(cata-text-style)
+            "Layer: <color_c_light_blue>Normal</color>. \n");
 
         REQUIRE(faux_fur_pants.get_avg_coverage() == 95);
         REQUIRE(faux_fur_pants.get_warmth() == 70);
@@ -567,12 +567,12 @@ TEST_CASE("armor coverage and protection values", "[item][iteminfo][armor]") {
             " The <color_c_cyan>head</color>."
             " The <color_c_cyan>torso</color>."
             " The <color_c_cyan>arms</color>."
-            " The <color_c_cyan>legs</color>. \n"); // NOLINT(cata-text-style)
+            " The <color_c_cyan>legs</color>. \n");
 
         test_info_equals(
             faux_fur_suit, q_vec({iteminfo_parts::ARMOR_LAYER}),
             "--\n"
-            "Layer: <color_c_light_blue>Normal</color>. \n"); // NOLINT(cata-text-style)
+            "Layer: <color_c_light_blue>Normal</color>. \n");
 
         REQUIRE(faux_fur_suit.get_avg_coverage() == 75);
         REQUIRE(faux_fur_suit.get_warmth() == 5);
@@ -674,10 +674,8 @@ TEST_CASE("armor coverage and protection values", "[item][iteminfo][armor]") {
             "test_longshirt", q,
             R"(--
 <color_c_white>Covers</color>: The <color_c_cyan>torso</color>. The <color_c_cyan>arms</color>. )"
-            // NOLINTNEXTLINE(cata-text-style)
             R"(
 Layer: <color_c_light_blue>Normal</color>. )"
-            // NOLINTNEXTLINE(cata-text-style)
             R"(
 Warmth: <color_c_yellow>5</color>
 --
@@ -744,7 +742,7 @@ TEST_CASE("ranged weapon attributes", "[item][iteminfo][weapon][ranged][gun]") {
         test_info_equals(
             "test_compbow", q,
             "--\n"
-            "Reload time: <color_c_yellow>110</color> moves \n"); // NOLINT(cata-text-style)
+            "Reload time: <color_c_yellow>110</color> moves \n");
     }
 
     SECTION("weapon firing modes") {

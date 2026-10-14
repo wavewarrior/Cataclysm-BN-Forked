@@ -248,8 +248,8 @@ struct rmlui_render_interface::impl {
     // buffer can be returned to the same bucket on release.
     auto acquire_buffer(
         std::unordered_map<std::uint32_t, std::vector<SDL_GPUBuffer*>>& pool,
-        SDL_GPUBufferUsageFlags usage, std::uint32_t bytes,
-        std::uint32_t& out_cap) -> SDL_GPUBuffer* { // *NOPAD*
+        SDL_GPUBufferUsageFlags usage, std::uint32_t bytes, std::uint32_t& out_cap)
+        -> SDL_GPUBuffer* {
         const std::uint32_t cap = pool_bucket(bytes);
         out_cap = cap;
         auto it = pool.find(cap);
@@ -266,7 +266,7 @@ struct rmlui_render_interface::impl {
 
     // The current ring slot's staging buffer, grown only when this frame needs
     // more than it already holds. Steady state creates nothing.
-    auto ensure_stage(std::uint32_t bytes) -> SDL_GPUTransferBuffer* { // *NOPAD*
+    auto ensure_stage(std::uint32_t bytes) -> SDL_GPUTransferBuffer* {
         const std::uint32_t slot = stage_slot;
         if (stage[slot] != nullptr && stage_cap[slot] >= bytes) { return stage[slot]; }
         const std::uint32_t cap = pool_bucket(bytes);

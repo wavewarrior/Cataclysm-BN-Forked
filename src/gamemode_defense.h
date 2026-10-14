@@ -1,8 +1,5 @@
 #pragma once
 
-#include <string>
-#include <vector>
-
 #include "calendar.h"
 #include "coordinates.h"
 #include "cursesdef.h"
@@ -10,6 +7,9 @@
 #include "gamemode.h"
 #include "point.h"
 #include "type_id.h"
+
+#include <string>
+#include <vector>
 
 enum action_id : int;
 
@@ -49,83 +49,79 @@ enum caravan_category {
     NUM_CARAVAN_CATEGORIES
 };
 
-struct defense_game : public special_game {
-        defense_game();
+struct defense_game: public special_game {
+    defense_game();
 
-        special_game_type id() override {
-            return special_game_type::DEFENSE;
-        }
-        bool init() override;
-        void per_turn() override;
-        void pre_action( action_id &act ) override;
-        void post_action( action_id act ) override;
-        void game_over() override;
+    special_game_type id() override { return special_game_type::DEFENSE; }
+    bool init() override;
+    void per_turn() override;
+    void pre_action(action_id& act) override;
+    void post_action(action_id act) override;
+    void game_over() override;
 
-    private:
-        void init_to_style( defense_style new_style );
+private:
+    void init_to_style(defense_style new_style);
 
-        void setup();
-        void refresh_setup( const catacurses::window &w, int selection );
-        void init_mtypes();
-        void init_constructions();
-        void init_map();
+    void setup();
+    void refresh_setup(const catacurses::window& w, int selection);
+    void init_mtypes();
+    void init_constructions();
+    void init_map();
 
-        void spawn_wave();
-        void caravan();
-        std::vector<mtype_id> pick_monster_wave();
-        void spawn_wave_monster( const mtype_id &type );
+    void spawn_wave();
+    void caravan();
+    std::vector<mtype_id> pick_monster_wave();
+    void spawn_wave_monster(const mtype_id& type);
 
-        std::string special_wave_message( std::string name );
+    std::string special_wave_message(std::string name);
 
-        int current_wave = 0;
+    int current_wave = 0;
 
-        // What type of game is it?
-        defense_style style;
-        // Where are we?
-        defense_location location;
+    // What type of game is it?
+    defense_style style;
+    // Where are we?
+    defense_location location;
 
-        // Total "level" of monsters in first wave
-        int initial_difficulty = 0;
-        // Increased "level" of monsters per wave
-        int wave_difficulty = 0;
+    // Total "level" of monsters in first wave
+    int initial_difficulty = 0;
+    // Increased "level" of monsters per wave
+    int wave_difficulty = 0;
 
-        // Cooldown / building / healing time
-        time_duration time_between_waves = 0_turns;
-        // How many waves until we get to trade?
-        int waves_between_caravans = 0;
+    // Cooldown / building / healing time
+    time_duration time_between_waves = 0_turns;
+    // How many waves until we get to trade?
+    int waves_between_caravans = 0;
 
-        // How much cash do we start with?
-        int initial_cash = 0;
-        // How much cash do we get per wave?
-        int cash_per_wave = 0;
-        // How much does the above increase per wave?
-        int cash_increase = 0;
+    // How much cash do we start with?
+    int initial_cash = 0;
+    // How much cash do we get per wave?
+    int cash_per_wave = 0;
+    // How much does the above increase per wave?
+    int cash_increase = 0;
 
-        bool zombies = false;
-        bool specials = false;
-        bool spiders = false;
-        bool triffids = false;
-        bool robots = false;
-        bool subspace = false;
+    bool zombies = false;
+    bool specials = false;
+    bool spiders = false;
+    bool triffids = false;
+    bool robots = false;
+    bool subspace = false;
 
-        // Do we need to fulfill hunger?
-        bool hunger = false;
-        // Do we need to fulfill thirst?
-        bool thirst = false;
-        // Do we need to sleep?
-        bool sleep = false;
+    // Do we need to fulfill hunger?
+    bool hunger = false;
+    // Do we need to fulfill thirst?
+    bool thirst = false;
+    // Do we need to sleep?
+    bool sleep = false;
 
-        // Do caravans offer the option of hiring a mercenary?
-        bool mercenaries = false;
+    // Do caravans offer the option of hiring a mercenary?
+    bool mercenaries = false;
 
-        // Allow save
-        bool allow_save = false;
+    // Allow save
+    bool allow_save = false;
 
-        // Start defence location position on overmap
-        tripoint_om_omt defloc_pos;
+    // Start defence location position on overmap
+    tripoint_om_omt defloc_pos;
 
-        // Defense location special
-        overmap_special_id defloc_special;
+    // Defense location special
+    overmap_special_id defloc_special;
 };
-
-

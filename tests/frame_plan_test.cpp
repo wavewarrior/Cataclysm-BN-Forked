@@ -66,8 +66,7 @@ auto rebuild(std::vector<frame_step> steps) -> frame_plan {
 }
 
 /// Moves the step of `kind` to position `to`, shifting the steps in between.
-auto move_step(std::vector<frame_step>& steps, frame_step_kind kind, std::size_t to)
-    -> void { // *NOPAD*
+auto move_step(std::vector<frame_step>& steps, frame_step_kind kind, std::size_t to) -> void {
     const auto it = std::ranges::find(steps, kind, &frame_step::kind);
     const frame_step moved = *it;
     steps.erase(it);

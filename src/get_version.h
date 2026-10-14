@@ -1,3 +1,2 @@
 #pragma once
-const char *getVersionString();
-
+const char* getVersionString();

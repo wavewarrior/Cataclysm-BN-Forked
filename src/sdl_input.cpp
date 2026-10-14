@@ -1,5 +1,30 @@
 #include "sdl_input.h"
 
+#include "avatar.h"
+#include "cached_options.h" // test_mode
+#include "cata_utility.h"   // restore_on_out_of_scope
+#include "catacharset.h"
+#include "coordinates.h"
+#include "cuboid_rectangle.h"
+#include "cursesdef.h" // KEY_*, KEY_F, KEY_NUM, catacurses::stdscr, wrefresh
+#include "debug.h"
+#include "driver_loop.h"
+#include "game.h"
+#include "game_ui.h" // reinitialize_framebuffer
+#include "lighting/dev_test_lights.h"
+#include "lighting/gpu_device.h"
+#include "lighting/lighting_settings.h"
+#include "lighting/rmlui_layer.h"
+#include "lighting/sprite_batcher.h" // lighting::debug_params
+#include "map.h"
+#include "mapdata.h"
+#include "options.h" // get_option
+#include "output.h"  // refresh_display
+#include "runtime_handlers.h"
+#include "sdl_lighting_devui.h"
+#include "sdltiles.h"   // handle_resize
+#include "ui_manager.h" // ui_manager::invalidate, ui_manager::redraw_invalidated
+
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -13,36 +38,11 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <variant>
-#include <string>
 
-#include "cached_options.h" // test_mode
-#include "catacharset.h"
-#include "cata_utility.h"   // restore_on_out_of_scope
-#include "cuboid_rectangle.h"
-#include "cursesdef.h" // KEY_*, KEY_F, KEY_NUM, catacurses::stdscr, wrefresh
-#include "game_ui.h"    // reinitialize_framebuffer
-#include "lighting/rmlui_layer.h"
-#include "lighting/sprite_batcher.h" // lighting::debug_params
-#include "options.h"   // get_option
-#include "output.h"    // refresh_display
-#include "runtime_handlers.h"
-#include "sdltiles.h"  // handle_resize
-#include "ui_manager.h" // ui_manager::invalidate, ui_manager::redraw_invalidated
-#include "sdl_lighting_devui.h"
-#include "lighting/gpu_device.h"
-#include "lighting/lighting_settings.h"
-#include "lighting/dev_test_lights.h"
-#include "avatar.h"
-#include "game.h"
-#include "map.h"
-#include "mapdata.h"
-#include "coordinates.h"
-#include "debug.h"
-#include "driver_loop.h"
-
-#define dbg(x) DebugLogFL((x),DC::Main)
+#define dbg(x) DebugLogFL((x), DC::Main)
 
 // File-scope state for ALT+nnnn code entry and arrow-key combos.
 // These were file-scope statics in sdltiles.cpp and stay file-scope here.
@@ -52,29 +52,26 @@ static int arrow_combo_modifier = 0;
 
 static constexpr int ERR = -1;
 
-namespace
-{
+namespace {
 
 /// F8/F9: move a keys-channel knob one table step toward `delta`'s sign,
 /// clamped to the table's key range (the old `lighting_dbg_range` numbers).
-auto key_step_knob( std::string_view name, float delta ) -> void
-{
-    const lighting::knob_entry *e = lighting::knob_find( name );
-    const auto *member = e == nullptr ? nullptr :
-                         std::get_if<float lighting::debug_params::*>( &e->dest );
-    if( e == nullptr || !e->keys || member == nullptr ) {
+auto key_step_knob(std::string_view name, float delta) -> void {
+    const lighting::knob_entry* e = lighting::knob_find(name);
+    const auto* member =
+        e == nullptr ? nullptr : std::get_if<float lighting::debug_params::*>(&e->dest);
+    if (e == nullptr || !e->keys || member == nullptr) {
         // A programmer error (a misspelt name or a knob F8/F9 do not own): say so
         // instead of leaving the key dead.
-        debugmsg( "F8/F9 knob '%s' is not a key-steppable float knob", std::string( name ) );
+        debugmsg("F8/F9 knob '%s' is not a key-steppable float knob", std::string(name));
         return;
     }
-    float &v = lighting::live_settings().debug.**member;
-    v = lighting::knob_key_step( *e->keys, v, delta );
+    float& v = lighting::live_settings().debug.**member;
+    v = lighting::knob_key_step(*e->keys, v, delta);
 }
 
-auto sdl_keycode_opposite_arrow( SDL_Keycode key ) -> SDL_Keycode
-{
-    switch( key ) {
+auto sdl_keycode_opposite_arrow(SDL_Keycode key) -> SDL_Keycode {
+    switch (key) {
         case SDLK_UP:
             return SDLK_DOWN;
         case SDLK_DOWN:
@@ -87,127 +84,102 @@ auto sdl_keycode_opposite_arrow( SDL_Keycode key ) -> SDL_Keycode
     return 0;
 }
 
-auto sdl_keycode_is_arrow( SDL_Keycode key ) -> bool
-{
-    return static_cast<bool>( sdl_keycode_opposite_arrow( key ) );
+auto sdl_keycode_is_arrow(SDL_Keycode key) -> bool {
+    return static_cast<bool>(sdl_keycode_opposite_arrow(key));
 }
 
-auto arrow_combo_to_numpad( SDL_Keycode mod, SDL_Keycode key ) -> int
-{
-    if( ( mod == SDLK_UP    && key == SDLK_RIGHT ) ||
-        ( mod == SDLK_RIGHT && key == SDLK_UP ) ) {
-        return KEY_NUM( 9 );
+auto arrow_combo_to_numpad(SDL_Keycode mod, SDL_Keycode key) -> int {
+    if ((mod == SDLK_UP && key == SDLK_RIGHT) || (mod == SDLK_RIGHT && key == SDLK_UP)) {
+        return KEY_NUM(9);
     }
-    if( ( mod == SDLK_UP    && key == SDLK_UP ) ) {
-        return KEY_NUM( 8 );
+    if ((mod == SDLK_UP && key == SDLK_UP)) { return KEY_NUM(8); }
+    if ((mod == SDLK_UP && key == SDLK_LEFT) || (mod == SDLK_LEFT && key == SDLK_UP)) {
+        return KEY_NUM(7);
     }
-    if( ( mod == SDLK_UP    && key == SDLK_LEFT ) ||
-        ( mod == SDLK_LEFT  && key == SDLK_UP ) ) {
-        return KEY_NUM( 7 );
+    if ((mod == SDLK_RIGHT && key == SDLK_RIGHT)) { return KEY_NUM(6); }
+    if (mod == sdl_keycode_opposite_arrow(key)) { return KEY_NUM(5); }
+    if ((mod == SDLK_LEFT && key == SDLK_LEFT)) { return KEY_NUM(4); }
+    if ((mod == SDLK_DOWN && key == SDLK_RIGHT) || (mod == SDLK_RIGHT && key == SDLK_DOWN)) {
+        return KEY_NUM(3);
     }
-    if( ( mod == SDLK_RIGHT && key == SDLK_RIGHT ) ) {
-        return KEY_NUM( 6 );
-    }
-    if( mod == sdl_keycode_opposite_arrow( key ) ) {
-        return KEY_NUM( 5 );
-    }
-    if( ( mod == SDLK_LEFT  && key == SDLK_LEFT ) ) {
-        return KEY_NUM( 4 );
-    }
-    if( ( mod == SDLK_DOWN  && key == SDLK_RIGHT ) ||
-        ( mod == SDLK_RIGHT && key == SDLK_DOWN ) ) {
-        return KEY_NUM( 3 );
-    }
-    if( ( mod == SDLK_DOWN  && key == SDLK_DOWN ) ) {
-        return KEY_NUM( 2 );
-    }
-    if( ( mod == SDLK_DOWN  && key == SDLK_LEFT ) ||
-        ( mod == SDLK_LEFT  && key == SDLK_DOWN ) ) {
-        return KEY_NUM( 1 );
+    if ((mod == SDLK_DOWN && key == SDLK_DOWN)) { return KEY_NUM(2); }
+    if ((mod == SDLK_DOWN && key == SDLK_LEFT) || (mod == SDLK_LEFT && key == SDLK_DOWN)) {
+        return KEY_NUM(1);
     }
     return 0;
 }
 
 } // namespace
 
-namespace sdl_input
-{
+namespace sdl_input {
 
-void begin_alt_code()
-{
+void begin_alt_code() {
     alt_buffer = 0;
     alt_down = true;
 }
 
-auto add_alt_code( char c ) -> bool
-{
-    if( alt_down ) {
-        if( c >= '0' && c <= '9' ) {
-            alt_buffer = alt_buffer * 10 + ( c - '0' );
-        }
+auto add_alt_code(char c) -> bool {
+    if (alt_down) {
+        if (c >= '0' && c <= '9') { alt_buffer = alt_buffer * 10 + (c - '0'); }
 
         // Hardcoded alt-tab check. TODO: Handle alt keys properly
-        if( c == '\t' ) {
-            return true;
-        }
+        if (c == '\t') { return true; }
     }
     return false;
 }
 
-auto end_alt_code() -> int
-{
+auto end_alt_code() -> int {
     alt_down = false;
     return alt_buffer;
 }
 
-auto handle_dpad( display_context &d ) -> int
-{
+auto handle_dpad(display_context& d) -> int {
     // Check if we have a gamepad d-pad event.
-    if( SDL_GetJoystickHat( d.joystick, 0 ) != SDL_HAT_CENTERED ) {
+    if (SDL_GetJoystickHat(d.joystick, 0) != SDL_HAT_CENTERED) {
         // When someone tries to press a diagonal, they likely will
         // press a single direction first. Wait a few milliseconds to
         // give them time to press both of the buttons for the diagonal.
-        int button = SDL_GetJoystickHat( d.joystick, 0 );
+        int button = SDL_GetJoystickHat(d.joystick, 0);
         int lc = ERR;
-        if( button == SDL_HAT_LEFT ) {
+        if (button == SDL_HAT_LEFT) {
             lc = JOY_LEFT;
-        } else if( button == SDL_HAT_DOWN ) {
+        } else if (button == SDL_HAT_DOWN) {
             lc = JOY_DOWN;
-        } else if( button == SDL_HAT_RIGHT ) {
+        } else if (button == SDL_HAT_RIGHT) {
             lc = JOY_RIGHT;
-        } else if( button == SDL_HAT_UP ) {
+        } else if (button == SDL_HAT_UP) {
             lc = JOY_UP;
-        } else if( button == SDL_HAT_LEFTUP ) {
+        } else if (button == SDL_HAT_LEFTUP) {
             lc = JOY_LEFTUP;
-        } else if( button == SDL_HAT_LEFTDOWN ) {
+        } else if (button == SDL_HAT_LEFTDOWN) {
             lc = JOY_LEFTDOWN;
-        } else if( button == SDL_HAT_RIGHTUP ) {
+        } else if (button == SDL_HAT_RIGHTUP) {
             lc = JOY_RIGHTUP;
-        } else if( button == SDL_HAT_RIGHTDOWN ) {
+        } else if (button == SDL_HAT_RIGHTDOWN) {
             lc = JOY_RIGHTDOWN;
         }
 
-        if( d.delaydpad == std::numeric_limits<Uint64>::max() ) {
+        if (d.delaydpad == std::numeric_limits<Uint64>::max()) {
             d.delaydpad = SDL_GetTicks() + d.dpad_delay;
             d.queued_dpad = lc;
         }
 
         // Okay it seems we're ready to process.
-        if( SDL_GetTicks() > d.delaydpad ) {
+        if (SDL_GetTicks() > d.delaydpad) {
 
-            if( lc != ERR ) {
-                if( d.dpad_continuous && ( lc & d.lastdpad ) == 0 ) {
+            if (lc != ERR) {
+                if (d.dpad_continuous && (lc & d.lastdpad) == 0) {
                     // Continuous movement should only work in the same or similar directions.
                     d.dpad_continuous = false;
                     d.lastdpad = lc;
                     return 0;
                 }
 
-                d.last_input = input_event( lc, input_event_t::gamepad );
+                d.last_input = input_event(lc, input_event_t::gamepad);
                 d.lastdpad = lc;
                 d.queued_dpad = ERR;
 
-                if( !d.dpad_continuous ) {
+                if (!d.dpad_continuous) {
                     d.delaydpad = SDL_GetTicks() + 200;
                     d.dpad_continuous = true;
                 } else {
@@ -222,8 +194,8 @@ auto handle_dpad( display_context &d ) -> int
 
         // If we didn't hold it down for a while, just
         // fire the last registered press.
-        if( d.queued_dpad != ERR ) {
-            d.last_input = input_event( d.queued_dpad, input_event_t::gamepad );
+        if (d.queued_dpad != ERR) {
+            d.last_input = input_event(d.queued_dpad, input_event_t::gamepad);
             d.queued_dpad = ERR;
             return 1;
         }
@@ -232,77 +204,74 @@ auto handle_dpad( display_context &d ) -> int
     return 0;
 }
 
-auto keysym_to_curses( SDL_Keycode sym, SDL_Keymod mod ) -> int
-{
-    if( sym >= SDLK_KP_1 && sym <= SDLK_KP_0 ) {
-        return 0;
-    }
+auto keysym_to_curses(SDL_Keycode sym, SDL_Keymod mod) -> int {
+    if (sym >= SDLK_KP_1 && sym <= SDLK_KP_0) { return 0; }
 
-    const std::string diag_mode = get_option<std::string>( "DIAG_MOVE_WITH_MODIFIERS_MODE" );
+    const std::string diag_mode = get_option<std::string>("DIAG_MOVE_WITH_MODIFIERS_MODE");
 
-    if( diag_mode == "mode1" ) {
-        if( mod & SDL_KMOD_CTRL && sdl_keycode_is_arrow( sym ) ) {
-            return handle_arrow_combo( sym );
+    if (diag_mode == "mode1") {
+        if (mod & SDL_KMOD_CTRL && sdl_keycode_is_arrow(sym)) {
+            return handle_arrow_combo(sym);
         } else {
             end_arrow_combo();
         }
     }
 
-    if( diag_mode == "mode2" ) {
-        //Shift + Cursor Arrow (diagonal clockwise)
-        if( mod & SDL_KMOD_SHIFT ) {
-            switch( sym ) {
+    if (diag_mode == "mode2") {
+        // Shift + Cursor Arrow (diagonal clockwise)
+        if (mod & SDL_KMOD_SHIFT) {
+            switch (sym) {
                 case SDLK_LEFT:
-                    return inp_mngr.get_first_char_for_action( "LEFTUP" );
+                    return inp_mngr.get_first_char_for_action("LEFTUP");
                 case SDLK_RIGHT:
-                    return inp_mngr.get_first_char_for_action( "RIGHTDOWN" );
+                    return inp_mngr.get_first_char_for_action("RIGHTDOWN");
                 case SDLK_UP:
-                    return inp_mngr.get_first_char_for_action( "RIGHTUP" );
+                    return inp_mngr.get_first_char_for_action("RIGHTUP");
                 case SDLK_DOWN:
-                    return inp_mngr.get_first_char_for_action( "LEFTDOWN" );
+                    return inp_mngr.get_first_char_for_action("LEFTDOWN");
             }
         }
-        //Ctrl + Cursor Arrow (diagonal counter-clockwise)
-        if( mod & SDL_KMOD_CTRL ) {
-            switch( sym ) {
+        // Ctrl + Cursor Arrow (diagonal counter-clockwise)
+        if (mod & SDL_KMOD_CTRL) {
+            switch (sym) {
                 case SDLK_LEFT:
-                    return inp_mngr.get_first_char_for_action( "LEFTDOWN" );
+                    return inp_mngr.get_first_char_for_action("LEFTDOWN");
                 case SDLK_RIGHT:
-                    return inp_mngr.get_first_char_for_action( "RIGHTUP" );
+                    return inp_mngr.get_first_char_for_action("RIGHTUP");
                 case SDLK_UP:
-                    return inp_mngr.get_first_char_for_action( "LEFTUP" );
+                    return inp_mngr.get_first_char_for_action("LEFTUP");
                 case SDLK_DOWN:
-                    return inp_mngr.get_first_char_for_action( "RIGHTDOWN" );
+                    return inp_mngr.get_first_char_for_action("RIGHTDOWN");
             }
         }
     }
 
-    if( diag_mode == "mode3" ) {
-        //Shift + Cursor Left/RightArrow
-        if( mod & SDL_KMOD_SHIFT ) {
-            switch( sym ) {
+    if (diag_mode == "mode3") {
+        // Shift + Cursor Left/RightArrow
+        if (mod & SDL_KMOD_SHIFT) {
+            switch (sym) {
                 case SDLK_LEFT:
-                    return inp_mngr.get_first_char_for_action( "LEFTUP" );
+                    return inp_mngr.get_first_char_for_action("LEFTUP");
                 case SDLK_RIGHT:
-                    return inp_mngr.get_first_char_for_action( "RIGHTUP" );
+                    return inp_mngr.get_first_char_for_action("RIGHTUP");
             }
         }
-        //Ctrl + Cursor Left/Right Arrow
-        if( mod & SDL_KMOD_CTRL ) {
-            switch( sym ) {
+        // Ctrl + Cursor Left/Right Arrow
+        if (mod & SDL_KMOD_CTRL) {
+            switch (sym) {
                 case SDLK_LEFT:
-                    return inp_mngr.get_first_char_for_action( "LEFTDOWN" );
+                    return inp_mngr.get_first_char_for_action("LEFTDOWN");
                 case SDLK_RIGHT:
-                    return inp_mngr.get_first_char_for_action( "RIGHTDOWN" );
+                    return inp_mngr.get_first_char_for_action("RIGHTDOWN");
             }
         }
     }
 
-    if( mod & SDL_KMOD_CTRL && sym >= 'a' && sym <= 'z' ) {
+    if (mod & SDL_KMOD_CTRL && sym >= 'a' && sym <= 'z') {
         // ASCII ctrl codes, ^A through ^Z.
         return sym - 'a' + '\1';
     }
-    switch( sym ) {
+    switch (sym) {
         // This is special: allow entering a Unicode character with ALT+number
         case SDLK_RALT:
         case SDLK_LALT:
@@ -321,9 +290,7 @@ auto keysym_to_curses( SDL_Keycode sym, SDL_Keymod mod ) -> int
         case SDLK_ESCAPE:
             return KEY_ESCAPE;
         case SDLK_TAB:
-            if( mod & SDL_KMOD_SHIFT ) {
-                return KEY_BTAB;
-            }
+            if (mod & SDL_KMOD_SHIFT) { return KEY_BTAB; }
             return '\t';
         case SDLK_LEFT:
             return KEY_LEFT;
@@ -342,35 +309,35 @@ auto keysym_to_curses( SDL_Keycode sym, SDL_Keymod mod ) -> int
         case SDLK_END:
             return KEY_END;
         case SDLK_F1:
-            return KEY_F( 1 );
+            return KEY_F(1);
         case SDLK_F2:
-            return KEY_F( 2 );
+            return KEY_F(2);
         case SDLK_F3:
-            return KEY_F( 3 );
+            return KEY_F(3);
         case SDLK_F4:
-            return KEY_F( 4 );
+            return KEY_F(4);
         case SDLK_F5:
-            return KEY_F( 5 );
+            return KEY_F(5);
         case SDLK_F6:
-            return KEY_F( 6 );
+            return KEY_F(6);
         case SDLK_F7:
-            return KEY_F( 7 );
+            return KEY_F(7);
         case SDLK_F8:
-            return KEY_F( 8 );
+            return KEY_F(8);
         case SDLK_F9:
-            return KEY_F( 9 );
+            return KEY_F(9);
         case SDLK_F10:
-            return KEY_F( 10 );
+            return KEY_F(10);
         case SDLK_F11:
-            return KEY_F( 11 );
+            return KEY_F(11);
         case SDLK_F12:
-            return KEY_F( 12 );
+            return KEY_F(12);
         case SDLK_F13:
-            return KEY_F( 13 );
+            return KEY_F(13);
         case SDLK_F14:
-            return KEY_F( 14 );
+            return KEY_F(14);
         case SDLK_F15:
-            return KEY_F( 15 );
+            return KEY_F(15);
         // Every other key is ignored as there is no curses constant for it.
         // TODO: add more if you find more.
         default:
@@ -378,39 +345,30 @@ auto keysym_to_curses( SDL_Keycode sym, SDL_Keymod mod ) -> int
     }
 }
 
-auto handle_arrow_combo( SDL_Keycode key ) -> int
-{
-    if( !arrow_combo_modifier ) {
+auto handle_arrow_combo(SDL_Keycode key) -> int {
+    if (!arrow_combo_modifier) {
         arrow_combo_modifier = key;
         return 0;
     }
-    return arrow_combo_to_numpad( arrow_combo_modifier, key );
+    return arrow_combo_to_numpad(arrow_combo_modifier, key);
 }
 
-void end_arrow_combo()
-{
-    arrow_combo_modifier = 0;
-}
+void end_arrow_combo() { arrow_combo_modifier = 0; }
 
-auto gamepad_available( const display_context &d ) -> bool
-{
-    return d.joystick != nullptr;
-}
+auto gamepad_available(const display_context& d) -> bool { return d.joystick != nullptr; }
 
 } // namespace sdl_input
 
-namespace sdl_input
-{
+namespace sdl_input {
 
 // ---------------------------------------------------------------------------
 // try_sdl_update — throttle display refreshes to the framerate interval.
 // These were file-scope statics in sdltiles.cpp.  lastupdate / interval are in
 // display_context; refresh_display is declared in output.h.
 // ---------------------------------------------------------------------------
-static void try_sdl_update( display_context &d )
-{
+static void try_sdl_update(display_context& d) {
     const Uint64 now = SDL_GetTicks();
-    if( now - d.lastupdate >= d.interval ) {
+    if (now - d.lastupdate >= d.interval) {
         refresh_display();
     } else {
         d.needupdate = true;
@@ -436,8 +394,7 @@ static void try_sdl_update( display_context &d )
 // on purpose: display_context::last_input is wiped at the top of CheckMessages and
 // overwritten by every keyboard event, so it cannot answer "where is the cursor"
 // inside a keyboard-driven modal loop. Read via get_tracked_mouse_pos().
-namespace
-{
+namespace {
 point s_last_mouse_px = point_zero;
 // Right mouse button down/up, tracked from the SDL event stream for the same
 // reason as the cursor position above: SDL_GetMouseState() only reports state
@@ -452,9 +409,8 @@ constexpr size_t SCANCODE_SLOTS = 512;
 std::array<bool, SCANCODE_SLOTS> s_key_down{};
 int s_non_mod_keys_held = 0;
 
-auto is_modifier_scancode( uint32_t sc ) -> bool
-{
-    switch( sc ) {
+auto is_modifier_scancode(uint32_t sc) -> bool {
+    switch (sc) {
         case SDL_SCANCODE_LCTRL:
         case SDL_SCANCODE_RCTRL:
         case SDL_SCANCODE_LSHIFT:
@@ -471,10 +427,9 @@ auto is_modifier_scancode( uint32_t sc ) -> bool
 }
 
 // Edge-triggered, so SDL key repeat cannot inflate the count.
-void note_key_state( uint32_t sc, bool down )
-{
-    if( sc >= SCANCODE_SLOTS || is_modifier_scancode( sc ) ) { return; }
-    if( s_key_down[sc] == down ) { return; }
+void note_key_state(uint32_t sc, bool down) {
+    if (sc >= SCANCODE_SLOTS || is_modifier_scancode(sc)) { return; }
+    if (s_key_down[sc] == down) { return; }
     s_key_down[sc] = down;
     s_non_mod_keys_held += down ? 1 : -1;
 }
@@ -482,48 +437,36 @@ void note_key_state( uint32_t sc, bool down )
 // SDL delivers no key-up while the window is unfocused, so an alt-tab mid-hold
 // would strand the count above zero forever and a hold-to-close UI would never
 // close. Treat losing focus as "everything came up".
-void forget_held_keys()
-{
-    s_key_down.fill( false );
+void forget_held_keys() {
+    s_key_down.fill(false);
     s_non_mod_keys_held = 0;
 }
 } // namespace
 
-auto last_mouse_px() -> point
-{
-    return s_last_mouse_px;
-}
+auto last_mouse_px() -> point { return s_last_mouse_px; }
 
-auto rmb_down() -> bool
-{
-    return s_rmb_down;
-}
+auto rmb_down() -> bool { return s_rmb_down; }
 
-auto non_modifier_keys_held() -> int
-{
-    return s_non_mod_keys_held;
-}
+auto non_modifier_keys_held() -> int { return s_non_mod_keys_held; }
 
-void CheckMessages( display_context &d )
-{
+void CheckMessages(display_context& d) {
     static int frame = 0;
-    if( ++frame % 120 == 0 ) {
-        dbg( DL::Info ) << "[input] CheckMessages called, frame=" << frame;
-    }
+    if (++frame % 120 == 0) { dbg(DL::Info) << "[input] CheckMessages called, frame=" << frame; }
     // DIAGNOSTIC (temporary): /tmp/cata_dbg_mode containing "0".."17" forces that
     // lighting debug mode (mirrors F7) and is consumed. Lets scripted verification
     // set an exact mode without depending on F-key delivery, which is flaky under
     // synthetic input.
     {
         std::error_code ec;
-        if( std::filesystem::exists( "/tmp/cata_dbg_mode", ec ) ) {
-            std::ifstream mf( "/tmp/cata_dbg_mode" );
+        if (std::filesystem::exists("/tmp/cata_dbg_mode", ec)) {
+            std::ifstream mf("/tmp/cata_dbg_mode");
             int m = -1;
             mf >> m;
-            std::filesystem::remove( "/tmp/cata_dbg_mode", ec );
-            if( m >= 0 && static_cast<std::uint32_t>( m ) < lighting::debug_mode_count ) {
-                lighting::live_settings().set_debug_mode( static_cast<std::uint32_t>( m ) );
-                dbg( DL::Info ) << "lighting debug mode " << lighting::live_settings().debug_mode() << " (file)";
+            std::filesystem::remove("/tmp/cata_dbg_mode", ec);
+            if (m >= 0 && static_cast<std::uint32_t>(m) < lighting::debug_mode_count) {
+                lighting::live_settings().set_debug_mode(static_cast<std::uint32_t>(m));
+                dbg(DL::Info) << "lighting debug mode " << lighting::live_settings().debug_mode()
+                              << " (file)";
             }
         }
     }
@@ -534,14 +477,14 @@ void CheckMessages( display_context &d )
     // with no range clamp.
     {
         std::error_code ec;
-        if( std::filesystem::exists( "/tmp/cata_knob", ec ) ) {
-            std::ifstream kf( "/tmp/cata_knob" );
+        if (std::filesystem::exists("/tmp/cata_knob", ec)) {
+            std::ifstream kf("/tmp/cata_knob");
             std::string kn;
             float kv = 0.0f;
-            if( kf >> kn >> kv ) {
-                const bool ok = lighting::knob_apply_file( lighting::live_settings(), kn, kv );
-                std::filesystem::remove( "/tmp/cata_knob", ec );
-                dbg( DL::Info ) << "knob " << kn << " = " << kv << ( ok ? "" : " (unknown)" );
+            if (kf >> kn >> kv) {
+                const bool ok = lighting::knob_apply_file(lighting::live_settings(), kn, kv);
+                std::filesystem::remove("/tmp/cata_knob", ec);
+                dbg(DL::Info) << "knob " << kn << " = " << kv << (ok ? "" : " (unknown)");
             }
         }
     }
@@ -562,55 +505,51 @@ void CheckMessages( display_context &d )
     // screenshot captures the whole coloured-bounce chamber.
     {
         std::error_code ec;
-        if( std::filesystem::exists( "/tmp/cata_build_gi_scene", ec ) ) {
-            std::filesystem::remove( "/tmp/cata_build_gi_scene", ec );
-            if( g != nullptr && g->u.bub_pos().x() >= 0 ) {
+        if (std::filesystem::exists("/tmp/cata_build_gi_scene", ec)) {
+            std::filesystem::remove("/tmp/cata_build_gi_scene", ec);
+            if (g != nullptr && g->u.bub_pos().x() >= 0) {
                 const tripoint_bub_ms base = g->u.bub_pos();
                 const int z = base.z();
-                const int x0 = base.x() + 3;  // west wall (green)
-                const int x1 = base.x() + 9;  // east wall (plain + door)
-                const int y0 = base.y() - 3;  // north wall (red)
-                const int y1 = base.y() + 3;  // south wall (blue)
-                map &here = get_map();
-                for( int x = x0; x <= x1; ++x ) {
-                    for( int y = y0; y <= y1; ++y ) {
-                        const tripoint_bub_ms p( x, y, z );
-                        if( y == y0 ) {
-                            here.ter_set( p, t_rock_red );
-                        } else if( y == y1 ) {
-                            here.ter_set( p, t_rock_blue );
-                        } else if( x == x0 ) {
-                            here.ter_set( p, t_rock_green );
-                        } else if( x == x1 ) {
-                            here.ter_set( p, ( y == base.y() ) ? t_door_c : t_wall );
+                const int x0 = base.x() + 3; // west wall (green)
+                const int x1 = base.x() + 9; // east wall (plain + door)
+                const int y0 = base.y() - 3; // north wall (red)
+                const int y1 = base.y() + 3; // south wall (blue)
+                map& here = get_map();
+                for (int x = x0; x <= x1; ++x) {
+                    for (int y = y0; y <= y1; ++y) {
+                        const tripoint_bub_ms p(x, y, z);
+                        if (y == y0) {
+                            here.ter_set(p, t_rock_red);
+                        } else if (y == y1) {
+                            here.ter_set(p, t_rock_blue);
+                        } else if (x == x0) {
+                            here.ter_set(p, t_rock_green);
+                        } else if (x == x1) {
+                            here.ter_set(p, (y == base.y()) ? t_door_c : t_wall);
                         } else {
-                            here.ter_set( p, t_floor );
+                            here.ter_set(p, t_floor);
                         }
                     }
                 }
-                dev_test_lights::lights.push_back( dev_test_lights::light{
-                    static_cast<float>( ( x0 + x1 ) / 2 ), static_cast<float>( base.y() ),
-                    static_cast<float>( z ) + 0.5f, 10.0f, 3.0f, 1.0f, 1.0f, 0.92f
-                } );
+                dev_test_lights::lights.push_back(dev_test_lights::light{
+                    static_cast<float>((x0 + x1) / 2), static_cast<float>(base.y()),
+                    static_cast<float>(z) + 0.5f, 10.0f, 3.0f, 1.0f, 1.0f, 0.92f});
                 // Isolated tree + short wall segment west of the room, in the
                 // open, for a tree-vs-building shadow-length comparison.
-                const tripoint_bub_ms tree_p( base.x() - 6, base.y(), z );
-                here.ter_set( tree_p, t_grass );
-                here.ter_set( tripoint_bub_ms( base.x() - 6, base.y() - 1, z ), t_tree );
-                for( int wx = base.x() - 7; wx <= base.x() - 5; ++wx ) {
-                    here.ter_set( tripoint_bub_ms( wx, base.y() + 4, z ), t_grass );
+                const tripoint_bub_ms tree_p(base.x() - 6, base.y(), z);
+                here.ter_set(tree_p, t_grass);
+                here.ter_set(tripoint_bub_ms(base.x() - 6, base.y() - 1, z), t_tree);
+                for (int wx = base.x() - 7; wx <= base.x() - 5; ++wx) {
+                    here.ter_set(tripoint_bub_ms(wx, base.y() + 4, z), t_grass);
                 }
-                here.ter_set( tripoint_bub_ms( base.x() - 6, base.y() + 4, z ), t_wall );
+                here.ter_set(tripoint_bub_ms(base.x() - 6, base.y() + 4, z), t_wall);
                 // If seated in a vehicle, unboard first — a boarded character's position
                 // is re-derived from the vehicle's seat every tick, silently reverting
                 // setpos() and making the teleport (and this whole scene) invisible.
-                if( g->u.in_vehicle ) {
-                    here.unboard_vehicle( g->u.bub_pos() );
-                }
-                g->u.setpos( tripoint_bub_ms( x1 - 1, base.y(), z ) );
-                dbg( DL::Info ) << "[giscene] built room x=" << x0 << ".." << x1
-                                << " y=" << y0 << ".." << y1 << " z=" << z
-                                << " lights=" << dev_test_lights::lights.size();
+                if (g->u.in_vehicle) { here.unboard_vehicle(g->u.bub_pos()); }
+                g->u.setpos(tripoint_bub_ms(x1 - 1, base.y(), z));
+                dbg(DL::Info) << "[giscene] built room x=" << x0 << ".." << x1 << " y=" << y0 << ".."
+                              << y1 << " z=" << z << " lights=" << dev_test_lights::lights.size();
             }
         }
     }
@@ -618,43 +557,41 @@ void CheckMessages( display_context &d )
     bool quit = false;
     bool text_refresh = false;
     bool is_repeat = false;
-    if( handle_dpad( d ) ) {
-        return;
-    }
+    if (handle_dpad(d)) { return; }
 
     d.last_input = input_event();
 
     std::optional<point> resize_dims;
     bool render_target_reset = false;
 
-    while( SDL_PollEvent( &ev ) ) {
+    while (SDL_PollEvent(&ev)) {
         static uint64_t event_count = 0;
-        if( ++event_count % 60 == 0 ) {
-            dbg( DL::Info ) << "[input] SDL_PollEvent processed " << event_count << " events";
+        if (++event_count % 60 == 0) {
+            dbg(DL::Info) << "[input] SDL_PollEvent processed " << event_count << " events";
         }
         // Physical right-button state, recorded BEFORE any capture gate: the RmlUi
         // layer and the dev-panel click handlers below all `continue` past the switch,
         // so a release consumed by an open document would otherwise leave this latched
         // on and hold-to-aim could never end. Buttons are hardware state, not an
         // action — whoever handles the event, the button really did move.
-        if( ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev.button.button == SDL_BUTTON_RIGHT ) {
+        if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev.button.button == SDL_BUTTON_RIGHT) {
             s_rmb_down = true;
-        } else if( ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_RIGHT ) {
+        } else if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_RIGHT) {
             s_rmb_down = false;
-        } else if( ev.type == SDL_EVENT_KEY_DOWN || ev.type == SDL_EVENT_KEY_UP ) {
+        } else if (ev.type == SDL_EVENT_KEY_DOWN || ev.type == SDL_EVENT_KEY_UP) {
             // Same placement rationale as the buttons above: recorded BEFORE the
             // capture gate, so a release swallowed by an open RmlUi document still
             // clears the hold.
-            note_key_state( ev.key.scancode, ev.type == SDL_EVENT_KEY_DOWN );
-        } else if( ev.type == SDL_EVENT_WINDOW_FOCUS_LOST ) {
+            note_key_state(ev.key.scancode, ev.type == SDL_EVENT_KEY_DOWN);
+        } else if (ev.type == SDL_EVENT_WINDOW_FOCUS_LOST) {
             forget_held_keys();
         }
         // RmlUi layer sees events first; captures mouse (only) while a menu is open.
-        const bool rmlui_capture = rmlui_layer::process_event( ev );
+        const bool rmlui_capture = rmlui_layer::process_event(ev);
         // Open/close toggle (F4) — handled BEFORE the capture gate so the panel
         // can always be closed. P0 dev key; revisit for collisions when promoting
         // past P0.
-        if( ev.type == SDL_EVENT_KEY_DOWN && !ev.key.repeat && ev.key.key == SDLK_F4 ) {
+        if (ev.type == SDL_EVENT_KEY_DOWN && !ev.key.repeat && ev.key.key == SDLK_F4) {
             sdl_lighting_devui::devui_visible() = !sdl_lighting_devui::devui_visible();
             d.needupdate = true;
             continue;
@@ -662,31 +599,29 @@ void CheckMessages( display_context &d )
         // Dev test-light placement: a world click (not over the RmlUi panel) while the
         // dev panel is open with place-mode on drops a static light. Was the ImGui mouse
         // path; consume the click so it doesn't also trigger a game action.
-        if( !rmlui_capture && ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
-            ev.button.button == SDL_BUTTON_LEFT ) {
-            dbg( DL::Info ) << "[light_vis] LEFT_CLICK: rmlui_capture=" << rmlui_capture
-                            << " calling place_test_light()";
-            if( sdl_lighting_devui::place_test_light() ) {
+        if (!rmlui_capture && ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN
+            && ev.button.button == SDL_BUTTON_LEFT) {
+            dbg(DL::Info) << "[light_vis] LEFT_CLICK: rmlui_capture=" << rmlui_capture
+                          << " calling place_test_light()";
+            if (sdl_lighting_devui::place_test_light()) {
                 d.needupdate = true;
                 continue;
             }
         }
         // Dev test-sound placement: a world click while sound place-mode is on drops a
         // test sound at that location. Consume the click so it doesn't trigger a game action.
-        if( !rmlui_capture && ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
-            ev.button.button == SDL_BUTTON_LEFT ) {
-            dbg( DL::Info ) << "[sound_vis] LEFT_CLICK: rmlui_capture=" << rmlui_capture
-                            << " calling place_test_sound()";
-            if( sdl_lighting_devui::place_test_sound() ) {
+        if (!rmlui_capture && ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN
+            && ev.button.button == SDL_BUTTON_LEFT) {
+            dbg(DL::Info) << "[sound_vis] LEFT_CLICK: rmlui_capture=" << rmlui_capture
+                          << " calling place_test_sound()";
+            if (sdl_lighting_devui::place_test_sound()) {
                 d.needupdate = true;
                 continue;
             }
         }
         // RmlUi consumed this mouse/keyboard event — keep it out of game.
-        if( rmlui_capture ) {
-            continue;
-        }
-        switch( ev.type ) {
+        if (rmlui_capture) { continue; }
+        switch (ev.type) {
             case SDL_EVENT_WINDOW_SHOWN:
             case SDL_EVENT_WINDOW_MINIMIZED:
             case SDL_EVENT_WINDOW_FOCUS_GAINED:
@@ -697,28 +632,28 @@ void CheckMessages( display_context &d )
             case SDL_EVENT_WINDOW_RESTORED:
                 break;
             case SDL_EVENT_WINDOW_RESIZED:
-                resize_dims = point( ev.window.data1, ev.window.data2 );
+                resize_dims = point(ev.window.data1, ev.window.data2);
                 break;
             case SDL_EVENT_RENDER_TARGETS_RESET:
                 render_target_reset = true;
                 break;
             case SDL_EVENT_KEY_DOWN: {
                 is_repeat = ev.key.repeat;
-                //hide mouse cursor on keyboard input
-                if( get_option<std::string>( "HIDE_CURSOR" ) != "show" && SDL_CursorVisible() ) {
+                // hide mouse cursor on keyboard input
+                if (get_option<std::string>("HIDE_CURSOR") != "show" && SDL_CursorVisible()) {
                     SDL_HideCursor();
                 }
-                const int lc = keysym_to_curses( ev.key.key, ev.key.mod );
+                const int lc = keysym_to_curses(ev.key.key, ev.key.mod);
                 // Debug/tuning F-key handlers
-                if( lc == KEY_F( 5 ) ) {
+                if (lc == KEY_F(5)) {
                     // F5: toggle debug HUD display
                     g_dbg_lighting = !g_dbg_lighting;
                     break;
-                } else if( lc == KEY_F( 6 ) ) {
+                } else if (lc == KEY_F(6)) {
                     // F6: toggle shader debug visualization
                     g_dbg_lighting_shader = !g_dbg_lighting_shader;
                     break;
-                } else if( lc == KEY_F( 7 ) ) {
+                } else if (lc == KEY_F(7)) {
                     // F7: cycle debug visualization mode (0-17). Modes include:
                     // 8 = B/W emitter-only (bypasses tint for main-menu blue),
                     // 9 = surface normal (Sobel), 10 = AO, 11 = shadow mask (game tiles only),
@@ -730,60 +665,60 @@ void CheckMessages( display_context &d )
                     // would otherwise leave the capture silently showing a different
                     // mode, which reads as a result rather than as a miss. This turns
                     // "I pressed it the right number of times" into positive evidence.
-                    dbg( DL::Info ) << "lighting debug mode " << lighting::live_settings().debug_mode();
+                    dbg(DL::Info) << "lighting debug mode "
+                                  << lighting::live_settings().debug_mode();
                     break;
-                } else if( lc == KEY_F( 8 ) ) {
+                } else if (lc == KEY_F(8)) {
                     // F8: decrease emitter/sun/sky scales.
                     // Shift+F8: less dither.  Ctrl+F8: fewer dither bands.
                     {
-                        const auto down = []( std::string_view n ) { key_step_knob( n, -1.0f ); };
-                        if( ev.key.mod & SDL_KMOD_ALT ) {
-                            down( "gi_strength" );
-                        } else if( ev.key.mod & SDL_KMOD_CTRL ) {
-                            down( "dither_bands" );
-                        } else if( ev.key.mod & SDL_KMOD_SHIFT ) {
-                            down( "dither_amt" );
+                        const auto down = [](std::string_view n) { key_step_knob(n, -1.0f); };
+                        if (ev.key.mod & SDL_KMOD_ALT) {
+                            down("gi_strength");
+                        } else if (ev.key.mod & SDL_KMOD_CTRL) {
+                            down("dither_bands");
+                        } else if (ev.key.mod & SDL_KMOD_SHIFT) {
+                            down("dither_amt");
                         } else {
-                            down( "emitter_scale" );
-                            down( "sun_scale" );
-                            down( "sky_scale" );
+                            down("emitter_scale");
+                            down("sun_scale");
+                            down("sky_scale");
                         }
                     }
                     break;
-                } else if( lc == KEY_F( 9 ) ) {
+                } else if (lc == KEY_F(9)) {
                     // F9: increase emitter/sun/sky scales.
                     // Shift+F9: more dither.  Ctrl+F9: more dither bands.
                     {
-                        const auto up = []( std::string_view n ) { key_step_knob( n, 1.0f ); };
-                        if( ev.key.mod & SDL_KMOD_ALT ) {
-                            up( "gi_strength" );
-                        } else if( ev.key.mod & SDL_KMOD_CTRL ) {
-                            up( "dither_bands" );
-                        } else if( ev.key.mod & SDL_KMOD_SHIFT ) {
-                            up( "dither_amt" );
+                        const auto up = [](std::string_view n) { key_step_knob(n, 1.0f); };
+                        if (ev.key.mod & SDL_KMOD_ALT) {
+                            up("gi_strength");
+                        } else if (ev.key.mod & SDL_KMOD_CTRL) {
+                            up("dither_bands");
+                        } else if (ev.key.mod & SDL_KMOD_SHIFT) {
+                            up("dither_amt");
                         } else {
-                            up( "emitter_scale" );
-                            up( "sun_scale" );
-                            up( "sky_scale" );
+                            up("emitter_scale");
+                            up("sun_scale");
+                            up("sky_scale");
                         }
                     }
                     break;
-                } else if( lc == KEY_F( 10 ) ) {
+                } else if (lc == KEY_F(10)) {
                     // F10: menu emitter radius input ± 100 (Shift = down).
                     // Input feeds make_omni; HUD shows 3·√r as actual radius.
-                    const bool shift = ( ev.key.mod & SDL_KMOD_SHIFT ) != 0;
+                    const bool shift = (ev.key.mod & SDL_KMOD_SHIFT) != 0;
                     const float step = shift ? -100.0f : 100.0f;
-                    menu_emitter_tuning::radius_input = std::clamp(
-                                                            menu_emitter_tuning::radius_input + step, 1.0f, 10000.0f );
+                    menu_emitter_tuning::radius_input =
+                        std::clamp(menu_emitter_tuning::radius_input + step, 1.0f, 10000.0f);
                     break;
-                } else if( lc == KEY_F( 11 ) ) {
+                } else if (lc == KEY_F(11)) {
                     // F11: cycle menu emitter position preset.
                     // 0 top-left (8.5, 4.5) — current default
                     // 1 screen centre (~40, 22) for a 80×45 tile viewport
                     // 2 bottom-right (~70, 38)
-                    menu_emitter_tuning::pos_preset =
-                        ( menu_emitter_tuning::pos_preset + 1 ) % 3;
-                    switch( menu_emitter_tuning::pos_preset ) {
+                    menu_emitter_tuning::pos_preset = (menu_emitter_tuning::pos_preset + 1) % 3;
+                    switch (menu_emitter_tuning::pos_preset) {
                         case 0:
                             menu_emitter_tuning::pos_x = 8.5f;
                             menu_emitter_tuning::pos_y = 4.5f;
@@ -798,63 +733,62 @@ void CheckMessages( display_context &d )
                             break;
                     }
                     break;
-                } else if( lc == KEY_F( 12 ) ) {
+                } else if (lc == KEY_F(12)) {
                     // F12: toggle bright-blue debug backdrop.
-                    menu_emitter_tuning::blue_backdrop =
-                        !menu_emitter_tuning::blue_backdrop;
+                    menu_emitter_tuning::blue_backdrop = !menu_emitter_tuning::blue_backdrop;
                     break;
-                } else if( lc == KEY_F( 13 ) ) {
+                } else if (lc == KEY_F(13)) {
                     // F13: dump the next frame's swapchain (/tmp/cata_frame_<n>.bmp)
                     // and map state (/tmp/cata_map_<n>.json) for offline analysis.
                     lighting::request_frame_dump();
-                    dbg( DL::Info ) << "frame+map dump requested (next frame)";
+                    dbg(DL::Info) << "frame+map dump requested (next frame)";
                     break;
                 }
-                if( lc <= 0 ) {
-                    if( ev.key.key >= SDLK_KP_1 && ev.key.key <= SDLK_KP_0 ) {
-                        d.last_input = input_event( ev.key.key - SDLK_KP_1 + NUMPAD_1, input_event_t::keyboard );
+                if (lc <= 0) {
+                    if (ev.key.key >= SDLK_KP_1 && ev.key.key <= SDLK_KP_0) {
+                        d.last_input =
+                            input_event(ev.key.key - SDLK_KP_1 + NUMPAD_1, input_event_t::keyboard);
                     } else {
                         // a key we don't know in curses and won't handle.
                         break;
                     }
-                } else if( add_alt_code( lc ) ) {
+                } else if (add_alt_code(lc)) {
                     // key was handled
                 } else {
-                    d.last_input = input_event( lc, input_event_t::keyboard );
+                    d.last_input = input_event(lc, input_event_t::keyboard);
                 }
-            }
-            break;
+            } break;
             case SDL_EVENT_KEY_UP: {
                 is_repeat = ev.key.repeat;
-                if( ev.key.key == SDLK_LALT || ev.key.key == SDLK_RALT ) {
+                if (ev.key.key == SDLK_LALT || ev.key.key == SDLK_RALT) {
                     int code = end_alt_code();
-                    if( code ) {
-                        d.last_input = input_event( code, input_event_t::keyboard );
-                        d.last_input.text = utf32_to_utf8( code );
+                    if (code) {
+                        d.last_input = input_event(code, input_event_t::keyboard);
+                        d.last_input.text = utf32_to_utf8(code);
                     }
                 }
-            }
-            break;
+            } break;
             case SDL_EVENT_TEXT_INPUT:
-                if( !add_alt_code( *ev.text.text ) ) {
-                    if( strlen( ev.text.text ) > 0 ) {
-                        const unsigned lc = UTF8_getch( ev.text.text );
-                        d.last_input = input_event( lc, input_event_t::keyboard );
+                if (!add_alt_code(*ev.text.text)) {
+                    if (strlen(ev.text.text) > 0) {
+                        const unsigned lc = UTF8_getch(ev.text.text);
+                        d.last_input = input_event(lc, input_event_t::keyboard);
 #if defined(SDL_PLATFORM_ANDROID)
-                        if( !android_is_hardware_keyboard_available() ) {
-                            if( !is_string_input( touch_input_context ) && !touch_input_context.allow_text_entry ) {
-                                if( get_option<bool>( "ANDROID_AUTO_KEYBOARD" ) ) {
-                                    SDL_StopTextInput( d.window.get() );
+                        if (!android_is_hardware_keyboard_available()) {
+                            if (!is_string_input(touch_input_context)
+                                && !touch_input_context.allow_text_entry) {
+                                if (get_option<bool>("ANDROID_AUTO_KEYBOARD")) {
+                                    SDL_StopTextInput(d.window.get());
                                 }
 
-                                quick_shortcuts_t &qsl = quick_shortcuts_map[get_quick_shortcut_name(
-                                                             touch_input_context.get_category() )];
-                                qsl.remove( d.last_input );
-                                add_quick_shortcut( qsl, d.last_input, false, true );
+                                quick_shortcuts_t& qsl = quick_shortcuts_map
+                                    [get_quick_shortcut_name(touch_input_context.get_category())];
+                                qsl.remove(d.last_input);
+                                add_quick_shortcut(qsl, d.last_input, false, true);
                                 refresh_display();
-                            } else if( lc == '\n' || lc == KEY_ESCAPE ) {
-                                if( get_option<bool>( "ANDROID_AUTO_KEYBOARD" ) ) {
-                                    SDL_StopTextInput( d.window.get() );
+                            } else if (lc == '\n' || lc == KEY_ESCAPE) {
+                                if (get_option<bool>("ANDROID_AUTO_KEYBOARD")) {
+                                    SDL_StopTextInput(d.window.get());
                                 }
                             }
                         }
@@ -869,9 +803,9 @@ void CheckMessages( display_context &d )
                 }
                 break;
             case SDL_EVENT_TEXT_EDITING: {
-                if( strlen( ev.edit.text ) > 0 ) {
-                    const unsigned lc = UTF8_getch( ev.edit.text );
-                    d.last_input = input_event( lc, input_event_t::keyboard );
+                if (strlen(ev.edit.text) > 0) {
+                    const unsigned lc = UTF8_getch(ev.edit.text);
+                    d.last_input = input_event(lc, input_event_t::keyboard);
                 } else {
                     // no key pressed in this event
                     d.last_input = input_event();
@@ -880,10 +814,9 @@ void CheckMessages( display_context &d )
                 d.last_input.edit = ev.edit.text;
                 d.last_input.edit_refresh = true;
                 text_refresh = true;
-            }
-            break;
+            } break;
             case SDL_EVENT_JOYSTICK_BUTTON_DOWN:
-                d.last_input = input_event( ev.jbutton.button, input_event_t::keyboard );
+                d.last_input = input_event(ev.jbutton.button, input_event_t::keyboard);
                 break;
             case SDL_EVENT_JOYSTICK_AXIS_MOTION:
                 // on gamepads, the axes are the analog sticks
@@ -897,26 +830,24 @@ void CheckMessages( display_context &d )
                 // player touches a key. Consumers that need "where is the cursor"
                 // during a keyboard-driven loop (the ranged-targeting crosshair)
                 // read this instead — see get_tracked_mouse_pos().
-                s_last_mouse_px = point( static_cast<int>( ev.motion.x ),
-                                         static_cast<int>( ev.motion.y ) );
-                if( get_option<std::string>( "HIDE_CURSOR" ) == "show" ||
-                    get_option<std::string>( "HIDE_CURSOR" ) == "hidekb" ) {
-                    if( !SDL_CursorVisible() ) {
-                        SDL_ShowCursor();
-                    }
+                s_last_mouse_px =
+                    point(static_cast<int>(ev.motion.x), static_cast<int>(ev.motion.y));
+                if (get_option<std::string>("HIDE_CURSOR") == "show"
+                    || get_option<std::string>("HIDE_CURSOR") == "hidekb") {
+                    if (!SDL_CursorVisible()) { SDL_ShowCursor(); }
 
                     // Only monitor motion when cursor is visible
-                    d.last_input = input_event( MOUSE_MOVE, input_event_t::mouse );
+                    d.last_input = input_event(MOUSE_MOVE, input_event_t::mouse);
                 }
                 break;
 
             case SDL_EVENT_MOUSE_BUTTON_UP:
-                switch( ev.button.button ) {
+                switch (ev.button.button) {
                     case SDL_BUTTON_LEFT:
-                        d.last_input = input_event( MOUSE_BUTTON_LEFT, input_event_t::mouse );
+                        d.last_input = input_event(MOUSE_BUTTON_LEFT, input_event_t::mouse);
                         break;
                     case SDL_BUTTON_RIGHT:
-                        d.last_input = input_event( MOUSE_BUTTON_RIGHT, input_event_t::mouse );
+                        d.last_input = input_event(MOUSE_BUTTON_RIGHT, input_event_t::mouse);
                         break;
                 }
                 break;
@@ -927,19 +858,19 @@ void CheckMessages( display_context &d )
                 // so active() is permanently true and gating on it swallowed every
                 // right/middle click — including the MOUSE_RIGHT_DOWN that AIM_HOLD
                 // is bound to, which disabled right-click-to-aim outright.
-                if( ev.button.button == SDL_BUTTON_RIGHT && !rmlui_layer::capturing_input() ) {
-                    d.last_input = input_event( MOUSE_BUTTON_RIGHT_DOWN, input_event_t::mouse );
-                } else if( ev.button.button == SDL_BUTTON_MIDDLE
-                           && !rmlui_layer::capturing_input() ) {
-                    d.last_input = input_event( MOUSE_BUTTON_MIDDLE, input_event_t::mouse );
+                if (ev.button.button == SDL_BUTTON_RIGHT && !rmlui_layer::capturing_input()) {
+                    d.last_input = input_event(MOUSE_BUTTON_RIGHT_DOWN, input_event_t::mouse);
+                } else if (ev.button.button == SDL_BUTTON_MIDDLE
+                           && !rmlui_layer::capturing_input()) {
+                    d.last_input = input_event(MOUSE_BUTTON_MIDDLE, input_event_t::mouse);
                 }
                 break;
 
             case SDL_EVENT_MOUSE_WHEEL:
-                if( ev.wheel.y > 0 ) {
-                    d.last_input = input_event( SCROLLWHEEL_UP, input_event_t::mouse );
-                } else if( ev.wheel.y < 0 ) {
-                    d.last_input = input_event( SCROLLWHEEL_DOWN, input_event_t::mouse );
+                if (ev.wheel.y > 0) {
+                    d.last_input = input_event(SCROLLWHEEL_UP, input_event_t::mouse);
+                } else if (ev.wheel.y < 0) {
+                    d.last_input = input_event(SCROLLWHEEL_DOWN, input_event_t::mouse);
                 }
                 break;
 
@@ -947,9 +878,7 @@ void CheckMessages( display_context &d )
                 quit = true;
                 break;
         }
-        if( text_refresh && !is_repeat ) {
-            break;
-        }
+        if (text_refresh && !is_repeat) { break; }
     }
 
     // While an RmlUi doc (dev panel or menu) is open, repaint every CheckMessages
@@ -957,60 +886,50 @@ void CheckMessages( display_context &d )
     // get_input_event spins CheckMessages ~1 kHz while waiting; vsync on
     // submit_frame caps actual redraws to the display rate. Without this an idle
     // panel (no mouse motion) looks frozen.
-    if( rmlui_layer::active() ) {
-        d.needupdate = true;
-    }
+    if (rmlui_layer::active()) { d.needupdate = true; }
 
     bool resized = false;
-    if( resize_dims.has_value() ) {
+    if (resize_dims.has_value()) {
         point rd = resize_dims.value();
         resize_dims.reset();
-        restore_on_out_of_scope<input_event> prev_last_input( d.last_input );
-        d.needupdate = resized = handle_resize( rd.x, rd.y );
+        restore_on_out_of_scope<input_event> prev_last_input(d.last_input);
+        d.needupdate = resized = handle_resize(rd.x, rd.y);
     }
-    if( !resized && render_target_reset ) {
+    if (!resized && render_target_reset) {
         render_target_reset = false;
-        reinitialize_framebuffer( true );
+        reinitialize_framebuffer(true);
         d.needupdate = true;
-        restore_on_out_of_scope<input_event> prev_last_input( d.last_input );
+        restore_on_out_of_scope<input_event> prev_last_input(d.last_input);
         // FIXME: SDL_RENDER_TARGETS_RESET only seems to be fired after the first redraw
         // when restoring the window after system sleep, rather than immediately
         // on focus gain. This seems to mess up the first redraw and
         // causes black screen that lasts ~0.5 seconds before the screen
         // contents are redrawn in the following code.
-        ui_manager::invalidate( rectangle<point>( point_zero, point( d.WindowWidth, d.WindowHeight ) ),
-                                false );
+        ui_manager::
+            invalidate(rectangle<point>(point_zero, point(d.WindowWidth, d.WindowHeight)), false);
         ui_manager::redraw_invalidated();
     }
-    if( d.needupdate ) {
-        try_sdl_update( d );
-    }
+    if (d.needupdate) { try_sdl_update(d); }
     // force_world_redraw: an idle input wait with no timeout only re-enters the
     // redraw loop on an event. Report a timeout instead so the knob takes effect
     // without user input (get_player_input treats TIMEOUT as keep-waiting).
-    if( g_force_world_redraw && d.last_input.type == input_event_t::error ) {
+    if (g_force_world_redraw && d.last_input.type == input_event_t::error) {
         d.last_input.type = input_event_t::timeout;
     }
-    if( quit ) {
-        exit_handler( 0 );
-    }
+    if (quit) { exit_handler(0); }
 }
 
 // Dispatch overrides — these are declared in input.h as input_manager member
 // functions.  They live here because they form the SDL input pipeline.
 } // namespace sdl_input
 
-void input_manager::set_timeout( const int t )
-{
+void input_manager::set_timeout(const int t) {
     input_timeout = t;
     g_display.inputdelay = t;
 }
 
-void input_manager::pump_events()
-{
-    if( test_mode ) {
-        return;
-    }
+void input_manager::pump_events() {
+    if (test_mode) { return; }
 
     // SDL3 asserts that the event queue is only pumped from the main thread
     // (SDL_PumpEventsInternal -> SDL_IsMainThread_REAL).  Many finalization
@@ -1018,26 +937,21 @@ void input_manager::pump_events()
     // of them also run on the prewarm/worker threads, where driving SDL and the
     // UI is both illegal and pointless.  Make the pump a no-op off the main
     // thread so callers never have to know which thread they are on.
-    if( !SDL_IsMainThread() ) {
-        return;
-    }
+    if (!SDL_IsMainThread()) { return; }
 
     // Handle all events, but ignore any keypress
-    sdl_input::CheckMessages( g_display );
+    sdl_input::CheckMessages(g_display);
 
     g_display.last_input = input_event();
     previously_pressed_key = 0;
 }
 
-input_event input_manager::get_input_event()
-{
-    if( driver_mode_active() ) {
+input_event input_manager::get_input_event() {
+    if (driver_mode_active()) {
         // Nobody types in driver mode, and a modal fiber (which never gets here) is the only
         // thing that can wait for a key. A poll with no wait finds nothing; any other read has
         // no one to answer it, so it must fail instead of hanging the process.
-        if( g_display.inputdelay != 0 ) {
-            throw driver_blocking_read();
-        }
+        if (g_display.inputdelay != 0) { throw driver_blocking_read(); }
         input_event nothing;
         nothing.type = input_event_t::timeout;
         return nothing;
@@ -1047,55 +961,45 @@ input_event input_manager::get_input_event()
     // thread: the inputdelay < 0 branch below spins until a real event arrives,
     // so a silent guard would hang instead of crash.  Blocking on user input
     // from a worker is a design error — fail loudly.
-    assert( SDL_IsMainThread() &&
-            "get_input_event() must be called from the main thread" );
+    assert(SDL_IsMainThread() && "get_input_event() must be called from the main thread");
 
     previously_pressed_key = 0;
 
     // standards note: getch is sometimes required to call refresh
     // see, e.g., http://linux.die.net/man/3/getch
-    // so although it's non-obvious, that refresh() call (and maybe InvalidateRect?) IS supposed to be there
-    // however, the refresh call has not effect when nothing has been drawn, so
-    // we can skip it if `needupdate` is false to improve performance during mouse
-    // move events.
-    if( g_display.needupdate ) {
-        wrefresh( catacurses::stdscr );
-    }
+    // so although it's non-obvious, that refresh() call (and maybe InvalidateRect?) IS supposed to
+    // be there however, the refresh call has not effect when nothing has been drawn, so we can skip
+    // it if `needupdate` is false to improve performance during mouse move events.
+    if (g_display.needupdate) { wrefresh(catacurses::stdscr); }
 
-    if( g_display.inputdelay < 0 ) {
+    if (g_display.inputdelay < 0) {
         do {
-            sdl_input::CheckMessages( g_display );
-            if( g_display.last_input.type != input_event_t::error ) {
-                break;
-            }
-            SDL_Delay( 1 );
-        } while( g_display.last_input.type == input_event_t::error );
-    } else if( g_display.inputdelay > 0 ) {
+            sdl_input::CheckMessages(g_display);
+            if (g_display.last_input.type != input_event_t::error) { break; }
+            SDL_Delay(1);
+        } while (g_display.last_input.type == input_event_t::error);
+    } else if (g_display.inputdelay > 0) {
         Uint64 starttime = SDL_GetTicks();
         Uint64 endtime = 0;
         bool timedout = false;
         do {
-            sdl_input::CheckMessages( g_display );
+            sdl_input::CheckMessages(g_display);
             endtime = SDL_GetTicks();
-            if( g_display.last_input.type != input_event_t::error ) {
-                break;
-            }
-            SDL_Delay( 1 );
+            if (g_display.last_input.type != input_event_t::error) { break; }
+            SDL_Delay(1);
             timedout = endtime >= starttime + g_display.inputdelay;
-            if( timedout ) {
-                g_display.last_input.type = input_event_t::timeout;
-            }
-        } while( !timedout );
+            if (timedout) { g_display.last_input.type = input_event_t::timeout; }
+        } while (!timedout);
     } else {
-        sdl_input::CheckMessages( g_display );
+        sdl_input::CheckMessages(g_display);
     }
 
-    if( g_display.last_input.type == input_event_t::mouse ) {
+    if (g_display.last_input.type == input_event_t::mouse) {
         float mx, my;
-        SDL_GetMouseState( &mx, &my );
-        g_display.last_input.mouse_pos.x = static_cast<int>( mx );
-        g_display.last_input.mouse_pos.y = static_cast<int>( my );
-    } else if( g_display.last_input.type == input_event_t::keyboard ) {
+        SDL_GetMouseState(&mx, &my);
+        g_display.last_input.mouse_pos.x = static_cast<int>(mx);
+        g_display.last_input.mouse_pos.y = static_cast<int>(my);
+    } else if (g_display.last_input.type == input_event_t::keyboard) {
         previously_pressed_key = g_display.last_input.get_first_input();
     }
 

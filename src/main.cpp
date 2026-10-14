@@ -19,29 +19,30 @@
 #include <utility>
 #include <vector>
 #if defined(_WIN32)
-#include "platform_win.h"
-#include <io.h>
-#include <fcntl.h>
+#    include "platform_win.h"
+
+#    include <fcntl.h>
+#    include <io.h>
 #else
-#include <csignal>
-#include <unistd.h>
+#    include <csignal>
+#    include <unistd.h>
 #endif
 #include "action.h"
+#include "avatar.h"   // game::u.moves access in the accumulator tick loop
+#include "calendar.h" // to_turn<int>(calendar::turn) for tick logging
 #include "catalua.h"
 #include "color.h"
+#include "coop_client.h"       // complete type for g->coop_client_->queue_action()
+#include "coop_input_window.h" // coop_admit_action/coop_expire_stale_actions in the co-op loop
+#include "coop_server.h"       // complete type for g->coop_server_->has_pending_actions()
+#include "coop_session.h"      // coop_session::get().is_coop() for main loop selection
 #include "crash.h"
 #include "cursesdef.h"
 #include "debug.h"
-#include "filesystem.h"
 #include "driver_loop.h"
 #include "driver_window.h"
+#include "filesystem.h"
 #include "game.h"
-#include "avatar.h"      // game::u.moves access in the accumulator tick loop
-#include "calendar.h"    // to_turn<int>(calendar::turn) for tick logging
-#include "coop_client.h" // complete type for g->coop_client_->queue_action()
-#include "coop_session.h" // coop_session::get().is_coop() for main loop selection
-#include "coop_input_window.h" // coop_admit_action/coop_expire_stale_actions in the co-op loop
-#include "coop_server.h" // complete type for g->coop_server_->has_pending_actions()
 #include "game_ui.h"
 #include "get_version.h"
 #include "init.h"
@@ -61,8 +62,8 @@
 #include "ui_manager.h"
 
 #if defined(PREFIX)
-#undef PREFIX
-#include "prefix.h"
+#    undef PREFIX
+#    include "prefix.h"
 #endif
 
 class ui_adaptor;
@@ -70,9 +71,10 @@ class ui_adaptor;
 #define SDL_MAIN_HANDLED
 #include "sdl_wrappers.h"
 #if defined(CATA_SDL)
-#   include <SDL3/SDL.h>
-#   include "compute/gpu_platform.h"
-#   include "platform/sdl_video.h"
+#    include "compute/gpu_platform.h"
+#    include "platform/sdl_video.h"
+
+#    include <SDL3/SDL.h>
 #endif
 #include "preload_config.h"
 
@@ -80,9 +82,8 @@ class ui_adaptor;
 
 #if !defined(_WIN32)
 [[noreturn]]
-static void signal_handler( int )
-{
-    exit_handler( 0 );
+static void signal_handler(int) {
+    exit_handler(0);
 }
 #endif //! defined(_WIN32)
 
@@ -90,73 +91,66 @@ static void signal_handler( int )
  * Report fatal error in a user-friendly way
  * (stderr or a message box, depending on build.)
  */
-static void report_fatal_error( const std::string& msg )
-{
-    if( test_mode ) {
+static void report_fatal_error(const std::string& msg) {
+    if (test_mode) {
         std::cerr << "Cataclysm BN: Fatal error" << '\n' << msg << '\n';
     } else {
         SDL_ShowSimpleMessageBox(
-            SDL_MESSAGEBOX_ERROR, "Cataclysm BN: Fatal error", msg.c_str(), nullptr );
+            SDL_MESSAGEBOX_ERROR, "Cataclysm BN: Fatal error", msg.c_str(), nullptr);
     }
 }
 
-namespace
-{
+namespace {
 
 struct arg_handler {
     //! Handler function to be invoked when this argument is encountered. The handler will be
     //! called with the number of parameters after the flag was encountered, along with the array
     //! of following parameters. It must return an integer indicating how many parameters were
     //! consumed by the call or -1 to indicate that a required argument was missing.
-    using handler_method = std::function<int( int, const char** )>;
+    using handler_method = std::function<int(int, const char**)>;
 
-    const char *flag;                //!< The commandline parameter to handle (e.g., "--seed").
-    const char *param_documentation; //!< Human readable description of this arguments parameter.
-    const char *documentation;       //!< Human readable documentation for this argument.
-    const char *help_group; //!< Section of the help message in which to include this argument.
+    const char* flag;                //!< The commandline parameter to handle (e.g., "--seed").
+    const char* param_documentation; //!< Human readable description of this arguments parameter.
+    const char* documentation;       //!< Human readable documentation for this argument.
+    const char* help_group; //!< Section of the help message in which to include this argument.
     handler_method handler; //!< The callback to be invoked when this argument is encountered.
 };
 
 #if defined(CATA_SDL)
-auto init_sdl_platform( bool init_audio ) -> bool
-{
-    auto init_flags = SDL_InitFlags{ SDL_INIT_VIDEO };
-#if defined(SDL_SOUND)
-    if( init_audio ) {
-        init_flags |= SDL_INIT_AUDIO;
-    }
-#else
-    ( void )init_audio;
-#endif
+auto init_sdl_platform(bool init_audio) -> bool {
+    auto init_flags = SDL_InitFlags{SDL_INIT_VIDEO};
+#    if defined(SDL_SOUND)
+    if (init_audio) { init_flags |= SDL_INIT_AUDIO; }
+#    else
+    (void)init_audio;
+#    endif
 
-    if( !SDL_Init( init_flags ) ) {
-        DebugLog( DL::Error, DC::Main ) << "SDL_Init failed: " << SDL_GetError();
+    if (!SDL_Init(init_flags)) {
+        DebugLog(DL::Error, DC::Main) << "SDL_Init failed: " << SDL_GetError();
         return false;
     }
 
-    atexit( SDL_Quit );
+    atexit(SDL_Quit);
     return true;
 }
 #endif
 
 void printHelpMessage(
     const arg_handler* first_pass_arguments, size_t num_first_pass_arguments,
-    const arg_handler* second_pass_arguments, size_t num_second_pass_arguments );
+    const arg_handler* second_pass_arguments, size_t num_second_pass_arguments);
 } // namespace
 
 #if defined(USE_WINMAIN)
 int APIENTRY
-WinMain( HINSTANCE /* hInstance */, HINSTANCE /* hPrevInstance */, LPSTR /* lpCmdLine */,
-         int /* nCmdShow */ )
-{
+WinMain(HINSTANCE /* hInstance */, HINSTANCE /* hPrevInstance */, LPSTR /* lpCmdLine */,
+        int /* nCmdShow */) {
     int argc = __argc;
-    char **argv = __argv;
+    char** argv = __argv;
 #else
-int main( int argc, char* argv[] )
-{
+int main(int argc, char* argv[]) {
 #endif
     init_crash_handlers();
-    int seed = time( nullptr );
+    int seed = time(nullptr);
     bool verifyexit = false;
     bool check_mods = false;
     auto check_mods_mode = init::check_mods_mode::default_mods;
@@ -165,293 +159,209 @@ int main( int argc, char* argv[] )
     std::string dump;
     dump_mode dmode = dump_mode::TSV;
     std::vector<std::string> opts;
-    std::string world; /** if set try to load first save in this world on startup */
-    int driver_fd = -1; /** if >= 0 serve the line-JSON agent driver on this inherited fd */
+    std::string world;        /** if set try to load first save in this world on startup */
+    int driver_fd = -1;       /** if >= 0 serve the line-JSON agent driver on this inherited fd */
     int driver_reply_fd = -1; /** with --driver-fd 0: the original stdout, where responses go */
     bool driver_windowed = false; /** the driver boots with a real window instead of test_mode */
     std::string driver_deny_list; /** the driver's deny-list file; empty selects the default */
-    std::string driver_scenes; /** the driver's Scenes directory; empty selects the default */
+    std::string driver_scenes;    /** the driver's Scenes directory; empty selects the default */
 
     // Set default file paths
 #if defined(PREFIX)
-    PATH_INFO::init_base_path( std::string( PREFIX ) );
+    PATH_INFO::init_base_path(std::string(PREFIX));
 #else
-    PATH_INFO::init_base_path( "" );
+    PATH_INFO::init_base_path("");
 #endif
 
 #if defined(USE_HOME_DIR) || defined(USE_XDG_DIR)
-    PATH_INFO::init_user_dir( "" );
+    PATH_INFO::init_user_dir("");
 #else
-    PATH_INFO::init_user_dir( "." );
+    PATH_INFO::init_user_dir(".");
 #endif
     PATH_INFO::set_standard_filenames();
 
     MAP_SHARING::setDefaults();
     {
-        const char *section_default = nullptr;
-        const char *section_map_sharing = "Map sharing";
-        const char *section_user_directory = "User directories";
-        const std::array<arg_handler, 21> first_pass_arguments = {{
-                {
-                    "--seed", "<string of letters and or numbers>",
-                    "Sets the random number generator's seed value",
-                    section_default,
-                    [&seed]( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        const unsigned char *hash_input = reinterpret_cast<const unsigned char *>( params[0] );
-                        seed = djb2_hash( hash_input );
-                        return 1;
-                    }
-                },
-                {
-                    "--jsonverify", nullptr,
-                    "Checks the BN json files",
-                    section_default,
-                    [&verifyexit]( int, const char ** ) -> int {
-                        test_mode = true;
-                        verifyexit = true;
-                        return 0;
-                    }
-                },
-                {
-                    "--check-mods", "[mods…]",
-                    "Checks the json files belonging to default or specified BN mods",
-                    section_default,
-                    [&check_mods, &opts]( int n, const char *params[] ) -> int {
-                        check_mods = true;
-                        test_mode = true;
-                        for( int i = 0; i < n; ++i ) {
-                            opts.emplace_back( params[ i ] );
-                        }
-                        return 0;
-                    }
-                },
-                {
-                    "--check-all-mods", nullptr,
-                    "Checks the json files belonging to all non-obsolete BN mods",
-                    section_default,
-                    [&check_mods, &check_mods_mode]( int, const char ** ) -> int {
-                        check_mods = true;
-                        check_mods_mode = init::check_mods_mode::all_mods;
-                        test_mode = true;
-                        return 0;
-                    }
-                },
-                {
-                    "--dump-stats", "<what> [mode = TSV] [opts…]",
-                    "Dumps item stats",
-                    section_default,
-                    [&dump, &dmode, &opts]( int n, const char *params[] ) -> int {
-                        if( n < 1 ) {
-                            return -1;
-                        }
-                        test_mode = true;
-                        dump = params[ 0 ];
-                        for( int i = 2; i < n; ++i )
-                        {
-                            opts.emplace_back( params[ i ] );
-                        }
-                        if( n >= 2 )
-                        {
-                            if( !strcmp( params[ 1 ], "TSV" ) ) {
-                                dmode = dump_mode::TSV;
-                                return 0;
-                            } else if( !strcmp( params[ 1 ], "HTML" ) ) {
-                                dmode = dump_mode::HTML;
-                                return 0;
-                            } else {
-                                return -1;
-                            }
-                        }
-                        return 0;
-                    }
-                },
-                {
-                    "--world", "<name>",
-                    "Load world",
-                    section_default,
-                    [&world]( int n, const char *params[] ) -> int {
-                        if( n < 1 ) {
-                            return -1;
-                        }
-                        world = params[0];
-                        return 1;
-                    }
-                },
-                {
-                    "--basepath", "<path>",
-                    "Base path for all game data subdirectories",
-                    section_default,
-                    []( int num_args, const char **params )
-                    {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        PATH_INFO::init_base_path( params[0] );
-                        PATH_INFO::set_standard_filenames();
-                        return 1;
-                    }
-                },
-                {
-                    "--shared", nullptr,
-                    "Activates the map-sharing mode",
-                    section_map_sharing,
-                    []( int, const char ** ) -> int {
-                        MAP_SHARING::setSharing( true );
-                        MAP_SHARING::setCompetitive( true );
-                        MAP_SHARING::setWorldmenu( false );
-                        return 0;
-                    }
-                },
-                {
-                    "--username", "<name>",
-                    "Instructs map-sharing code to use this name for your character.",
-                    section_map_sharing,
-                    []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        MAP_SHARING::setUsername( params[0] );
-                        return 1;
-                    }
-                },
-                {
-                    "--addadmin", "<username>",
-                    "Instructs map-sharing code to use this name for your character and give you "
-                    "access to the cheat functions.",
-                    section_map_sharing,
-                    []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        MAP_SHARING::addAdmin( params[0] );
-                        return 1;
-                    }
-                },
-                {
-                    "--adddebugger", "<username>",
-                    "Informs map-sharing code that you're running inside a debugger",
-                    section_map_sharing,
-                    []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        MAP_SHARING::addDebugger( params[0] );
-                        return 1;
-                    }
-                },
-                {
-                    "--competitive", nullptr,
-                    "Instructs map-sharing code to disable access to the in-game cheat functions",
-                    section_map_sharing,
-                    []( int, const char ** ) -> int {
-                        MAP_SHARING::setCompetitive( true );
-                        return 0;
-                    }
-                },
-                {
-                    "--userdir", "<path>",
-                    // NOLINTNEXTLINE(cata-text-style): the dot is not a period
-                    "Base path for user-overrides to files from the ./data directory and named below",
-                    section_user_directory,
-                    []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        PATH_INFO::init_user_dir( params[0] );
-                        PATH_INFO::set_standard_filenames();
-                        return 1;
-                    }
-                },
-                {
-                    "--dont-debugmsg", nullptr,
-                    "If set, no debug messages will be printed",
-                    section_default,
-                    []( int, const char ** ) -> int {
-                        dont_debugmsg = true;
-                        return 0;
-                    }
-                },
-                {
-                    "--lua-doc", "<output path>",
-                    "Generate Lua docs to given path and exit",
-                    section_default,
-                    [&]( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        test_mode = true;
-                        lua_doc_output_path = params[0];
-                        return 0;
-                    }
-                },
-                {
-                    "--lua-types", "<output path>",
-                    "Generate Lua types to given path and exit",
-                    section_default,
-                    [&]( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        test_mode = true;
-                        lua_types_output_path = params[0];
-                        return 0;
-                    }
-                },
-                {
-                    "--gpu-backend", "<driver>",
-                    "Override the SDL_GPU backend driver for diagnostics (vulkan / direct3d12 / metal / software).",
-                    nullptr,
-                    []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
+        const char* section_default = nullptr;
+        const char* section_map_sharing = "Map sharing";
+        const char* section_user_directory = "User directories";
+        const std::array<arg_handler, 21> first_pass_arguments = {
+            {{"--seed", "<string of letters and or numbers>",
+              "Sets the random number generator's seed value", section_default,
+              [&seed](int num_args, const char** params) -> int {
+                  if (num_args < 1) { return -1; }
+                  const unsigned char* hash_input = reinterpret_cast<const unsigned char*>(
+                      params[0]);
+                  seed = djb2_hash(hash_input);
+                  return 1;
+              }},
+             {"--jsonverify", nullptr, "Checks the BN json files", section_default,
+              [&verifyexit](int, const char**) -> int {
+                  test_mode = true;
+                  verifyexit = true;
+                  return 0;
+              }},
+             {"--check-mods", "[mods…]",
+              "Checks the json files belonging to default or specified BN mods", section_default,
+              [&check_mods, &opts](int n, const char* params[]) -> int {
+                  check_mods = true;
+                  test_mode = true;
+                  for (int i = 0; i < n; ++i) { opts.emplace_back(params[i]); }
+                  return 0;
+              }},
+             {"--check-all-mods", nullptr,
+              "Checks the json files belonging to all non-obsolete BN mods", section_default,
+              [&check_mods, &check_mods_mode](int, const char**) -> int {
+                  check_mods = true;
+                  check_mods_mode = init::check_mods_mode::all_mods;
+                  test_mode = true;
+                  return 0;
+              }},
+             {"--dump-stats", "<what> [mode = TSV] [opts…]", "Dumps item stats", section_default,
+              [&dump, &dmode, &opts](int n, const char* params[]) -> int {
+                  if (n < 1) { return -1; }
+                  test_mode = true;
+                  dump = params[0];
+                  for (int i = 2; i < n; ++i) { opts.emplace_back(params[i]); }
+                  if (n >= 2) {
+                      if (!strcmp(params[1], "TSV")) {
+                          dmode = dump_mode::TSV;
+                          return 0;
+                      } else if (!strcmp(params[1], "HTML")) {
+                          dmode = dump_mode::HTML;
+                          return 0;
+                      } else {
+                          return -1;
+                      }
+                  }
+                  return 0;
+              }},
+             {"--world", "<name>", "Load world", section_default,
+              [&world](int n, const char* params[]) -> int {
+                  if (n < 1) { return -1; }
+                  world = params[0];
+                  return 1;
+              }},
+             {"--basepath", "<path>", "Base path for all game data subdirectories", section_default,
+              [](int num_args, const char** params) {
+                  if (num_args < 1) { return -1; }
+                  PATH_INFO::init_base_path(params[0]);
+                  PATH_INFO::set_standard_filenames();
+                  return 1;
+              }},
+             {"--shared", nullptr, "Activates the map-sharing mode", section_map_sharing,
+              [](int, const char**) -> int {
+                  MAP_SHARING::setSharing(true);
+                  MAP_SHARING::setCompetitive(true);
+                  MAP_SHARING::setWorldmenu(false);
+                  return 0;
+              }},
+             {"--username", "<name>",
+              "Instructs map-sharing code to use this name for your character.",
+              section_map_sharing,
+              [](int num_args, const char** params) -> int {
+                  if (num_args < 1) { return -1; }
+                  MAP_SHARING::setUsername(params[0]);
+                  return 1;
+              }},
+             {"--addadmin", "<username>",
+              "Instructs map-sharing code to use this name for your character and give you "
+              "access to the cheat functions.",
+              section_map_sharing,
+              [](int num_args, const char** params) -> int {
+                  if (num_args < 1) { return -1; }
+                  MAP_SHARING::addAdmin(params[0]);
+                  return 1;
+              }},
+             {"--adddebugger", "<username>",
+              "Informs map-sharing code that you're running inside a debugger", section_map_sharing,
+              [](int num_args, const char** params) -> int {
+                  if (num_args < 1) { return -1; }
+                  MAP_SHARING::addDebugger(params[0]);
+                  return 1;
+              }},
+             {"--competitive", nullptr,
+              "Instructs map-sharing code to disable access to the in-game cheat functions",
+              section_map_sharing,
+              [](int, const char**) -> int {
+                  MAP_SHARING::setCompetitive(true);
+                  return 0;
+              }},
+             {"--userdir", "<path>",
+              // : the dot is not a period
+              "Base path for user-overrides to files from the ./data directory and named below",
+              section_user_directory,
+              [](int num_args, const char** params) -> int {
+                  if (num_args < 1) { return -1; }
+                  PATH_INFO::init_user_dir(params[0]);
+                  PATH_INFO::set_standard_filenames();
+                  return 1;
+              }},
+             {"--dont-debugmsg", nullptr, "If set, no debug messages will be printed",
+              section_default,
+              [](int, const char**) -> int {
+                  dont_debugmsg = true;
+                  return 0;
+              }},
+             {"--lua-doc", "<output path>", "Generate Lua docs to given path and exit",
+              section_default,
+              [&](int num_args, const char** params) -> int {
+                  if (num_args < 1) { return -1; }
+                  test_mode = true;
+                  lua_doc_output_path = params[0];
+                  return 0;
+              }},
+             {"--lua-types", "<output path>", "Generate Lua types to given path and exit",
+              section_default,
+              [&](int num_args, const char** params) -> int {
+                  if (num_args < 1) { return -1; }
+                  test_mode = true;
+                  lua_types_output_path = params[0];
+                  return 0;
+              }},
+             {"--gpu-backend", "<driver>",
+              "Override the SDL_GPU backend driver for diagnostics (vulkan / direct3d12 / metal / software).",
+              nullptr,
+              [](int num_args, const char** params) -> int {
+                  if (num_args < 1) { return -1; }
 #if defined(CATA_SDL)
-                        preload_config::set_gpu_backend_override( params[0] );
+                  preload_config::set_gpu_backend_override(params[0]);
 #endif
-                        return 1;
-                    }
-                },
-                {
-                    "--driver-fd", "<N>",
-                    "Serve the line-JSON agent driver protocol on inherited file descriptor N; 0 reads requests from stdin and answers on stdout (the only form Windows supports). Without a window unless --driver-windowed is also given.",
-                    section_default,
-                    [&driver_fd, &driver_reply_fd]( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        driver_fd = atoi( params[0] );
-                        // Stray stdout writes (cata_printf, SDL, RmlUi, Lua print) must never
-                        // reach the protocol channel: move stdout onto stderr. With N = 0 the
-                        // protocol keeps a private copy of the original stdout first.
+                  return 1;
+              }},
+             {"--driver-fd", "<N>",
+              "Serve the line-JSON agent driver protocol on inherited file descriptor N; 0 reads requests from stdin and answers on stdout (the only form Windows supports). Without a window unless --driver-windowed is also given.",
+              section_default,
+              [&driver_fd, &driver_reply_fd](int num_args, const char** params) -> int {
+                  if (num_args < 1) { return -1; }
+                  driver_fd = atoi(params[0]);
+            // Stray stdout writes (cata_printf, SDL, RmlUi, Lua print) must never
+            // reach the protocol channel: move stdout onto stderr. With N = 0 the
+            // protocol keeps a private copy of the original stdout first.
 #if defined(_WIN32)
-                        if( driver_fd == 0 )
-                        {
-                            driver_reply_fd = _dup( _fileno( stdout ) );
-                            if( driver_reply_fd < 0 ) {
-                                std::cerr << "driver: --driver-fd 0 needs a stdout pipe; none was inherited\n";
-                                return -1;
-                            }
-                            // Text mode would turn "\n" into "\r\n" and stop reading at ^Z.
-                            _setmode( 0, _O_BINARY );
-                            _setmode( driver_reply_fd, _O_BINARY );
-                        }
-                        // Stray stdout goes to stderr, or to NUL when no stderr was inherited
-                        // (_fileno == -2; passing that on would fast-fail in the CRT's
-                        // invalid-parameter handler). Either way it never reaches the protocol pipe.
-                        const auto sink = _fileno( stderr ) >= 0 ? _fileno( stderr ) : _open( "NUL", _O_WRONLY );
-                        if( sink >= 0 && _fileno( stdout ) >= 0 )
-                        {
-                            _dup2( sink, _fileno( stdout ) );
-                        }
-                        if( sink >= 0 )
-                        {
-                            // A GUI-subsystem exe's CRT does not update the OS handle; code that
-                            // writes through GetStdHandle( STD_OUTPUT_HANDLE ) must not reach it.
-                            SetStdHandle( STD_OUTPUT_HANDLE, reinterpret_cast<HANDLE>( _get_osfhandle( sink ) ) );
-                        }
+                  if (driver_fd == 0) {
+                      driver_reply_fd = _dup(_fileno(stdout));
+                      if (driver_reply_fd < 0) {
+                          std::cerr
+                              << "driver: --driver-fd 0 needs a stdout pipe; none was inherited\n";
+                          return -1;
+                      }
+                      // Text mode would turn "\n" into "\r\n" and stop reading at ^Z.
+                      _setmode(0, _O_BINARY);
+                      _setmode(driver_reply_fd, _O_BINARY);
+                  }
+                  // Stray stdout goes to stderr, or to NUL when no stderr was inherited
+                  // (_fileno == -2; passing that on would fast-fail in the CRT's
+                  // invalid-parameter handler). Either way it never reaches the protocol pipe.
+                  const auto sink =
+                      _fileno(stderr) >= 0 ? _fileno(stderr) : _open("NUL", _O_WRONLY);
+                  if (sink >= 0 && _fileno(stdout) >= 0) { _dup2(sink, _fileno(stdout)); }
+                  if (sink >= 0) {
+                      // A GUI-subsystem exe's CRT does not update the OS handle; code that
+                      // writes through GetStdHandle( STD_OUTPUT_HANDLE ) must not reach it.
+                      SetStdHandle(STD_OUTPUT_HANDLE,
+                                   reinterpret_cast<HANDLE>(_get_osfhandle(sink)));
+                  }
 #else
                         if( driver_fd == 0 )
                         {
@@ -459,185 +369,127 @@ int main( int argc, char* argv[] )
                         }
                         dup2( STDERR_FILENO, STDOUT_FILENO );
 #endif
-                        return 1;
-                    }
-                },
-                {
-                    "--driver-windowed", "<WxH>",
-                    "With --driver-fd, open a real, visible game window of this size in pixels, in a corner of the screen and without taking focus, instead of running windowless.",
-                    section_default,
-                    [&driver_windowed]( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        const std::optional<driver_window_size> size = parse_driver_window_size( params[0] );
-                        if( !size )
-                        {
-                            return -1;
-                        }
-                        request_driver_window( *size );
-                        driver_windowed = true;
-                        return 1;
-                    }
-                },
-                {
-                    "--driver-deny-list", "<path>",
-                    "Load the driver's deny list from this file instead of data/driver_deny_list.json.",
-                    section_default,
-                    [&driver_deny_list]( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        driver_deny_list = params[0];
-                        return 1;
-                    }
-                },
-                {
-                    "--driver-scenes", "<dir>",
-                    "Look for the driver's run_scene Scenes in this directory instead of tools/visual_verify/scenes.",
-                    section_default,
-                    [&driver_scenes]( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        driver_scenes = params[0];
-                        return 1;
-                    }
-                }
-            }
-        };
+                  return 1;
+              }},
+             {"--driver-windowed", "<WxH>",
+              "With --driver-fd, open a real, visible game window of this size in pixels, in a corner of the screen and without taking focus, instead of running windowless.",
+              section_default,
+              [&driver_windowed](int num_args, const char** params) -> int {
+                  if (num_args < 1) { return -1; }
+                  const std::optional<driver_window_size> size = parse_driver_window_size(
+                      params[0]);
+                  if (!size) { return -1; }
+                  request_driver_window(*size);
+                  driver_windowed = true;
+                  return 1;
+              }},
+             {"--driver-deny-list", "<path>",
+              "Load the driver's deny list from this file instead of data/driver_deny_list.json.",
+              section_default,
+              [&driver_deny_list](int num_args, const char** params) -> int {
+                  if (num_args < 1) { return -1; }
+                  driver_deny_list = params[0];
+                  return 1;
+              }},
+             {"--driver-scenes", "<dir>",
+              "Look for the driver's run_scene Scenes in this directory instead of tools/visual_verify/scenes.",
+              section_default, [&driver_scenes](int num_args, const char** params) -> int {
+                  if (num_args < 1) { return -1; }
+                  driver_scenes = params[0];
+                  return 1;
+              }}}};
 
         // The following arguments are dependent on one or more of the previous flags and are run
         // in a second pass.
         const std::array<arg_handler, 8> second_pass_arguments = {{
-                {
-                    "--worldmenu", nullptr,
-                    "Enables the world menu in the map-sharing code",
-                    section_map_sharing,
-                    []( int, const char ** ) -> int {
-                        MAP_SHARING::setWorldmenu( true );
-                        return true;
-                    }
-                },
-                {
-                    "--datadir", "<directory name>",
-                    "Sub directory from which game data is loaded",
-                    nullptr,
-                    []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        PATH_INFO::set_datadir( params[0] );
-                        return 1;
-                    }
-                },
-                {
-                    "--savedir", "<directory name>",
-                    "Subdirectory for game saves",
-                    section_user_directory,
-                    []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        PATH_INFO::set_savedir( params[0] );
-                        return 1;
-                    }
-                },
-                {
-                    "--configdir", "<directory name>",
-                    "Subdirectory for game configuration",
-                    section_user_directory,
-                    []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        PATH_INFO::set_config_dir( params[0] );
-                        return 1;
-                    }
-                },
-                {
-                    "--memorialdir", "<directory name>",
-                    "Subdirectory for memorials",
-                    section_user_directory,
-                    []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        PATH_INFO::set_memorialdir( params[0] );
-                        return 1;
-                    }
-                },
-                {
-                    "--optionfile", "<filename>",
-                    "Name of the options file within the configdir",
-                    section_user_directory,
-                    []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        PATH_INFO::set_options( params[0] );
-                        return 1;
-                    }
-                },
-                {
-                    "--autopickupfile", "<filename>",
-                    "Name of the autopickup options file within the configdir",
-                    nullptr,
-                    []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        PATH_INFO::set_autopickup( params[0] );
-                        return 1;
-                    }
-                },
-                {
-                    "--motdfile", "<filename>",
-                    "Name of the message of the day file within the motd directory",
-                    nullptr,
-                    []( int num_args, const char **params ) -> int {
-                        if( num_args < 1 ) {
-                            return -1;
-                        }
-                        PATH_INFO::set_motd( params[0] );
-                        return 1;
-                    }
-                },
-            }
-        };
+            {"--worldmenu", nullptr, "Enables the world menu in the map-sharing code",
+             section_map_sharing,
+             [](int, const char**) -> int {
+                 MAP_SHARING::setWorldmenu(true);
+                 return true;
+             }},
+            {"--datadir", "<directory name>", "Sub directory from which game data is loaded",
+             nullptr,
+             [](int num_args, const char** params) -> int {
+                 if (num_args < 1) { return -1; }
+                 PATH_INFO::set_datadir(params[0]);
+                 return 1;
+             }},
+            {"--savedir", "<directory name>", "Subdirectory for game saves", section_user_directory,
+             [](int num_args, const char** params) -> int {
+                 if (num_args < 1) { return -1; }
+                 PATH_INFO::set_savedir(params[0]);
+                 return 1;
+             }},
+            {"--configdir", "<directory name>", "Subdirectory for game configuration",
+             section_user_directory,
+             [](int num_args, const char** params) -> int {
+                 if (num_args < 1) { return -1; }
+                 PATH_INFO::set_config_dir(params[0]);
+                 return 1;
+             }},
+            {"--memorialdir", "<directory name>", "Subdirectory for memorials",
+             section_user_directory,
+             [](int num_args, const char** params) -> int {
+                 if (num_args < 1) { return -1; }
+                 PATH_INFO::set_memorialdir(params[0]);
+                 return 1;
+             }},
+            {"--optionfile", "<filename>", "Name of the options file within the configdir",
+             section_user_directory,
+             [](int num_args, const char** params) -> int {
+                 if (num_args < 1) { return -1; }
+                 PATH_INFO::set_options(params[0]);
+                 return 1;
+             }},
+            {"--autopickupfile", "<filename>",
+             "Name of the autopickup options file within the configdir", nullptr,
+             [](int num_args, const char** params) -> int {
+                 if (num_args < 1) { return -1; }
+                 PATH_INFO::set_autopickup(params[0]);
+                 return 1;
+             }},
+            {"--motdfile", "<filename>",
+             "Name of the message of the day file within the motd directory", nullptr,
+             [](int num_args, const char** params) -> int {
+                 if (num_args < 1) { return -1; }
+                 PATH_INFO::set_motd(params[0]);
+                 return 1;
+             }},
+        }};
 
         // Process CLI arguments.
         const size_t num_first_pass_arguments =
-            sizeof( first_pass_arguments ) / sizeof( first_pass_arguments[0] );
+            sizeof(first_pass_arguments) / sizeof(first_pass_arguments[0]);
         const size_t num_second_pass_arguments =
-            sizeof( second_pass_arguments ) / sizeof( second_pass_arguments[0] );
+            sizeof(second_pass_arguments) / sizeof(second_pass_arguments[0]);
         int saved_argc = --argc; // skip program name
-        const char **saved_argv = const_cast<const char **>( ++argv );
+        const char** saved_argv = const_cast<const char**>(++argv);
         bool asked_game_path = false;
-        while( argc ) {
-            if( !strcmp( argv[0], "--help" ) ) {
-                printHelpMessage( first_pass_arguments.data(), num_first_pass_arguments,
-                                  second_pass_arguments.data(), num_second_pass_arguments );
+        while (argc) {
+            if (!strcmp(argv[0], "--help")) {
+                printHelpMessage(first_pass_arguments.data(), num_first_pass_arguments,
+                                 second_pass_arguments.data(), num_second_pass_arguments);
                 return 0;
-            } else if( !strcmp( argv[0], "--version" ) ) {
-                cata_printf( "%s\n", getVersionString() );
+            } else if (!strcmp(argv[0], "--version")) {
+                cata_printf("%s\n", getVersionString());
                 return 0;
-            } else if( !strcmp( argv[0], "--paths" ) ) {
+            } else if (!strcmp(argv[0], "--paths")) {
                 asked_game_path = true;
                 argc--;
                 argv++;
             } else {
                 bool arg_handled = false;
-                for( size_t i = 0; i < num_first_pass_arguments; ++i ) {
+                for (size_t i = 0; i < num_first_pass_arguments; ++i) {
                     auto& arg_handler = first_pass_arguments[i];
-                    if( !strcmp( argv[0], arg_handler.flag ) ) {
+                    if (!strcmp(argv[0], arg_handler.flag)) {
                         argc--;
                         argv++;
                         int args_consumed =
-                            arg_handler.handler( argc, const_cast<const char**>( argv ) );
-                        if( args_consumed < 0 ) {
-                            cata_printf( "Failed parsing parameter '%s'\n", *( argv - 1 ) );
-                            exit( 1 );
+                            arg_handler.handler(argc, const_cast<const char**>(argv));
+                        if (args_consumed < 0) {
+                            cata_printf("Failed parsing parameter '%s'\n", *(argv - 1));
+                            exit(1);
                         }
                         argc -= args_consumed;
                         argv += args_consumed;
@@ -646,23 +498,23 @@ int main( int argc, char* argv[] )
                     }
                 }
                 // Skip other options.
-                if( !arg_handled ) {
+                if (!arg_handled) {
                     --argc;
                     ++argv;
                 }
             }
         }
-        while( saved_argc ) {
+        while (saved_argc) {
             bool arg_handled = false;
-            for( size_t i = 0; i < num_second_pass_arguments; ++i ) {
+            for (size_t i = 0; i < num_second_pass_arguments; ++i) {
                 auto& arg_handler = second_pass_arguments[i];
-                if( !strcmp( saved_argv[0], arg_handler.flag ) ) {
+                if (!strcmp(saved_argv[0], arg_handler.flag)) {
                     --saved_argc;
                     ++saved_argv;
-                    int args_consumed = arg_handler.handler( saved_argc, saved_argv );
-                    if( args_consumed < 0 ) {
-                        cata_printf( "Failed parsing parameter '%s'\n", *( argv - 1 ) );
-                        exit( 1 );
+                    int args_consumed = arg_handler.handler(saved_argc, saved_argv);
+                    if (args_consumed < 0) {
+                        cata_printf("Failed parsing parameter '%s'\n", *(argv - 1));
+                        exit(1);
                     }
                     saved_argc -= args_consumed;
                     saved_argv += args_consumed;
@@ -671,173 +523,171 @@ int main( int argc, char* argv[] )
                 }
             }
             // Ignore unknown options.
-            if( !arg_handled ) {
+            if (!arg_handled) {
                 --saved_argc;
                 ++saved_argv;
             }
         }
-        if( asked_game_path ) {
-            cata_printf( remove_color_tags( resolved_game_paths() ) );
+        if (asked_game_path) {
+            cata_printf(remove_color_tags(resolved_game_paths()));
             return 0;
         }
     }
 
-    if( driver_windowed && driver_fd < 0 ) {
+    if (driver_windowed && driver_fd < 0) {
         std::cerr << "driver: --driver-windowed requires --driver-fd\n";
         return 1;
     }
     // The windowless driver takes the test_mode path, which skips the interface init. The
     // windowed one must not: test_mode also makes frame production return early, so no frame
     // would ever exist, and it skips the window the whole mode is for.
-    if( driver_fd >= 0 && !driver_windowed ) {
-        test_mode = true;
-    }
+    if (driver_fd >= 0 && !driver_windowed) { test_mode = true; }
 
     preload_config::load();
 
     std::string current_path = std::filesystem::current_path().string();
 
-    if( !dir_exist( PATH_INFO::datadir() ) ) {
+    if (!dir_exist(PATH_INFO::datadir())) {
         std::string msg = string_format(
-                              "Can't find data directory \"%s\"\n"
-                              "Current path: \"%s\"\n"
-                              "Please ensure the current working directory is correct.\n"
-                              "Perhaps you meant to start \"cataclysm-launcher\"?\n",
-                              PATH_INFO::datadir(), current_path );
-        report_fatal_error( msg );
-        exit( 1 );
+            "Can't find data directory \"%s\"\n"
+            "Current path: \"%s\"\n"
+            "Please ensure the current working directory is correct.\n"
+            "Perhaps you meant to start \"cataclysm-launcher\"?\n",
+            PATH_INFO::datadir(), current_path);
+        report_fatal_error(msg);
+        exit(1);
     }
 
-    const auto check_dir_good = [&current_path]( const std::string & dir ) {
-        if( !assure_dir_exist( dir ) ) {
+    const auto check_dir_good = [&current_path](const std::string& dir) {
+        if (!assure_dir_exist(dir)) {
             std::string msg = string_format(
-                                  "Can't open or create \"%s\"\n"
-                                  "Current path: \"%s\"\n"
-                                  "Please ensure you have write permission.\n",
-                                  dir.c_str(), current_path );
-            report_fatal_error( msg );
-            exit( 1 );
+                "Can't open or create \"%s\"\n"
+                "Current path: \"%s\"\n"
+                "Please ensure you have write permission.\n",
+                dir.c_str(), current_path);
+            report_fatal_error(msg);
+            exit(1);
         }
-        if( !can_write_to_dir( dir ) ) {
+        if (!can_write_to_dir(dir)) {
             std::string msg = string_format(
-                                  "Can't write to \"%s\"\n"
-                                  "Current path: \"%s\"\n"
-                                  "Please ensure you have write permission and free storage space.\n",
-                                  dir.c_str(), current_path );
-            report_fatal_error( msg );
-            exit( 1 );
+                "Can't write to \"%s\"\n"
+                "Current path: \"%s\"\n"
+                "Please ensure you have write permission and free storage space.\n",
+                dir.c_str(), current_path);
+            report_fatal_error(msg);
+            exit(1);
         }
     };
 
-    check_dir_good( PATH_INFO::user_dir() );
-    check_dir_good( PATH_INFO::config_dir() );
-    check_dir_good( PATH_INFO::savedir() );
+    check_dir_good(PATH_INFO::user_dir());
+    check_dir_good(PATH_INFO::config_dir());
+    check_dir_good(PATH_INFO::savedir());
 
-    setupDebug( DebugOutput::file );
+    setupDebug(DebugOutput::file);
 
-    if( !init_language_system() ) { exit_handler( -999 ); }
+    if (!init_language_system()) { exit_handler(-999); }
 
-    DebugLog( DL::Info, DC::Main ) << "SDL version used during compile is " << SDL_MAJOR_VERSION
-                                   << "." << SDL_MINOR_VERSION << "." << SDL_MICRO_VERSION;
+    DebugLog(DL::Info, DC::Main) << "SDL version used during compile is " << SDL_MAJOR_VERSION
+                                 << "." << SDL_MINOR_VERSION << "." << SDL_MICRO_VERSION;
 
     const int linked_ver = SDL_GetVersion();
-    DebugLog( DL::Info, DC::Main ) << "SDL version used during linking and in runtime is "
-                                   << SDL_VERSIONNUM_MAJOR( linked_ver ) << "."
-                                   << SDL_VERSIONNUM_MINOR( linked_ver ) << "."
-                                   << SDL_VERSIONNUM_MICRO( linked_ver );
+    DebugLog(DL::Info, DC::Main) << "SDL version used during linking and in runtime is "
+                                 << SDL_VERSIONNUM_MAJOR(linked_ver) << "."
+                                 << SDL_VERSIONNUM_MINOR(linked_ver) << "."
+                                 << SDL_VERSIONNUM_MICRO(linked_ver);
 
 #if defined(CATA_SDL)
 
-    if( test_mode && lua_doc_output_path.empty() && lua_types_output_path.empty() &&
-        !init_sdl_platform( false ) ) {
+    if (test_mode && lua_doc_output_path.empty() && lua_types_output_path.empty()
+        && !init_sdl_platform(false)) {
         return 1;
     }
 #endif
 
     // in test mode don't initialize curses to avoid escape sequences being inserted into output
     // stream
-    if( !test_mode ) {
+    if (!test_mode) {
         try {
             // set minimum FULL_SCREEN sizes
             FULL_SCREEN_WIDTH = 80;
             FULL_SCREEN_HEIGHT = 24;
             catacurses::init_interface();
-        } catch( const std::exception& err ) {
+        } catch (const std::exception& err) {
             // can't use any curses function as it has not been initialized
             std::cerr << "Error while initializing the interface: " << err.what() << '\n';
-            DebugLog( DL::Error, DC::Main )
-                    << "Error while initializing the interface: " << err.what();
+            DebugLog(DL::Error, DC::Main)
+                << "Error while initializing the interface: " << err.what();
             return 1;
         }
     }
 
 #if defined(CATA_SDL)
-    if( lua_doc_output_path.empty() && lua_types_output_path.empty() ) {
+    if (lua_doc_output_path.empty() && lua_types_output_path.empty()) {
         cata_gpu::init();
-        atexit( cata_gpu::shutdown );
+        atexit(cata_gpu::shutdown);
     }
 #endif
 
-    if( test_mode ) {
+    if (test_mode) {
         get_options().init();
         get_options().load();
     }
     set_language();
 
-    rng_set_engine_seed( seed );
+    rng_set_engine_seed(seed);
 
     g = std::make_unique<game>();
     // First load and initialize everything that does not
     // depend on the mods.
     try {
         g->load_static_data();
-        if( verifyexit ) { exit_handler( 0 ); }
-        if( !dump.empty() ) {
+        if (verifyexit) { exit_handler(0); }
+        if (!dump.empty()) {
             init_colors();
-            exit( g->dump_stats( dump, dmode, opts ) ? 0 : 1 );
+            exit(g->dump_stats(dump, dmode, opts) ? 0 : 1);
         }
-        if( check_mods ) {
+        if (check_mods) {
             init_colors();
-            loading_ui ui( false );
-            const std::vector<mod_id> mods( opts.begin(), opts.end() );
-            if( init::check_mods_for_errors( ui, mods, check_mods_mode ) ) {
-                exit( 0 );
+            loading_ui ui(false);
+            const std::vector<mod_id> mods(opts.begin(), opts.end());
+            if (init::check_mods_for_errors(ui, mods, check_mods_mode)) {
+                exit(0);
             } else {
-                exit( 1 );
+                exit(1);
             }
         }
-    } catch( const std::exception& err ) {
-        debugmsg( "%s", err.what() );
-        exit_handler( -999 );
+    } catch (const std::exception& err) {
+        debugmsg("%s", err.what());
+        exit_handler(-999);
     }
 
 
-    DebugLog( DL::Info, DC::Main ) << "LAPI version: " << cata::get_lapi_version_string();
+    DebugLog(DL::Info, DC::Main) << "LAPI version: " << cata::get_lapi_version_string();
     cata::startup_lua_test();
 
 
-    if( !lua_doc_output_path.empty() || !lua_types_output_path.empty() ) {
+    if (!lua_doc_output_path.empty() || !lua_types_output_path.empty()) {
         init_colors();
         const auto doc_script =
             std::filesystem::path{PATH_INFO::datadir()} / "raw" / "generate_docs.lua";
         const auto types_script =
             std::filesystem::path{PATH_INFO::datadir()} / "raw" / "generate_types.lua";
 
-        if( !lua_doc_output_path.empty() ) {
-            const bool doc_result = cata::generate_lua_docs( doc_script, lua_doc_output_path );
-            if( !doc_result ) {
-                cata_printf( "Lua doc: Failed.\n" );
+        if (!lua_doc_output_path.empty()) {
+            const bool doc_result = cata::generate_lua_docs(doc_script, lua_doc_output_path);
+            if (!doc_result) {
+                cata_printf("Lua doc: Failed.\n");
                 return 1;
             }
-            cata_printf( "Lua doc: Success.\n" );
+            cata_printf("Lua doc: Success.\n");
         }
-        if( !lua_types_output_path.empty() ) {
-            const bool types_result = cata::generate_lua_docs( types_script, lua_types_output_path );
-            if( !types_result ) {
-                cata_printf( "Lua types: Failed.\n" );
+        if (!lua_types_output_path.empty()) {
+            const bool types_result = cata::generate_lua_docs(types_script, lua_types_output_path);
+            if (!types_result) {
+                cata_printf("Lua types: Failed.\n");
                 return 1;
             }
-            cata_printf( "Lua types: Success.\n" );
+            cata_printf("Lua types: Success.\n");
         }
         return 0;
     }
@@ -846,14 +696,14 @@ int main( int argc, char* argv[] )
     // Must be after startup_lua_test() to avoid racing sol/luna global state.
     // Placed after lua-doc block to avoid spawning a thread that would
     // terminate the process on early exit (deno task docs:gen).
-    if( driver_fd < 0 ) {
+    if (driver_fd < 0) {
         // The driver never shows a menu; prewarm would only contend for CPU.
         init::start_prewarm();
     }
 
     // Now we do the actual game.
 
-    if( driver_fd >= 0 && !driver_windowed ) {
+    if (driver_fd >= 0 && !driver_windowed) {
         // test_mode skipped init_interface: its display metrics are zero, so give the UI a
         // fixed terminal size or game_ui::init_ui would write zeros into the options file.
         FULL_SCREEN_WIDTH = TERMX = 80;
@@ -865,61 +715,55 @@ int main( int argc, char* argv[] )
         game_ui::init_ui();
     }
 
-    catacurses::curs_set( 0 ); // Invisible cursor here, because MAPBUFFER.load() is crash-prone
+    catacurses::curs_set(0); // Invisible cursor here, because MAPBUFFER.load() is crash-prone
 
 #if !defined(_WIN32)
     struct sigaction sigIntHandler;
     sigIntHandler.sa_handler = signal_handler;
-    sigemptyset( &sigIntHandler.sa_mask );
+    sigemptyset(&sigIntHandler.sa_mask);
     sigIntHandler.sa_flags = 0;
-    sigaction( SIGINT, &sigIntHandler, nullptr );
+    sigaction(SIGINT, &sigIntHandler, nullptr);
 #endif
 
-    if( driver_fd < 0 ) {
-        prompt_select_lang_on_startup();
-    }
+    if (driver_fd < 0) { prompt_select_lang_on_startup(); }
     replay_buffered_debugmsg_prompts();
-    if( driver_fd >= 0 && world.empty() ) {
+    if (driver_fd >= 0 && world.empty()) {
         std::cerr << "driver: --driver-fd requires --world\n";
         return 1;
     }
 
-    while( true ) {
-        if( !world.empty() ) {
-            if( !g->load( world ) ) {
-                if( driver_fd >= 0 ) {
+    while (true) {
+        if (!world.empty()) {
+            if (!g->load(world)) {
+                if (driver_fd >= 0) {
                     std::cerr << "driver: world '" << world << "' failed to load\n";
                     return 1;
                 }
                 break;
             }
-            if( driver_fd >= 0 ) {
+            if (driver_fd >= 0) {
                 // The windowed driver draws the game itself, so the main UI must outlive it.
                 shared_ptr_fast<ui_adaptor> driver_ui;
-                if( driver_windowed ) {
-                    driver_ui = g->create_or_get_main_ui_adaptor();
-                }
+                if (driver_windowed) { driver_ui = g->create_or_get_main_ui_adaptor(); }
                 const driver_options options = {
                     .deny_list_path = driver_deny_list,
                     .scenes_dir = driver_scenes,
                     .windowed = driver_windowed,
                     .reply_fd = driver_reply_fd,
                 };
-                if( !run_driver_loop( driver_fd, options ) ) {
-                    return 1;
-                }
-                exit_handler( 0 );
+                if (!run_driver_loop(driver_fd, options)) { return 1; }
+                exit_handler(0);
             }
             world.clear(); // ensure quit returns to opening screen
 
         } else {
             main_menu menu;
-            if( !menu.opening_screen() ) { break; }
+            if (!menu.opening_screen()) { break; }
         }
 
         shared_ptr_fast<ui_adaptor> ui = g->create_or_get_main_ui_adaptor();
         options_manager::cache_balance_options();
-        if( coop_session::get().is_coop() ) {
+        if (coop_session::get().is_coop()) {
             // Co-op accumulator/fiber main loop — non-blocking tick with input coalescing.
             using clk = std::chrono::steady_clock;
             auto last_tick = clk::now();
@@ -929,60 +773,60 @@ int main( int argc, char* argv[] )
             // timestamps and for staleness expiry.
             const auto loop_start = clk::now();
             const auto now_ms = [&]() -> double {
-                return std::chrono::duration<double, std::milli>( clk::now() - loop_start ).count();
+                return std::chrono::duration<double, std::milli>(clk::now() - loop_start).count();
             };
             bool game_done = false;
 
-            while( !game_done ) {
+            while (!game_done) {
                 const auto now = clk::now();
                 const double frame_ms =
-                    std::chrono::duration<double, std::milli>( now - last_tick ).count();
+                    std::chrono::duration<double, std::milli>(now - last_tick).count();
                 last_tick = now;
 
                 // Size the coalescing/staleness window from the slower of the two sides:
                 // an action is not "stale" until whoever resolves it has had time to.
-                auto &sess = coop_session::get();
+                auto& sess = coop_session::get();
                 const double window_ms = coop_input_window_ms(
-                                             sess.local_tick_cost.value(),
-                                             static_cast<double>( sess.partner_tick_ms.load() ) );
+                    sess.local_tick_cost.value(), static_cast<double>(sess.partner_tick_ms.load()));
 
                 const auto evt = g->poll_event();
 
                 bool host_acted = false;
-                if( g->modal_fiber_ && !g->modal_fiber_->done() ) {
-                    g->modal_fiber_->resume( evt );
-                    if( g->modal_fiber_->done() ) { g->modal_fiber_.reset(); }
-                } else if( evt.type == input_event_t::keyboard || evt.type == input_event_t::gamepad ) {
+                if (g->modal_fiber_ && !g->modal_fiber_->done()) {
+                    g->modal_fiber_->resume(evt);
+                    if (g->modal_fiber_->done()) { g->modal_fiber_.reset(); }
+                } else if (evt.type == input_event_t::keyboard
+                           || evt.type == input_event_t::gamepad) {
                     const input_context dflt = get_default_mode_input_context();
-                    const auto& action_str = dflt.input_to_action( evt );
-                    if( !action_str.empty() && action_str != "ERROR" ) {
-                        const bool evictable =
-                            can_action_change_worldstate( look_up_action( action_str ) );
-                        coop_admit_action( g->pending_action_queue_, { .action = action_str,
-                                           .enqueued_ms = now_ms(), .evictable = evictable
-                                                                     } );
+                    const auto& action_str = dflt.input_to_action(evt);
+                    if (!action_str.empty() && action_str != "ERROR") {
+                        const bool evictable = can_action_change_worldstate(
+                            look_up_action(action_str));
+                        coop_admit_action(
+                            g->pending_action_queue_,
+                            {.action = action_str, .enqueued_ms = now_ms(), .evictable = evictable});
                         host_acted = true;
                     }
                 }
 
                 const bool client_actions_pending =
                     g->coop_server_ && g->coop_server_->has_pending_actions();
-                if( ( host_acted || client_actions_pending ) && coalesce_start_ms < 0.0 ) {
+                if ((host_acted || client_actions_pending) && coalesce_start_ms < 0.0) {
                     coalesce_start_ms = 0.0;
-                } else if( coalesce_start_ms >= 0.0 ) {
+                } else if (coalesce_start_ms >= 0.0) {
                     coalesce_start_ms += frame_ms;
                 }
 
                 bool fire_tick = false;
                 bool tick_active = false;
-                if( coalesce_start_ms >= window_ms ) {
+                if (coalesce_start_ms >= window_ms) {
                     fire_tick = true;
                     tick_active = true;
                     coalesce_start_ms = -1.0;
                     g->main_loop_accum_ms_ = 0.0;
-                } else if( coalesce_start_ms < 0.0 ) {
+                } else if (coalesce_start_ms < 0.0) {
                     g->main_loop_accum_ms_ += frame_ms;
-                    if( g->main_loop_accum_ms_ >= IDLE_TICK_INTERVAL_MS ) {
+                    if (g->main_loop_accum_ms_ >= IDLE_TICK_INTERVAL_MS) {
                         g->main_loop_accum_ms_ -= IDLE_TICK_INTERVAL_MS;
                         fire_tick = true;
                     }
@@ -991,26 +835,25 @@ int main( int argc, char* argv[] )
                 // Once the player stops pressing, everything older than one window is
                 // discarded here, leaving at most the newest entry — that is what stops the
                 // avatar walking on for several tiles after the key is released.
-                coop_expire_stale_actions( g->pending_action_queue_, now_ms(), window_ms );
+                coop_expire_stale_actions(g->pending_action_queue_, now_ms(), window_ms);
 
-                if( fire_tick ) {
-                    DebugLog( DL::Info, DC::Main )
-                            << "[coop][tick=" << ( tick_active ? "active" : "idle" ) << "]"
-                            << " game_turn=" << to_turn<int>( calendar::turn )
-                            << " pending=" << g->pending_action_queue_.size()
-                            << " window=" << window_ms;
+                if (fire_tick) {
+                    DebugLog(DL::Info, DC::Main)
+                        << "[coop][tick=" << (tick_active ? "active" : "idle") << "]"
+                        << " game_turn=" << to_turn<int>(calendar::turn) << " pending="
+                        << g->pending_action_queue_.size() << " window=" << window_ms;
 
                     const auto tick_t0 = clk::now();
 
                     g->coop_game_tick();
 
-                    while( g->u.moves > 0 ) {
-                        if( !g->pending_action_queue_.empty() ) {
+                    while (g->u.moves > 0) {
+                        if (!g->pending_action_queue_.empty()) {
                             const auto act = g->pending_action_queue_.front().action;
                             g->pending_action_queue_.pop_front();
-                            DebugLog( DL::Info, DC::Main ) << "[coop][action] " << act;
-                            g->handle_action_from( act );
-                            if( g->modal_fiber_ && !g->modal_fiber_->done() ) { break; }
+                            DebugLog(DL::Info, DC::Main) << "[coop][action] " << act;
+                            g->handle_action_from(act);
+                            if (g->modal_fiber_ && !g->modal_fiber_->done()) { break; }
                         } else {
                             g->u.moves = 0;
                             break;
@@ -1018,54 +861,52 @@ int main( int argc, char* argv[] )
                     }
 
                     sess.local_tick_cost.sample(
-                        std::chrono::duration<double, std::milli>( clk::now() - tick_t0 ).count() );
+                        std::chrono::duration<double, std::milli>(clk::now() - tick_t0).count());
 
-                    if( g->is_game_over() ) {
+                    if (g->is_game_over()) {
                         g->cleanup_at_end();
                         game_done = true;
                     }
                 }
 
-                if( !game_done ) {
+                if (!game_done) {
                     g->invalidate_main_ui_adaptor();
                     ui_manager::redraw_invalidated();
                     refresh_display();
                 }
-                SDL_Delay( 4 );
+                SDL_Delay(4);
             }
         } else {
             // Singleplayer: blocking turn-based main loop.
-            while( !g->do_turn() );
+            while (!g->do_turn());
         }
     }
 
-    exit_handler( -999 );
+    exit_handler(-999);
     return 0;
 }
 
-namespace
-{
+namespace {
 void printHelpMessage(
     const arg_handler* first_pass_arguments, size_t num_first_pass_arguments,
-    const arg_handler* second_pass_arguments, size_t num_second_pass_arguments )
-{
+    const arg_handler* second_pass_arguments, size_t num_second_pass_arguments) {
 
     // Group all arguments by help_group.
-    std::multimap<std::string, const arg_handler *> help_map;
-    for( size_t i = 0; i < num_first_pass_arguments; ++i ) {
+    std::multimap<std::string, const arg_handler*> help_map;
+    for (size_t i = 0; i < num_first_pass_arguments; ++i) {
         std::string help_group;
-        if( first_pass_arguments[i].help_group ) { help_group = first_pass_arguments[i].help_group; }
-        help_map.insert( std::make_pair( help_group, &first_pass_arguments[i] ) );
+        if (first_pass_arguments[i].help_group) { help_group = first_pass_arguments[i].help_group; }
+        help_map.insert(std::make_pair(help_group, &first_pass_arguments[i]));
     }
-    for( size_t i = 0; i < num_second_pass_arguments; ++i ) {
+    for (size_t i = 0; i < num_second_pass_arguments; ++i) {
         std::string help_group;
-        if( second_pass_arguments[i].help_group ) {
+        if (second_pass_arguments[i].help_group) {
             help_group = second_pass_arguments[i].help_group;
         }
-        help_map.insert( std::make_pair( help_group, &second_pass_arguments[i] ) );
+        help_map.insert(std::make_pair(help_group, &second_pass_arguments[i]));
     }
 
-    cata_printf( R"(Info:
+    cata_printf(R"(Info:
 --help
     print this message and exit
 --version
@@ -1074,21 +915,21 @@ void printHelpMessage(
     print the paths used by the game and exit
 
 Command line parameters:
-)" );
+)");
     std::string current_help_group;
     auto it = help_map.begin();
     auto it_end = help_map.end();
-    for( ; it != it_end; ++it ) {
-        if( it->first != current_help_group ) {
+    for (; it != it_end; ++it) {
+        if (it->first != current_help_group) {
             current_help_group = it->first;
-            cata_printf( "\n%s\n", current_help_group.c_str() );
+            cata_printf("\n%s\n", current_help_group.c_str());
         }
 
         const arg_handler* handler = it->second;
-        cata_printf( "%s", handler->flag );
-        if( handler->param_documentation ) { cata_printf( " %s", handler->param_documentation ); }
-        cata_printf( "\n" );
-        if( handler->documentation ) { cata_printf( "    %s\n", handler->documentation ); }
+        cata_printf("%s", handler->flag);
+        if (handler->param_documentation) { cata_printf(" %s", handler->param_documentation); }
+        cata_printf("\n");
+        if (handler->documentation) { cata_printf("    %s\n", handler->documentation); }
     }
 }
 } // namespace

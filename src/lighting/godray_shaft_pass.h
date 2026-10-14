@@ -67,7 +67,7 @@ class godray_shaft_pass {
 public:
     godray_shaft_pass() = default;
     godray_shaft_pass(const godray_shaft_pass&) = delete;
-    auto operator=(const godray_shaft_pass&) -> godray_shaft_pass& = delete; // *NOPAD*
+    auto operator=(const godray_shaft_pass&) -> godray_shaft_pass& = delete;
     ~godray_shaft_pass();
 
     // Build pipeline + instance buffers. `target_format` is the world_target

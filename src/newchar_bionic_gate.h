@@ -10,8 +10,7 @@
 /// refuses. Before this rework only the popup existed, so every unavailable row rendered as the
 /// same dark gray and the reason arrived only AFTER a keypress. They agree now because all three
 /// read one `state`.
-namespace nc_bionic_gate
-{
+namespace nc_bionic_gate {
 
 /// What the caller looked up from game state. Deliberately plain data: every field is a question
 /// already answered, so this header never needs a game, and a test can pose combinations that are
@@ -63,14 +62,10 @@ struct inputs {
 /// the columns are grouped by anything else — and reported a zero-point bionic as breaching the
 /// DISADVANTAGE cap purely because it was not an advantage. Identical to the TRAITS rule, and kept
 /// separate rather than shared because the two steps are free to diverge on budgeting.
-constexpr auto over_budget( int points, int num_good, int num_bad, int max_points,
-                            bool freeform ) -> bool
-{
-    if( freeform || points == 0 ) {
-        return false;
-    }
-    return points > 0 ? num_good + points > max_points
-           : num_bad + points < -max_points;
+constexpr auto over_budget(int points, int num_good, int num_bad, int max_points, bool freeform)
+    -> bool {
+    if (freeform || points == 0) { return false; }
+    return points > 0 ? num_good + points > max_points : num_bad + points < -max_points;
 }
 
 /// The resolved answer. Every field is independently meaningful, because the UI reports the FIRST
@@ -79,8 +74,8 @@ struct state {
     bool taken = false;
     bool granted = false;
     bool has_dependents = false;
-    bool locked = false;            //< scenario or profession pins it
-    bool forbidden = false;         //< scenario or profession forbids it, wholesale or by name
+    bool locked = false;    //< scenario or profession pins it
+    bool forbidden = false; //< scenario or profession forbids it, wholesale or by name
     bool trait_conflicts = false;
     bool over_budget = false;
     bool no_space = false;
@@ -89,9 +84,7 @@ struct state {
     bool has_upgrade = false;
 
     /// Shown as held: installed, or guaranteed by the profession.
-    constexpr auto held() const -> bool {
-        return taken || granted;
-    }
+    constexpr auto held() const -> bool { return taken || granted; }
 
     /// Can the player act on this bionic at all — install it if absent, remove it if present.
     ///
@@ -99,23 +92,21 @@ struct state {
     /// conjunction: an installed bionic cares only about whether it may be removed, and nothing
     /// about conflicts, space or budget, since removing it can only ever free all three.
     constexpr auto toggleable() const -> bool {
-        if( taken ) {
-            return !has_dependents && !locked;
-        }
-        // `granted` and `locked` are the same fact for a profession — `profession::is_locked_bionic`
-        // IS "in _starting_CBMs" — and both mean the same thing here: this step does not get to
-        // decide. A scenario's `_forced_bionics` reach `locked` the same way.
-        return !granted && !locked && !forbidden && !trait_conflicts && !over_budget && !no_space &&
-               !missing_prereq && !has_downgrade && !has_upgrade;
+        if (taken) { return !has_dependents && !locked; }
+        // `granted` and `locked` are the same fact for a profession —
+        // `profession::is_locked_bionic` IS "in _starting_CBMs" — and both mean the same thing
+        // here: this step does not get to decide. A scenario's `_forced_bionics` reach `locked` the
+        // same way.
+        return !granted && !locked && !forbidden && !trait_conflicts && !over_budget && !no_space
+            && !missing_prereq && !has_downgrade && !has_upgrade;
     }
 };
 
-constexpr auto evaluate( const inputs &in ) -> state
-{
+constexpr auto evaluate(const inputs& in) -> state {
     state st;
     st.taken = in.taken;
     st.granted = in.granted;
-    if( in.taken ) {
+    if (in.taken) {
         // An installed bionic is only ever asked whether it can come out. Evaluating conflicts,
         // space or the budget here would be nonsense: it is already paid for and already fits.
         st.has_dependents = in.has_dependents;
@@ -125,7 +116,7 @@ constexpr auto evaluate( const inputs &in ) -> state
     st.locked = in.scen_locked || in.prof_locked;
     st.forbidden = in.scen_forbids_all || in.prof_forbids_all || in.scen_forbids || in.prof_forbids;
     st.trait_conflicts = in.trait_conflicts;
-    st.over_budget = over_budget( in.points, in.num_good, in.num_bad, in.max_points, in.freeform );
+    st.over_budget = over_budget(in.points, in.num_good, in.num_bad, in.max_points, in.freeform);
     st.no_space = in.no_space;
     st.missing_prereq = in.missing_prereq;
     st.has_downgrade = in.has_downgrade;

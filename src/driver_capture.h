@@ -13,8 +13,7 @@ class JsonOut;
 /// Files are named `turn-<turn>-<n>-final.bmp` or `-state.png` and `turn-<turn>-<n>-map.json`,
 /// where `n` counts the captures this process has written, so several captures of one turn (a
 /// null frame, a toggled one, a restored one) each keep their own. It takes no game time.
-namespace driver_capture
-{
+namespace driver_capture {
 
 /// What a capture shows.
 enum class mode {
@@ -39,8 +38,8 @@ struct parsed_request {
     std::optional<request> value;
     std::string error;
 };
-auto parse_request( std::string_view dir, std::optional<std::string_view> mode_text,
-                    int turn ) -> parsed_request;
+auto parse_request(std::string_view dir, std::optional<std::string_view> mode_text, int turn)
+    -> parsed_request;
 
 /// What a capture wrote.
 struct files {
@@ -71,10 +70,10 @@ struct result {
 /// path of this request, a state capture re-renders what `draw` queued. With no drawable nothing
 /// is written: the window is hidden or minimised, or (final only, a state view is offscreen)
 /// occluded, as it is while the screen is locked, or the display gave no frame.
-auto capture( const request &req, const std::function<void()> &draw ) -> result;
+auto capture(const request& req, const std::function<void()>& draw) -> result;
 
 /// Writes the `capture` member of a response into the object `out` is inside.
-auto write( JsonOut &out, const files &written ) -> void;
+auto write(JsonOut& out, const files& written) -> void;
 
 /// The size of the file a state view wrote, in pixels.
 struct state_view_size {
@@ -90,11 +89,9 @@ struct state_view_size {
 /// lighting tonemap and the interface passes, and saves it as a PNG at `png_path` (sdltiles.cpp,
 /// beside `save_screenshot`). Empty when the render state is not ready or the file cannot be
 /// written.
-auto save_state_view( const std::string &png_path ) ->
-std::optional<driver_capture::state_view_size>;
+auto save_state_view(const std::string& png_path) -> std::optional<driver_capture::state_view_size>;
 
-namespace lighting
-{
+namespace lighting {
 
 /// What the one-shot swapchain dump armed by `arm_frame_capture` came to.
 struct frame_capture_report {
@@ -106,10 +103,10 @@ struct frame_capture_report {
     std::string error;
 };
 
-/// Asks the next submitted frame, and only that one, to be dumped to a BMP at `path` (gpu_device.cpp).
-/// The file appears whole or not at all. Unlike the F13 and file-trigger dumps it takes a path of
-/// the caller's and writes no global file, nor the map snapshot.
-auto arm_frame_capture( std::string path ) -> void;
+/// Asks the next submitted frame, and only that one, to be dumped to a BMP at `path`
+/// (gpu_device.cpp). The file appears whole or not at all. Unlike the F13 and file-trigger dumps it
+/// takes a path of the caller's and writes no global file, nor the map snapshot.
+auto arm_frame_capture(std::string path) -> void;
 
 /// Disarms the request and returns how it went; empty when no frame was submitted since it was
 /// armed (the window gave no drawable).
@@ -117,11 +114,10 @@ auto take_frame_capture() -> std::optional<frame_capture_report>;
 
 } // namespace lighting
 
-namespace sdl_lighting_devui
-{
+namespace sdl_lighting_devui {
 
 /// Writes the map snapshot (the CATA_MAP_DUMP JSON) of `frame` to `path` (sdl_lighting_devui.cpp).
 /// Returns false when the file cannot be written.
-auto dump_map_to( std::uint64_t frame, const std::string &path ) -> bool;
+auto dump_map_to(std::uint64_t frame, const std::string& path) -> bool;
 
 } // namespace sdl_lighting_devui

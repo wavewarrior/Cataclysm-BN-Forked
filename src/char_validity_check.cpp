@@ -10,8 +10,7 @@
  * @param ch The char to check.
  * @return true if the char is allowed in a name, false if not.
  */
-bool is_char_allowed( int ch )
-{
+bool is_char_allowed(int ch) {
 #if defined(_MSC_VER)
     // This hardcoded check and rejection of \t is in here because
     // std::isprint on Windows with MSVC has a bug where it considers
@@ -25,35 +24,33 @@ bool is_char_allowed( int ch )
     //
     // That was from July 27, 2018. As of April 8, 2020 this is still
     // not functional.
-    if( ch == 9 ) {
-        return false;
-    }
+    if (ch == 9) { return false; }
 #endif
 
-    if( !std::isprint( ch ) && ch <= 127 ) {
+    if (!std::isprint(ch) && ch <= 127) {
         // above 127 are non-ASCII, therefore Unicode, therefore OK
         return false;
     }
 
-    if( ch == '/' ) {
+    if (ch == '/') {
         // not valid in filenames for most operating systems (Linux, MacOs, Windows, Android)
         return false;
     }
 
 #if !defined(__linux__)
-#if defined(MACOSX)
-    if( ch == ':' ) {
+#    if defined(MACOSX)
+    if (ch == ':') {
         // not valid in macOS (Specific cases, best to be safe) and Windows filenames
         return false;
     }
-#else
-    if( ch == ':' || ch == '<' || ch == '>' || ch == '"' || ch == '\\' || ch == '?' || ch == '|' ||
-        ch == '*' ) {
+#    else
+    if (ch == ':' || ch == '<' || ch == '>' || ch == '"' || ch == '\\' || ch == '?' || ch == '|'
+        || ch == '*') {
         // not valid in Windows filenames
         return false;
     }
 
-#endif
+#    endif
 #endif
     return true;
 }

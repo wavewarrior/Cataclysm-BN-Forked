@@ -1,28 +1,27 @@
 #pragma once
 
+#include "enums.h"
+
 #include <algorithm>
 #include <cstddef>
 #include <ctime>
 #include <functional>
-#include <string>
-#include <utility>
-#include <vector>
 #include <map>
 #include <memory>
+#include <string>
 #include <type_traits>
+#include <utility>
 #include <variant>
-
-#include "enums.h"
+#include <vector>
 
 /**
  * Greater-than comparison operator; required by the sort interface
  */
 struct pair_greater_cmp_first {
-    template< class T, class U >
-    bool operator()( const std::pair<T, U> &a, const std::pair<T, U> &b ) const {
+    template <class T, class U>
+    bool operator()(const std::pair<T, U>& a, const std::pair<T, U>& b) const {
         return a.first > b.first;
     }
-
 };
 
 /**
@@ -30,8 +29,7 @@ struct pair_greater_cmp_first {
  * anything.
  */
 struct null_deleter {
-    template<typename T>
-    void operator()( T * ) const {}
+    template <typename T> void operator()(T*) const {}
 };
 
 /**
@@ -39,10 +37,7 @@ struct null_deleter {
  *
  * Optimized floor function, similar to std::floor but faster.
  */
-inline int fast_floor( double v )
-{
-    return static_cast<int>( v ) - ( v < static_cast<int>( v ) );
-}
+inline int fast_floor(double v) { return static_cast<int>(v) - (v < static_cast<int>(v)); }
 
 /**
  * Round a value up at a given decimal place.
@@ -51,16 +46,17 @@ inline int fast_floor( double v )
  * @param dp Decimal place to round the value at.
  * @return Rounded value.
  */
-double round_up( double val, unsigned int dp );
+double round_up(double val, unsigned int dp);
 
 /** Divide @p num by @p den, rounding up
-*
-* @p num must be non-negative, @p den must be positive, and @c num+den must not overflow.
-*/
-template<typename T>
-T divide_round_up( T num, T den )
-requires std::is_integral_v<T> {
-    return ( num + den - 1 ) / den;
+ *
+ * @p num must be non-negative, @p den must be positive, and @c num+den must not overflow.
+ */
+template <typename T>
+T divide_round_up(T num, T den)
+    requires std::is_integral_v<T>
+{
+    return (num + den - 1) / den;
 }
 
 /**
@@ -73,7 +69,7 @@ requires std::is_integral_v<T> {
  * @return True if test value is greater than lower boundary and less than upper
  *         boundary, otherwise returns false.
  */
-bool isBetween( int test, int down, int up );
+bool isBetween(int test, int down, int up);
 
 /**
  * Basic logistic function.
@@ -84,7 +80,7 @@ bool isBetween( int test, int down, int up );
  *
  * @return Value of the logistic curve at the given point
  */
-double logarithmic( double t );
+double logarithmic(double t);
 
 /**
  * Normalized logistic function
@@ -98,7 +94,7 @@ double logarithmic( double t );
  *
  * @return The value of the scaled logistic curve at point pos.
  */
-double logarithmic_range( int min, int max, int pos );
+double logarithmic_range(int min, int max, int pos);
 
 /**
  * Cumulative distribution function of a certain normal distribution.
@@ -109,7 +105,7 @@ double logarithmic_range( int min, int max, int pos );
  *
  * @return The probability that a random point from the distribution will be lesser than @param x
  */
-double normal_cdf( double x, double mean, double stddev );
+double normal_cdf(double x, double mean, double stddev);
 
 /**
  * Clamp the value of a modifier in order to bound the resulting value
@@ -128,7 +124,7 @@ double normal_cdf( double x, double mean, double stddev );
  *
  * @returns Value of mod, possibly altered to respect the min and max boundaries
  */
-int bound_mod_to_vals( int val, int mod, int max, int min );
+int bound_mod_to_vals(int val, int mod, int max, int min);
 
 /**
  * Clamp (number and space wise) value to with,
@@ -137,35 +133,30 @@ int bound_mod_to_vals( int val, int mod, int max, int min );
  * optionally returning a flag that indicate if the value was truncated to fit the width
  */
 /**@{*/
-double clamp_to_width( double value, int width, int &scale );
-double clamp_to_width( double value, int width, int &scale, bool *out_truncated );
+double clamp_to_width(double value, int width, int& scale);
+double clamp_to_width(double value, int width, int& scale, bool* out_truncated);
 /**@}*/
 
 /**
  * Clamp first argument so that it is no lower than second and no higher than third.
  * Does not check if min is lower than max.
  */
-template<typename T>
-constexpr T clamp( const T &val, const T &min, const T &max )
-{
-    return std::max( min, std::min( max, val ) );
+template <typename T> constexpr T clamp(const T& val, const T& min, const T& max) {
+    return std::max(min, std::min(max, val));
 }
 
 /**
- * Linear interpolation: returns first argument if t is 0, second if t is 1, otherwise proportional to t.
- * Does not clamp t, meaning it can return values lower than min (if t<0) or higher than max (if t>1).
+ * Linear interpolation: returns first argument if t is 0, second if t is 1, otherwise proportional
+ * to t. Does not clamp t, meaning it can return values lower than min (if t<0) or higher than max
+ * (if t>1).
  */
-template<typename T>
-constexpr T lerp( const T &min, const T &max, float t )
-{
-    return ( 1.0f - t ) * min + t * max;
+template <typename T> constexpr T lerp(const T& min, const T& max, float t) {
+    return (1.0f - t) * min + t * max;
 }
 
 /** Linear interpolation with t clamped to [0, 1] */
-template<typename T>
-constexpr T lerp_clamped( const T &min, const T &max, float t )
-{
-    return lerp( min, max, clamp( t, 0.0f, 1.0f ) );
+template <typename T> constexpr T lerp_clamped(const T& min, const T& max, float t) {
+    return lerp(min, max, clamp(t, 0.0f, 1.0f));
 }
 
 /**
@@ -174,7 +165,7 @@ constexpr T lerp_clamped( const T &min, const T &max, float t )
  * `points` should be sorted by first elements of the pairs.
  * If x is outside range, returns second value of the first (if x < points[0].first) or last point.
  */
-float multi_lerp( const std::vector<std::pair<float, float>> &points, float x );
+float multi_lerp(const std::vector<std::pair<float, float>>& points, float x);
 
 /**
  * @brief Class used to access a list as if it were circular.
@@ -183,41 +174,30 @@ float multi_lerp( const std::vector<std::pair<float, float>> &points, float x );
  * This wrapper class allows you to do that. It requires the list to exist
  * separately, but that also means any changes to the list get propagated (both ways).
  */
-template<typename T>
-class list_circularizer {
-    private:
-        unsigned int _index = 0;
-        std::vector<T> *_list;
-    public:
-        /** Construct list_circularizer from an existing std::vector. */
-        list_circularizer( std::vector<T> &_list ) : _list( &_list )
-        {
-        }
+template <typename T> class list_circularizer {
+private:
+    unsigned int _index = 0;
+    std::vector<T>* _list;
 
-        /** Advance list to next item, wrapping back to 0 at end of list */
-        void next()
-        {
-            _index = ( _index == _list->size() - 1 ? 0 : _index + 1 );
-        }
+public:
+    /** Construct list_circularizer from an existing std::vector. */
+    list_circularizer(std::vector<T>& _list): _list(&_list) {}
 
-        /** Advance list to previous item, wrapping back to end at zero */
-        void prev()
-        {
-            _index = ( _index == 0 ? _list->size() - 1 : _index - 1 );
-        }
+    /** Advance list to next item, wrapping back to 0 at end of list */
+    void next() { _index = (_index == _list->size() - 1 ? 0 : _index + 1); }
 
-        /** Return list element at the current location */
-        T & cur() const {
-            // list could be null, but it would be a design time mistake and really, the callers fault.
-            return ( *_list )[_index];
-        }
+    /** Advance list to previous item, wrapping back to end at zero */
+    void prev() { _index = (_index == 0 ? _list->size() - 1 : _index - 1); }
 
-        void set_index( const size_t new_index )
-        {
-            if( new_index < _list->size() ) {
-                _index = new_index;
-            }
-        }
+    /** Return list element at the current location */
+    T& cur() const {
+        // list could be null, but it would be a design time mistake and really, the callers fault.
+        return (*_list)[_index];
+    }
+
+    void set_index(const size_t new_index) {
+        if (new_index < _list->size()) { _index = new_index; }
+    }
 };
 
 /** Apply fuzzy effect to a string like:
@@ -234,22 +214,20 @@ class list_circularizer {
  *
  */
 
-std::string obscure_message( const std::string &str, const std::function<char()> &f );
+std::string obscure_message(const std::string& str, const std::function<char()>& f);
 
 /**
  * Erases elements from a set that match given predicate function.
  * Will work on vector, albeit not optimally performance-wise.
  * @return true if set was changed
  */
-//bool erase_if( const std::function<bool( const value_type & )> &predicate ) {
-template<typename Col, class Pred>
-bool erase_if( Col &set, Pred predicate )
-{
+// bool erase_if( const std::function<bool( const value_type & )> &predicate ) {
+template <typename Col, class Pred> bool erase_if(Col& set, Pred predicate) {
     bool ret = false;
     auto iter = set.begin();
-    for( ; iter != set.end(); ) {
-        if( predicate( *iter ) ) {
-            iter = set.erase( iter );
+    for (; iter != set.end();) {
+        if (predicate(*iter)) {
+            iter = set.erase(iter);
             ret = true;
         } else {
             ++iter;
@@ -267,16 +245,13 @@ bool erase_if( Col &set, Pred predicate )
  * @param ignored_elements elements from both sets to ignore
  * @return true, if sets without ignored elements are equal, false otherwise
  */
-template<typename Set, typename T = std::decay_t<decltype( *std::declval<const Set &>().begin() ) >>
-bool equal_ignoring_elements( const Set &set, const Set &set2, const Set &ignored_elements )
-{
+template <typename Set, typename T = std::decay_t<decltype(*std::declval<const Set&>().begin())>>
+bool equal_ignoring_elements(const Set& set, const Set& set2, const Set& ignored_elements) {
     // general idea: splits both sets into the ranges bounded by elements from `ignored_elements`
     // and checks that these ranges are equal
 
     // traverses ignored elements in
-    if( ignored_elements.empty() ) {
-        return set == set2;
-    }
+    if (ignored_elements.empty()) { return set == set2; }
 
     using Iter = typename Set::iterator;
     Iter end = ignored_elements.end();
@@ -285,146 +260,125 @@ bool equal_ignoring_elements( const Set &set, const Set &set2, const Set &ignore
     cur++;
 
     // first comparing the sets range [set.begin() .. ignored_elements.begin()]
-    if( !std::equal( set.begin(), set.lower_bound( *prev ),
-                     set2.begin(), set2.lower_bound( *prev ) ) ) {
+    if (!std::equal(set.begin(), set.lower_bound(*prev), set2.begin(), set2.lower_bound(*prev))) {
         return false;
     }
 
     // compare ranges bounded by two elements: [`prev` .. `cur`]
-    while( cur != end ) {
-        if( !std::equal( set.upper_bound( *prev ), set.lower_bound( *cur ),
-                         set2.upper_bound( *prev ), set2.lower_bound( *cur ) ) ) {
+    while (cur != end) {
+        if (!std::equal(set.upper_bound(*prev), set.lower_bound(*cur), set2.upper_bound(*prev),
+                        set2.lower_bound(*cur))) {
             return false;
         }
         prev = cur;
         cur++;
     }
 
-    // compare the range after the last element of ignored_elements: [ignored_elements.back() .. set.end()]
-    return static_cast<bool>( std::equal( set.upper_bound( *prev ), set.end(),
-                                          set2.upper_bound( *prev ), set2.end() ) );
+    // compare the range after the last element of ignored_elements: [ignored_elements.back() ..
+    // set.end()]
+    return static_cast<bool>(
+        std::equal(set.upper_bound(*prev), set.end(), set2.upper_bound(*prev), set2.end()));
 }
 
-int modulo( int v, int m );
+int modulo(int v, int m);
 
 class on_out_of_scope {
-    private:
-        std::function<void()> func;
-    public:
-        on_out_of_scope( const std::function<void()> &func ) : func( func )
-        {
-        }
+private:
+    std::function<void()> func;
 
-        ~on_out_of_scope()
-        {
-            if( func ) {
-                func();
-            }
-        }
+public:
+    on_out_of_scope(const std::function<void()>& func): func(func) {}
 
-        void cancel()
-        {
-            func = nullptr;
-        }
+    ~on_out_of_scope() {
+        if (func) { func(); }
+    }
+
+    void cancel() { func = nullptr; }
 };
 
-template<typename T>
-class restore_on_out_of_scope {
-    private:
-        T &t;
-        T orig_t;
-        on_out_of_scope impl;
-    public:
-        // *INDENT-OFF*
-        restore_on_out_of_scope( T &t_in ) : t( t_in ), orig_t( t_in ),
-            impl( [this]() { t = std::move( orig_t ); } ) {
-        }
+template <typename T> class restore_on_out_of_scope {
+private:
+    T& t;
+    T orig_t;
+    on_out_of_scope impl;
 
-        restore_on_out_of_scope( T &&t_in ) : t( t_in ), orig_t( std::move( t_in ) ),
-            impl( [this]() { t = std::move( orig_t ); } ) {
-        }
-        // *INDENT-ON*
+public:
+    // *INDENT-OFF*
+    restore_on_out_of_scope(T& t_in)
+        : t(t_in),
+          orig_t(t_in),
+          impl([this]() { t = std::move(orig_t); }) {}
+
+    restore_on_out_of_scope(T&& t_in)
+        : t(t_in),
+          orig_t(std::move(t_in)),
+          impl([this]() { t = std::move(orig_t); }) {}
+    // *INDENT-ON*
 };
 
 /**
  * Get the current holiday based on the given time, or based on current time if time = 0
  * @param time The timestampt to assess
  * @param force_refresh Force recalculation of current holiday, otherwise use cached value
-*/
-holiday get_holiday_from_time( std::time_t time = 0, bool force_refresh = false );
+ */
+holiday get_holiday_from_time(std::time_t time = 0, bool force_refresh = false);
 
-template <typename T, std::size_t ... Is>
-constexpr T _pow10p( std::index_sequence<Is...> const & )
-{
-    auto apply = []( size_t, T & v ) { v *= 10; };
-    T ret { 1 };
-    ( apply( Is, ret ), ... );
+template <typename T, std::size_t... Is> constexpr T _pow10p(std::index_sequence<Is...> const&) {
+    auto apply = [](size_t, T& v) { v *= 10; };
+    T ret{1};
+    (apply(Is, ret), ...);
     return ret;
 }
 
-template <typename T, std::size_t ... Is>
-constexpr T _pow10n( std::index_sequence<Is...> const & )
-{
-    auto apply = []( size_t, T & v ) { v /= 10; };
-    T ret { 1 };
-    ( apply( Is, ret ), ... );
+template <typename T, std::size_t... Is> constexpr T _pow10n(std::index_sequence<Is...> const&) {
+    auto apply = [](size_t, T& v) { v /= 10; };
+    T ret{1};
+    (apply(Is, ret), ...);
     return ret;
 }
 
-template < typename T, int E, std::size_t N = ( E < 0 ? -E : E ) >
-           constexpr T pow10()
-{
-    return E < 0
-               ? _pow10n<T>( std::make_index_sequence<N> {} )
-               : _pow10p<T>( std::make_index_sequence<N> {} );
+template <typename T, int E, std::size_t N = (E < 0 ? -E : E)> constexpr T pow10() {
+    return E < 0 ? _pow10n<T>(std::make_index_sequence<N>{})
+                 : _pow10p<T>(std::make_index_sequence<N>{});
 }
 
 namespace detail {
-template <bool Static, typename T>
-struct variant_cast_impl;
+template <bool Static, typename T> struct variant_cast_impl;
 
-template < bool Static, typename ...Ts >
-struct variant_cast_impl < Static, std::variant < Ts...>> {
-    using target_type = std::variant < Ts... >;
+template <bool Static, typename... Ts> struct variant_cast_impl<Static, std::variant<Ts...>> {
+    using target_type = std::variant<Ts...>;
 
     // DO NOT make this into a lambda, due to an issue with MSVC
     // where it'll fail the constexpr requires check, and fall into the throw branch,
     // even with a valid target_type constructor
     struct visitor {
-        template < typename U >
-        auto operator()( U &&v ) -> target_type {
-            if constexpr( requires { target_type{v}; } )
-            {
+        template <typename U> auto operator()(U&& v) -> target_type {
+            if constexpr (requires { target_type{v}; }) {
                 return v;
-            } else if constexpr( Static )
-            {
-                static_assert( !Static, "bad variant cast" );
-            } else
-            {
+            } else if constexpr (Static) {
+                static_assert(!Static, "bad variant cast");
+            } else {
                 throw std::bad_variant_access();
             }
         }
     };
 
-    template < typename ... Us >
-    auto operator()( const std::variant < Us... > &var ) -> target_type {
-        return std::visit( visitor{}, var );
+    template <typename... Us> auto operator()(const std::variant<Us...>& var) -> target_type {
+        return std::visit(visitor{}, var);
     }
 };
 } // namespace detail
 
-/// If the value on source variant does have a valid destination type on destination, throws std::bad_variant_access
-template < typename T, typename U >
-auto dynamic_variant_cast( const U &from ) -> T
-{
-    auto caster = detail::variant_cast_impl < false, T > {};
-    return caster( from );
+/// If the value on source variant does have a valid destination type on destination, throws
+/// std::bad_variant_access
+template <typename T, typename U> auto dynamic_variant_cast(const U& from) -> T {
+    auto caster = detail::variant_cast_impl<false, T>{};
+    return caster(from);
 }
 
-/// All types on source variant must have a valid destination type on destination, checked at compile time
-template < typename T, typename U >
-auto static_variant_cast( const U &from ) -> T
-{
-    auto caster = detail::variant_cast_impl < true, T > {};
-    return caster( from );
+/// All types on source variant must have a valid destination type on destination, checked at
+/// compile time
+template <typename T, typename U> auto static_variant_cast(const U& from) -> T {
+    auto caster = detail::variant_cast_impl<true, T>{};
+    return caster(from);
 }

@@ -14,26 +14,26 @@
 
 enum { BILLION = 1000 * 1000 * 1000 };
 
-#   if defined(__cplusplus)
+#    if defined(__cplusplus)
 extern "C" {
-#   endif
+#    endif
 
 // Apparently this is defined by pthread.h, if that header had been included.
 // _INC_TIME is defined in time.h for MSVC
 // __struct_timespec_defined is defined in time.h for MinGW on Windows
-#if !defined(_TIMESPEC_DEFINED) && !defined(_INC_TIME) && !__struct_timespec_defined
-#define _TIMESPEC_DEFINED
+#    if !defined(_TIMESPEC_DEFINED) && !defined(_INC_TIME) && !__struct_timespec_defined
+#        define _TIMESPEC_DEFINED
 struct timespec {
     time_t tv_sec;
     long int tv_nsec;
 };
-#endif
+#    endif
 
-#   if defined(__cplusplus)
+#    if defined(__cplusplus)
 }
-#   endif
+#    endif
 
-#include "platform_win.h"
+#    include "platform_win.h"
 
 /* The Win32 function Sleep() has a resolution of about 15 ms and takes
    at least 5 ms to execute.  We use this function for longer time periods.
@@ -41,9 +41,6 @@ struct timespec {
    resolution of about 0.01 ms.  In order to measure such short time spans,
    we use the QueryPerformanceCounter() function.  */
 
-int
-nanosleep( const struct timespec *requested_delay,
-           struct timespec *remaining_delay );
+int nanosleep(const struct timespec* requested_delay, struct timespec* remaining_delay);
 
 #endif
-

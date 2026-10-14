@@ -1,10 +1,10 @@
 #pragma once
 #ifndef CATA_SRC_HUD_RUNIC_H
-#define CATA_SRC_HUD_RUNIC_H
+#    define CATA_SRC_HUD_RUNIC_H
 
-#include <array>
-#include <string>
-#include <string_view>
+#    include <array>
+#    include <string>
+#    include <string_view>
 
 /// Sidebar HUD in the character creator's register: ink ladder, dp geometry,
 /// markup primitives.
@@ -29,8 +29,7 @@
 ///     a step on the `ink` ladder; every gold mark on screen comes from the
 ///     stylesheet and is redundant with a shape (a left edge, a filled pip, a
 ///     filled chip). Desaturating the document must leave every reading intact.
-namespace hud_runic
-{
+namespace hud_runic {
 
 // ── Palette ─────────────────────────────────────────────────────────────────
 
@@ -40,38 +39,37 @@ namespace hud_runic
 /// a value a producer chose. Resolved through the gruvbox tokens in
 /// `data/gui/theme.json`, so the F4 Theme tab still edits them live.
 enum class ink : int {
-    ground,  ///< `bg-hard`, luma 31.5: panel ground, radar ground
-    dead,    ///< `bg2`,     luma 74.2: present but unavailable (unbound key, empty ammo)
-    rule,    ///< `bg4`,     luma 113.0: separators, `::`, oldest log rows
-    label,   ///< `fg4`,     luma 154.6: chrome words, limbs at FULL health
-    datum,   ///< `fg`,      luma 219.5: live data, limbs that are DAMAGED
-    peak,    ///< `fg0`,     luma 240.2: newest log line, wielded weapon, the clock
+    ground, ///< `bg-hard`, luma 31.5: panel ground, radar ground
+    dead,   ///< `bg2`,     luma 74.2: present but unavailable (unbound key, empty ammo)
+    rule,   ///< `bg4`,     luma 113.0: separators, `::`, oldest log rows
+    label,  ///< `fg4`,     luma 154.6: chrome words, limbs at FULL health
+    datum,  ///< `fg`,      luma 219.5: live data, limbs that are DAMAGED
+    peak,   ///< `fg0`,     luma 240.2: newest log line, wielded weapon, the clock
 };
 
 /// `#rrggbbaa` for a ladder rung. Falls back to the built-in ladder if the theme
 /// is missing the token, so a truncated theme.json degrades to correct colours
 /// rather than to `substitute_tokens`'s magenta.
-auto hex( ink i ) -> std::string;
+auto hex(ink i) -> std::string;
 
 /// The same rung as `hex`, as straight RGBA in 0..1 — for the GPU dot layer,
 /// which cannot consume a CSS string. Falls back identically.
-auto rgba( ink i ) -> std::array<float, 4>;
+auto rgba(ink i) -> std::array<float, 4>;
 
 /// The RCSS rung class for `i`, for the rows that need it ALONGSIDE a layout
 /// class (`<span class="hud-cell-name hud-i4">`), which `tint` cannot produce.
 /// Promoted here on its second adopter: a producer-local copy of the class
 /// table in each TU is exactly the drift the single ladder exists to prevent.
-auto ink_class( ink i ) -> std::string_view;
+auto ink_class(ink i) -> std::string_view;
 
 /// Wrap already-escaped `content` in a span at ladder rung `i`.
-auto tint( ink i, std::string_view content ) -> std::string;
+auto tint(ink i, std::string_view content) -> std::string;
 
 // ── Geometry ────────────────────────────────────────────────────────────────
 
-inline constexpr float row_h    = 20.0f;  ///< dp, one HUD list row
-inline constexpr float head_h   =
-    22.0f;  ///< dp, one .nc-colhead (3+3 padding, 12dp caps, 1dp rule)
-inline constexpr float chrome_h = 8.0f;   ///< dp, a panel's 1dp border pair + .hud-body padding
+inline constexpr float row_h = 20.0f;   ///< dp, one HUD list row
+inline constexpr float head_h = 22.0f;  ///< dp, one .nc-colhead (3+3 padding, 12dp caps, 1dp rule)
+inline constexpr float chrome_h = 8.0f; ///< dp, a panel's 1dp border pair + .hud-body padding
 
 /// A region in dp, ready for `Element::SetProperty`.
 struct rect {
@@ -80,7 +78,7 @@ struct rect {
     float w = 0.0f;
     float h = 0.0f;
 
-    auto operator<=>( const rect & ) const = default; // *NOPAD*
+    auto operator<=>(const rect&) const = default;
 };
 
 /// Where every region sits, in dp.
@@ -91,13 +89,13 @@ struct rect {
 struct layout {
     float ctx_w = 0.0f;
     float ctx_h = 0.0f;
-    rect status;   ///< full width, top edge: world and character state
-    rect soma;     ///< left column: body parts, pools, effects
-    rect radar;    ///< right column, top: the dot-matrix tactical minimap
-    rect dock;     ///< right column under the radar: target, arms
-    rect log;      ///< bottom-left, sized to its content, not to the column
-    rect keys;     ///< full width, bottom edge: the function-key strip
-    rect vehicle;  ///< right column under the dock; empty unless driving
+    rect status;  ///< full width, top edge: world and character state
+    rect soma;    ///< left column: body parts, pools, effects
+    rect radar;   ///< right column, top: the dot-matrix tactical minimap
+    rect dock;    ///< right column under the radar: target, arms
+    rect log;     ///< bottom-left, sized to its content, not to the column
+    rect keys;    ///< full width, bottom edge: the function-key strip
+    rect vehicle; ///< right column under the dock; empty unless driving
 };
 
 /// Options for `layout_for`. `sidebar_right` mirrors `soma`/`radar`/`dock`/
@@ -106,7 +104,7 @@ struct layout_options {
     float ctx_w_dp = 0.0f;
     float ctx_h_dp = 0.0f;
     bool sidebar_right = true;
-    int log_lines = 6;        ///< the log well is sized to this, and only this
+    int log_lines = 6; ///< the log well is sized to this, and only this
     bool show_vehicle = false;
     /// Is SOMA's limb card expanded? Drives only that panel's HEIGHT — the
     /// producer reads the same flag for its content. Collapsing has to reach the
@@ -115,12 +113,11 @@ struct layout_options {
     bool soma_expanded = false;
 };
 
-auto layout_for( const layout_options &o ) -> layout;
+auto layout_for(const layout_options& o) -> layout;
 
 /// dp height of a panel holding exactly `rows` list rows under a head.
-constexpr auto panel_h( int rows ) -> float
-{
-    return head_h + static_cast<float>( rows ) * row_h + chrome_h;
+constexpr auto panel_h(int rows) -> float {
+    return head_h + static_cast<float>(rows) * row_h + chrome_h;
 }
 
 // ── Markup primitives ───────────────────────────────────────────────────────
@@ -138,13 +135,13 @@ constexpr auto panel_h( int rows ) -> float
 
 /// `<div class="{classes}"[ id="{id}"]>{inner}</div>`. Empty `id` → no attribute.
 /// `classes` and `id` are emitted as authored; `inner` is already markup.
-auto row( std::string_view classes, std::string_view id, std::string_view inner ) -> std::string;
+auto row(std::string_view classes, std::string_view id, std::string_view inner) -> std::string;
 
 /// `<div class="nc-rule"></div>` — the creator's dotted separator.
 auto rule_div() -> std::string;
 
 /// A `.nc-rule` followed by `<div class="hud-row hud-subhead"><span>{title}</span></div>`.
-auto subhead( std::string_view title ) -> std::string;
+auto subhead(std::string_view title) -> std::string;
 
 struct pip_options {
     int cur = 0;
@@ -156,27 +153,27 @@ struct pip_options {
 /// carrying ` on`. `max <= 0` → every pip off. The lit count is clamped to
 /// `[0, count]`, so a value over its maximum fills the meter rather than
 /// overflowing the row.
-auto pips( const pip_options &o ) -> std::string;
+auto pips(const pip_options& o) -> std::string;
 
 struct fact_options {
-    std::string label;   ///< emitted as-is; RCSS upper-cases it
+    std::string label; ///< emitted as-is; RCSS upper-cases it
     std::string value;
-    std::string sub;     ///< omitted entirely when empty
+    std::string sub; ///< omitted entirely when empty
     ink value_ink = ink::datum;
 };
 
 /// The creator's fact block: quiet tracked-caps label over a bright value, with
 /// an optional subordinate line. An empty `.sub` emits no element at all — an
 /// empty one would still take vertical space in a fixed-height panel.
-auto fact( const fact_options &o ) -> std::string;
+auto fact(const fact_options& o) -> std::string;
 
 struct legend_options {
     std::string label;
     std::string value;
     ink label_ink = ink::label;
     ink value_ink = ink::datum;
-    bool alarm = false;                   ///< value takes "hud-alarm" instead of a rung class
-    std::string label_class = "hud-lab";  ///< extra class on the label span; "" for none
+    bool alarm = false;                  ///< value takes "hud-alarm" instead of a rung class
+    std::string label_class = "hud-lab"; ///< extra class on the label span; "" for none
     /// Extra class on the value span. Defaults to `.hud-text`, which is only a
     /// `display: block` + `flex: 0 0 auto` — the minimum a span needs to be a
     /// real flex item, since RmlUi does NOT blockify flex children and an inline
@@ -197,14 +194,14 @@ struct legend_options {
 /// instead, because there the label position holds a key glyph and the value
 /// position holds the action name — content, not a caption, and it must not
 /// shrink.
-auto legend_item( const legend_options &o ) -> std::string;
+auto legend_item(const legend_options& o) -> std::string;
 
 /// `<span class="nc-chip"><span class="nc-chip-label hud-iN">text</span></span>`.
-auto chip( std::string_view text, ink i ) -> std::string;
+auto chip(std::string_view text, ink i) -> std::string;
 
 /// One row of the creator's vertical tally list. An empty `val` omits its span.
-auto tally_row( std::string_view name, std::string_view val, ink name_ink, ink val_ink )
--> std::string;
+auto tally_row(std::string_view name, std::string_view val, ink name_ink, ink val_ink)
+    -> std::string;
 
 // ── Severity ────────────────────────────────────────────────────────────────
 
@@ -234,7 +231,7 @@ struct crit_options {
     bool broken = false;
 };
 
-auto is_critical( const crit_options &o ) -> bool;
+auto is_critical(const crit_options& o) -> bool;
 
 } // namespace hud_runic
 

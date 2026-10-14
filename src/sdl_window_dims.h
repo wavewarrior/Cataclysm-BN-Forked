@@ -14,10 +14,10 @@
 ///
 /// sdl_window_dims.cpp is the single definition site for all of the above.
 
-#include <optional>
-
 #include "coordinates.h"
 #include "units_angle.h"
+
+#include <optional>
 
 /// Returns true when the right mouse button is physically held down, as tracked
 /// from the SDL event stream by sdl_input.
@@ -52,5 +52,4 @@ auto get_aim_mouse_pos() -> point;
 /// player merely holds RMB and moves the mouse.
 ///
 /// nullopt when the pixel resolves onto the source tile centre (no direction).
-auto aim_angle_from_pixel( point pixel, const tripoint_bub_ms &src )
--> std::optional<units::angle>;
+auto aim_angle_from_pixel(point pixel, const tripoint_bub_ms& src) -> std::optional<units::angle>;

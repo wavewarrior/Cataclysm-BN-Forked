@@ -4,10 +4,9 @@
 
 enum class holiday : int;
 
-namespace PATH_INFO
-{
-void init_base_path( std::string path );
-void init_user_dir( std::string dir );
+namespace PATH_INFO {
+void init_base_path(std::string path);
+void init_user_dir(std::string dir);
 void set_standard_filenames();
 
 std::string autopickup();
@@ -60,17 +59,15 @@ std::string soundpack_conf();
 
 std::string credits();
 std::string motd();
-std::string title( holiday current_holiday );
+std::string title(holiday current_holiday);
 std::string names();
 
-void set_datadir( const std::string &datadir );
-void set_config_dir( const std::string &config_dir );
-void set_savedir( const std::string &savedir );
-void set_memorialdir( const std::string &memorialdir );
-void set_options( const std::string &options );
-void set_autopickup( const std::string &autopickup );
-void set_motd( const std::string &motd );
+void set_datadir(const std::string& datadir);
+void set_config_dir(const std::string& config_dir);
+void set_savedir(const std::string& savedir);
+void set_memorialdir(const std::string& memorialdir);
+void set_options(const std::string& options);
+void set_autopickup(const std::string& autopickup);
+void set_motd(const std::string& motd);
 
 } // namespace PATH_INFO
-
-

@@ -22,17 +22,18 @@ enum class coop_pkt : uint8_t {
 
     resync_request = 25, ///< client detected hash mismatch; host responds with forced full sync
     ///< (client → host)
-    chat = 30,           ///< free-form text (bidirectional, any time)
+    chat = 30, ///< free-form text (bidirectional, any time)
 
-    trade_offer    = 43, ///< one player offers an item to the other (bidirectional; "from" field disambiguates)
-    trade_accept   = 44, ///< recipient confirms trade; transfer executes
-    trade_reject   = 45, ///< recipient declines trade
-    tap_shoulder   = 46, ///< interrupt partner's current long activity (bidirectional)
-    overmap_mark   = 47, ///< place or clear a shared overmap marker (bidirectional)
-    emote          = 48, ///< player emote — "high_five" in this version (bidirectional)
-    stabilize      = 49, ///< host stabilizes downed client (host → client only)
+    trade_offer = 43,  ///< one player offers an item to the other (bidirectional; "from" field
+                       ///< disambiguates)
+    trade_accept = 44, ///< recipient confirms trade; transfer executes
+    trade_reject = 45, ///< recipient declines trade
+    tap_shoulder = 46, ///< interrupt partner's current long activity (bidirectional)
+    overmap_mark = 47, ///< place or clear a shared overmap marker (bidirectional)
+    emote = 48,        ///< player emote — "high_five" in this version (bidirectional)
+    stabilize = 49,    ///< host stabilizes downed client (host → client only)
 
-    reconnect  = 15, ///< client sends session_token to resume (client → host)
+    reconnect = 15,  ///< client sends session_token to resume (client → host)
     disconnect = 99, ///< graceful close notification
 };
 
@@ -78,4 +79,3 @@ constexpr double COOP_INPUT_EWMA_ALPHA = 0.25;
 /// Hard depth cap on the co-op action buffer: the action in flight plus one look-ahead.
 /// This is the anti-"train of actions" bound — a burst can never bank more than this.
 constexpr std::size_t COOP_MAX_QUEUED_ACTIONS = 2;
-

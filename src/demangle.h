@@ -5,6 +5,4 @@
 /**
  * Demangles a C++ symbol
  */
-auto demangle( const char *symbol ) -> std::string;
-
-
+auto demangle(const char* symbol) -> std::string;

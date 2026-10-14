@@ -99,7 +99,7 @@ class dust_mote_effect {
 public:
     dust_mote_effect() = default;
     dust_mote_effect(const dust_mote_effect&) = delete;
-    auto operator=(const dust_mote_effect&) -> dust_mote_effect& = delete; // *NOPAD*
+    auto operator=(const dust_mote_effect&) -> dust_mote_effect& = delete;
     ~dust_mote_effect();
 
     // Build pipeline + instance buffer. hdr_format is the world_target format.

@@ -18,7 +18,8 @@ static constexpr int STATUS_WIDTH = 55;
 
 static constexpr int EXPLOSION_MULTIPLIER = 7;
 
-// Really just a sanity check for functions not tested beyond this. in theory 4096 works (`InvletInvlet).
+// Really just a sanity check for functions not tested beyond this. in theory 4096 works
+// (`InvletInvlet).
 static constexpr int MAX_ITEM_IN_SQUARE = 4096;
 // no reason to differ.
 static constexpr int MAX_ITEM_IN_VEHICLE_STORAGE = MAX_ITEM_IN_SQUARE;
@@ -32,7 +33,7 @@ static constexpr int REALITY_BUBBLE_SIZE_MAX = 16;
 // MAPSIZE is the number of submaps in each direction.
 // Formula: 2 * REALITY_BUBBLE_SIZE_MAX + 3
 static constexpr int MAPSIZE = 2 * REALITY_BUBBLE_SIZE_MAX + 3;
-static constexpr int HALF_MAPSIZE = static_cast<int>( MAPSIZE / 2 );
+static constexpr int HALF_MAPSIZE = static_cast<int>(MAPSIZE / 2);
 
 // SEEX/SEEY define the size of a nonant, or grid.
 // All map segments will need to be at least this wide.
@@ -50,7 +51,7 @@ static constexpr int MAX_VIEW_DISTANCE = SEEX * HALF_MAPSIZE;
 /**
  * Size of the overmap. This is the number of overmap terrain tiles per dimension in one overmap,
  * it's just like SEEX/SEEY for submaps.
-*/
+ */
 static constexpr int OMAPX = 180;
 static constexpr int OMAPY = OMAPX;
 
@@ -80,8 +81,7 @@ static constexpr int VEHICLE_HANDLING_PENALTY = 80;
 static constexpr int PLUTONIUM_CHARGES = 500;
 
 // Temperature constants.
-namespace temperatures
-{
+namespace temperatures {
 
 /// Average annual temperature used for climate, weather and temperature calculation.
 constexpr units::temperature annual_average = 6_c;
@@ -152,9 +152,9 @@ extern float g_visible_threshold;
 // Accuracy levels which a shots tangent must be below.
 constexpr double accuracy_headshot = 0.1;
 constexpr double accuracy_critical = 0.2;
-constexpr double accuracy_goodhit  = 0.5;
+constexpr double accuracy_goodhit = 0.5;
 constexpr double accuracy_standard = 0.8;
-constexpr double accuracy_grazing  = 1.0;
+constexpr double accuracy_grazing = 1.0;
 
 // The maximum level recoil will ever reach.
 // This corresponds to the level of accuracy of a "snap" or "hip" shot.
@@ -170,9 +170,10 @@ static constexpr int BIO_CQB_LEVEL = 5;
 static constexpr int HORDE_VISIBILITY_SIZE = 3;
 
 /**
- * Used to limit the random seed during noise calculation. A large value flattens the noise generator to zero.
- * Windows has a rand limit of 32768, other operating systems can have higher limits.
-*/
+ * Used to limit the random seed during noise calculation. A large value flattens the noise
+ * generator to zero. Windows has a rand limit of 32768, other operating systems can have higher
+ * limits.
+ */
 constexpr int SIMPLEX_NOISE_RANDOM_SEED_LIMIT = 32768;
 
 /**
@@ -184,7 +185,7 @@ constexpr int SIMPLEX_NOISE_RANDOM_SEED_LIMIT = 32768;
  * as such, when determining your activity level
  * in the json, think about what it would be if you
  * did this activity for a longer period of time.
-*/
+ */
 constexpr float NO_EXERCISE = 1.2f;
 constexpr float LIGHT_EXERCISE = 1.375f;
 constexpr float MODERATE_EXERCISE = 1.55f;
@@ -192,8 +193,7 @@ constexpr float ACTIVE_EXERCISE = 1.725f;
 constexpr float EXTRA_EXERCISE = 1.9f;
 
 // these are the lower bounds of each of the weight classes.
-namespace character_weight_category
-{
+namespace character_weight_category {
 constexpr float emaciated = 14.0f;
 constexpr float underweight = 16.0f;
 constexpr float normal = 18.5f;
@@ -202,4 +202,3 @@ constexpr float obese = 30.0f;
 constexpr float very_obese = 35.0f;
 constexpr float morbidly_obese = 40.0f;
 } // namespace character_weight_category
-

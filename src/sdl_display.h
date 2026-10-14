@@ -1,19 +1,17 @@
 #pragma once
 
-#include <SDL3/SDL.h>
+#include "input.h"
+#include "sdl_wrappers.h"
 
+#include <SDL3/SDL.h>
 #include <cstdint>
 #include <memory>
 #include <string>
 
-#include "input.h"
-#include "sdl_wrappers.h"
-
 class Font;
 class GeometryRenderer;
 
-namespace cata_cursesport
-{
+namespace cata_cursesport {
 struct curseline;
 } // namespace cata_cursesport
 
@@ -56,7 +54,7 @@ struct display_context {
     bool dpad_continuous = false;
     int lastdpad = -1;
     int queued_dpad = -1;
-    SDL_Joystick *joystick = nullptr;
+    SDL_Joystick* joystick = nullptr;
 
     // Fonts
     std::unique_ptr<Font> font;

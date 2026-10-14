@@ -6,8 +6,7 @@
 /// no out-of-TU consumer, so they are intentionally not exported here.
 extern bool g_show_fps;
 
-namespace lighting
-{
+namespace lighting {
 class render_state;
 struct frame_context;
 struct lighting_settings;
@@ -23,5 +22,6 @@ class frame_executor;
 /// `cfg` is the lighting settings the whole frame reads (the live ones from
 /// `refresh_display`, a test's own otherwise); the commit and readback steps take
 /// its one-shot pulses, so it is not const.
-auto run_frame_plan( lighting::render_state &rs, lighting::frame_context &ctx,
-                     frame_executor &exec, lighting::lighting_settings &cfg ) -> void;
+auto run_frame_plan(
+    lighting::render_state& rs, lighting::frame_context& ctx, frame_executor& exec,
+    lighting::lighting_settings& cfg) -> void;

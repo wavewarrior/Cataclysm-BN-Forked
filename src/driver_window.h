@@ -27,17 +27,17 @@ struct screen_position {
 };
 
 /// Reads `<width>x<height>`: two positive whole numbers, nothing else.
-auto parse_driver_window_size( std::string_view text ) -> std::optional<driver_window_size>;
+auto parse_driver_window_size(std::string_view text) -> std::optional<driver_window_size>;
 
 /// Where a window of `size` goes so that it sits in the bottom right corner of `usable` (the
 /// screen without the menu bar and dock). A window larger than the area is pinned to its top
 /// left corner instead, so its title bar stays reachable.
-auto driver_window_corner( const screen_area &usable,
-                           const driver_window_size &size ) -> screen_position;
+auto driver_window_corner(const screen_area& usable, const driver_window_size& size)
+    -> screen_position;
 
 /// Asks the interface init to open the game window as the driver's window. Call before
 /// `init_interface`.
-auto request_driver_window( const driver_window_size &size ) -> void;
+auto request_driver_window(const driver_window_size& size) -> void;
 
 /// The window `request_driver_window` asked for; empty when the boot is not windowed.
 auto requested_driver_window() -> std::optional<driver_window_size>;

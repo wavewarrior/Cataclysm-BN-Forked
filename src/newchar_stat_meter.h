@@ -14,8 +14,7 @@
 ///
 /// The three functions also collapse what used to be eight near-identical arms in
 /// `set_stats`' input loop (four stats x two directions, each restating the double-cost rule).
-namespace nc_stat_meter
-{
+namespace nc_stat_meter {
 
 /// Lowest value the creator will reduce a stat to. The first `floor_val` pips are granted and
 /// can never be sold back, so they are not part of the spendable range.
@@ -31,29 +30,20 @@ enum class tier {
 };
 
 /// Which tier the pip standing for value `val` (1-based) belongs to. `high` is `HIGH_STAT`.
-constexpr auto pip_tier( int val, int high ) -> tier
-{
-    if( val <= floor_val ) {
-        return tier::base;
-    }
+constexpr auto pip_tier(int val, int high) -> tier {
+    if (val <= floor_val) { return tier::base; }
     return val > high ? tier::steep : tier::cheap;
 }
 
 /// Points the NEXT increment costs for a stat sitting at `val`, or 0 when it is capped.
-constexpr auto next_cost( int val, int high, int max ) -> int
-{
-    if( val >= max ) {
-        return 0;
-    }
+constexpr auto next_cost(int val, int high, int max) -> int {
+    if (val >= max) { return 0; }
     return val >= high ? 2 : 1;
 }
 
 /// Points returned by decrementing a stat sitting at `val`, or 0 when it is at the floor.
-constexpr auto refund( int val, int high ) -> int
-{
-    if( val <= floor_val ) {
-        return 0;
-    }
+constexpr auto refund(int val, int high) -> int {
+    if (val <= floor_val) { return 0; }
     return val > high ? 2 : 1;
 }
 

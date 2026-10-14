@@ -17,16 +17,15 @@
 /// Translated, player-facing text MUST stay on `string_format`: the PO
 /// placeholder contract depends on it, and there a localised decimal separator
 /// is the correct behaviour.
-namespace rml
-{
+namespace rml {
 
 /// `<v>%` — percentage of the containing block.
-inline auto pct( float v ) -> std::string { return std::format( "{:.4f}%", v ); }
+inline auto pct(float v) -> std::string { return std::format("{:.4f}%", v); }
 
 /// `<v>dp` — density-independent pixels.
-inline auto dp( float v ) -> std::string { return std::format( "{:.2f}dp", v ); }
+inline auto dp(float v) -> std::string { return std::format("{:.2f}dp", v); }
 
 /// `<v>px` — physical pixels.
-inline auto px( float v ) -> std::string { return std::format( "{:.2f}px", v ); }
+inline auto px(float v) -> std::string { return std::format("{:.2f}px", v); }
 
 } // namespace rml

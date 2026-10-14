@@ -3,8 +3,7 @@
 #include "calendar.h"
 #include "catalua_sol.h"
 
-namespace cata
-{
+namespace cata {
 struct on_every_x_hooks {
     time_duration interval;
     std::vector<sol::protected_function> functions;
@@ -25,31 +24,31 @@ struct lua_state {
 } // namespace cata
 
 sol::state make_lua_state();
-void run_lua_script( sol::state &lua, const std::string &script_name );
-void run_console_input( sol::state &lua, const std::string &chunk );
-void check_func_result( sol::protected_function_result &res );
+void run_lua_script(sol::state& lua, const std::string& script_name);
+void run_console_input(sol::state& lua, const std::string& chunk);
+void check_func_result(sol::protected_function_result& res);
 
 // Numbers in Lua can be either integers or floating-point,
 // but you can't determine that with simple get_type()
-bool is_number_integer( sol::state_view lua, const sol::object &val );
+bool is_number_integer(sol::state_view lua, const sol::object& val);
 
 // Returns type name as registered with luna.
 // If type was not registered with luna, or the value is not a userdata, returns nullopt.
-std::optional<std::string> get_luna_type( const sol::object &val );
+std::optional<std::string> get_luna_type(const sol::object& val);
 
 /**
  * Compare 2 Lua values for equality (by value).
  *
  * May contain unhandled cases, use with care.
  */
-bool compare_values( const sol::object &a, const sol::object &b );
+bool compare_values(const sol::object& a, const sol::object& b);
 
 /**
  * Compare 2 Lua tables for equality (by value).
  *
  * May contain unhandled cases, use with care.
  */
-bool compare_tables( sol::table a, sol::table b );
+bool compare_tables(sol::table a, sol::table b);
 
 /**
  * @brief Find key of equivalent value in provided table.
@@ -62,6 +61,4 @@ bool compare_tables( sol::table a, sol::table b );
  * @param desired_key found key will be equal to this value
  * @returns sol::nil on failure, key object from table \p t on success
  */
-sol::object find_equivalent_key( const sol::table &t, sol::object desired_key );
-
-
+sol::object find_equivalent_key(const sol::table& t, sol::object desired_key);

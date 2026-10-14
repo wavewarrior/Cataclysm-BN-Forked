@@ -15,10 +15,10 @@
  */
 struct fire_data {
     fire_data() = default;
-    fire_data( const fire_data & ) = default;
-    fire_data( int intensity, bool is_contained = false ) : fire_intensity( intensity ),
-        contained( is_contained )
-    {}
+    fire_data(const fire_data&) = default;
+    fire_data(int intensity, bool is_contained = false)
+        : fire_intensity(intensity),
+          contained(is_contained) {}
     /** Current intensity of the fire.  This is an input to the calculations */
     int fire_intensity = 0;
     /** Smoke produced by each burning item this turn is summed here. */
@@ -53,5 +53,3 @@ struct mat_burn_data {
     /** Volume of material destroyed per tick when this material burns. */
     float burn = 0.0f;
 };
-
-

@@ -26,11 +26,11 @@
 #include "dialogue.h"
 #include "disease.h"
 #include "effect.h"
-#include "enchantments/enchantment.h"
-#include "enchantments/enchantment_value.h"
-#include "enchantments/enchantment_flag.h"
-#include "enchantments/enchantment_condition.h"
 #include "emit.h"
+#include "enchantments/enchantment.h"
+#include "enchantments/enchantment_condition.h"
+#include "enchantments/enchantment_flag.h"
+#include "enchantments/enchantment_value.h"
 #include "event_statistics.h"
 #include "faction.h"
 #include "fault.h"
@@ -45,10 +45,6 @@
 #include "item_category.h"
 #include "item_factory.h"
 #include "json.h"
-#include <algorithm>
-#include <cstdint>
-#include <cstring>
-#include <filesystem>
 #include "language.h"
 #include "loading_ui.h"
 #include "lru_cache.h"
@@ -114,13 +110,16 @@
 #include "worldfactory.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <atomic>
+#include <cstring>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <memory>
@@ -151,11 +150,9 @@ static constexpr int stream_cache_limit = 4096;
 
 // Forward declarations for helpers used by prewarm worker
 static void clear_loaded_data();
-static auto normalize_mod_load_order( std::vector<mod_id> mods ) -> std::vector<mod_id>;
+static auto normalize_mod_load_order(std::vector<mod_id> mods) -> std::vector<mod_id>;
 
-namespace
-{
-
+namespace {
 
 
 struct json_perf_load_metrics {
@@ -184,7 +181,7 @@ struct json_perf_deferred_stats {
 json_perf_load_metrics g_last_load_metrics;
 json_perf_deferred_stats g_deferred_stats;
 
-const auto s_json_perf_enabled = getenv( "CATA_JSON_PERF" ) != nullptr;
+const auto s_json_perf_enabled = getenv("CATA_JSON_PERF") != nullptr;
 
 /// Pre-warm state: background thread loading last-world modfiles.
 static std::optional<std::thread> g_prewarm_thread;
@@ -194,93 +191,90 @@ static std::optional<prewarm_result> g_prewarm_result;
 using named_entry = std::pair<std::string, std::function<void()>>;
 
 static const std::vector<named_entry> worker_safe_finalizers = {{
-        { translate_marker( "Flags" ), &DynamicDataLoader::finalize_flags },
-        { translate_marker( "Mutation Flags" ), &DynamicDataLoader::finalize_trait_flags },
-        { translate_marker( "Body parts" ), &body_part_type::finalize_all },
-        { translate_marker( "Bionics" ), &bionic_data::finalize_all },
-        { translate_marker( "Weather types" ), &weather_types::finalize_all },
-        { translate_marker( "World types" ), &world_types::finalize_all },
-        { translate_marker( "Field types" ), &field_types::finalize_all },
-        { translate_marker( "Ammo effects" ), &ammo_effects::finalize_all },
-        { translate_marker( "Emissions" ), &emit::finalize },
-        { translate_marker( "Sidebar widgets" ), &widget::finalize_all },
-        { translate_marker( "Items" ), []() { item_controller->finalize(); } },
-        { translate_marker( "Crafting requirements" ), []() { requirement_data::finalize(); } },
-        { translate_marker( "Vehicle parts" ), &vpart_info::finalize_all },
-        { translate_marker( "Traps" ), &trap::finalize },
-        { translate_marker( "Terrain" ), &set_ter_ids },
-        { translate_marker( "Furniture" ), &finalize_furn },
-        { translate_marker( "Overmap land use codes" ), &overmap_land_use_codes::finalize },
-        { translate_marker( "Overmap terrain" ), &overmap_terrains::finalize },
-        { translate_marker( "Overmap connections" ), &overmap_connections::finalize },
-        { translate_marker( "Overmap specials" ), &overmap_specials::finalize },
-        { translate_marker( "Overmap locations" ), &overmap_locations::finalize },
-        { translate_marker( "Start locations" ), &start_locations::finalize_all },
-        { translate_marker( "Zone manager" ), &zone_manager::reset_manager },
-        { translate_marker( "Vehicle prototypes" ), &vehicle_prototype::finalize },
-        { translate_marker( "Mapgen weights" ), &calculate_mapgen_weights },
-        { translate_marker( "Mapgen parameters" ), &overmap_specials::finalize_mapgen_parameters },
-        { translate_marker( "Monster types" ), []() { MonsterGenerator::generator().finalize_mtypes(); } },
-        { translate_marker( "Monster groups" ), &MonsterGroupManager::FinalizeMonsterGroups },
-        { translate_marker( "Monster factions" ), &monfactions::finalize },
-        { translate_marker( "Factions" ), &npc_factions::finalize },
-        { translate_marker( "Constructions" ), &constructions::finalize },
-        { translate_marker( "Crafting recipes" ), &recipe_dictionary::finalize },
-        { translate_marker( "Recipe groups" ), &recipe_group::check },
-        { translate_marker( "Martial arts" ), &finialize_martial_arts },
-        { translate_marker( "NPC classes" ), &npc_class::finalize_all },
-        { translate_marker( "Missions" ), &mission_type::finalize },
-        { translate_marker( "Behaviors" ), &behavior::finalize },
-        { translate_marker( "Harvest lists" ), &harvest_list::finalize_all },
-        { translate_marker( "Anatomies" ), &anatomy::finalize_all },
-        { translate_marker( "Mutations" ), &mutation_branch::finalize },
-        { translate_marker( "Achievements" ), &achievement::finalize },
-        { translate_marker( "Enchantments" ), &enchantment::finalize_all },
-    }
-};
+    {translate_marker("Flags"), &DynamicDataLoader::finalize_flags},
+    {translate_marker("Mutation Flags"), &DynamicDataLoader::finalize_trait_flags},
+    {translate_marker("Body parts"), &body_part_type::finalize_all},
+    {translate_marker("Bionics"), &bionic_data::finalize_all},
+    {translate_marker("Weather types"), &weather_types::finalize_all},
+    {translate_marker("World types"), &world_types::finalize_all},
+    {translate_marker("Field types"), &field_types::finalize_all},
+    {translate_marker("Ammo effects"), &ammo_effects::finalize_all},
+    {translate_marker("Emissions"), &emit::finalize},
+    {translate_marker("Sidebar widgets"), &widget::finalize_all},
+    {translate_marker("Items"), []() { item_controller->finalize(); }},
+    {translate_marker("Crafting requirements"), []() { requirement_data::finalize(); }},
+    {translate_marker("Vehicle parts"), &vpart_info::finalize_all},
+    {translate_marker("Traps"), &trap::finalize},
+    {translate_marker("Terrain"), &set_ter_ids},
+    {translate_marker("Furniture"), &finalize_furn},
+    {translate_marker("Overmap land use codes"), &overmap_land_use_codes::finalize},
+    {translate_marker("Overmap terrain"), &overmap_terrains::finalize},
+    {translate_marker("Overmap connections"), &overmap_connections::finalize},
+    {translate_marker("Overmap specials"), &overmap_specials::finalize},
+    {translate_marker("Overmap locations"), &overmap_locations::finalize},
+    {translate_marker("Start locations"), &start_locations::finalize_all},
+    {translate_marker("Zone manager"), &zone_manager::reset_manager},
+    {translate_marker("Vehicle prototypes"), &vehicle_prototype::finalize},
+    {translate_marker("Mapgen weights"), &calculate_mapgen_weights},
+    {translate_marker("Mapgen parameters"), &overmap_specials::finalize_mapgen_parameters},
+    {translate_marker("Monster types"), []() { MonsterGenerator::generator().finalize_mtypes(); }},
+    {translate_marker("Monster groups"), &MonsterGroupManager::FinalizeMonsterGroups},
+    {translate_marker("Monster factions"), &monfactions::finalize},
+    {translate_marker("Factions"), &npc_factions::finalize},
+    {translate_marker("Constructions"), &constructions::finalize},
+    {translate_marker("Crafting recipes"), &recipe_dictionary::finalize},
+    {translate_marker("Recipe groups"), &recipe_group::check},
+    {translate_marker("Martial arts"), &finialize_martial_arts},
+    {translate_marker("NPC classes"), &npc_class::finalize_all},
+    {translate_marker("Missions"), &mission_type::finalize},
+    {translate_marker("Behaviors"), &behavior::finalize},
+    {translate_marker("Harvest lists"), &harvest_list::finalize_all},
+    {translate_marker("Anatomies"), &anatomy::finalize_all},
+    {translate_marker("Mutations"), &mutation_branch::finalize},
+    {translate_marker("Achievements"), &achievement::finalize},
+    {translate_marker("Enchantments"), &enchantment::finalize_all},
+}};
 
 static const std::vector<named_entry> main_thread_finalizers = {{
-        { translate_marker( "Localization" ), &l10n_data::load_mod_catalogues },
-        { translate_marker( "Tileset" ), &load_tileset },
-    }
-};
+    {translate_marker("Localization"), &l10n_data::load_mod_catalogues},
+    {translate_marker("Tileset"), &load_tileset},
+}};
 
-static void _finalize_entry( loading_ui& ui, const named_entry& e )
-{
+static void _finalize_entry(loading_ui& ui, const named_entry& e) {
     const auto tf0 = std::chrono::steady_clock::now();
     e.second();
-    const auto tf_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                           std::chrono::steady_clock::now() - tf0 ).count();
-    if( s_json_perf_enabled && tf_ms >= 5 ) {
-        // NOLINTNEXTLINE(cata-text-style)
-        fprintf( stderr, "[JSON_PERF]   finalize[%s]=%lldms\n", e.first.c_str(),
-                 static_cast<long long>( tf_ms ) );
+    const auto tf_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - tf0)
+            .count();
+    if (s_json_perf_enabled && tf_ms >= 5) {
+        fprintf(stderr, "[JSON_PERF]   finalize[%s]=%lldms\n", e.first.c_str(),
+                static_cast<long long>(tf_ms));
     }
     ui.proceed();
 }
-static std::atomic<bool> g_prewarm_joined{ false };
+static std::atomic<bool> g_prewarm_joined{false};
 
 /// Run the FULL load+finalize pipeline on a background thread.
 /// This mirrors load_and_finalize_packs but skips UI rendering.
 /// Returns a prewarm_result (error string or wall time).
-static prewarm_result run_prewarm_load_for_world( std::string world_name,
-        std::vector<mod_id> mod_ids )
-{
+static prewarm_result run_prewarm_load_for_world(
+    std::string world_name, std::vector<mod_id> mod_ids) {
     auto start = std::chrono::steady_clock::now();
     try {
-        loading_ui ui( false );
+        loading_ui ui(false);
 
         // Clear existing data before loading (same as load_world_modfiles)
         clear_loaded_data();
 
         // Separate valid mods
         std::vector<mod_id> available;
-        for( const mod_id& mod : mod_ids ) {
-            if( mod.is_valid() ) {
-                available.emplace_back( mod );
-                ui.add_entry( mod->name() );
+        for (const mod_id& mod : mod_ids) {
+            if (mod.is_valid()) {
+                available.emplace_back(mod);
+                ui.add_entry(mod->name());
             } else {
-                debugmsg( "prewarm: unknown content pack [%s]", mod );
+                debugmsg("prewarm: unknown content pack [%s]", mod);
             }
         }
 
@@ -289,46 +283,46 @@ static prewarm_result run_prewarm_load_for_world( std::string world_name,
         // Lua setup (MUST run before load_data_from_path)
         cata::lua_sidebar_widgets::clear_widgets();
         loader.lua = cata::make_wrapped_state();
-        cata::init_global_state_tables( *loader.lua, available );
+        cata::init_global_state_tables(*loader.lua, available);
 
         ui.show();
 
         // Run mod preload scripts
-        for( const mod_id& mod : available ) {
-            if( mod->lua_api_version ) {
-                cata::set_mod_being_loaded( *loader.lua, mod );
-                cata::run_mod_preload_script( *loader.lua, mod );
+        for (const mod_id& mod : available) {
+            if (mod->lua_api_version) {
+                cata::set_mod_being_loaded(*loader.lua, mod);
+                cata::run_mod_preload_script(*loader.lua, mod);
             }
         }
 
         // Register Lua callbacks for item parsing
-        cata::reg_lua_icallback_actors( *loader.lua, *item_controller );
+        cata::reg_lua_icallback_actors(*loader.lua, *item_controller);
 
         // Load all mod JSON files
-        for( const mod_id& mod : available ) {
-            loader.load_data_from_path( mod->path, mod.str(), ui );
+        for (const mod_id& mod : available) {
+            loader.load_data_from_path(mod->path, mod.str(), ui);
             ui.proceed();
         }
 
         // Finalize worker-safe entries only (0-40)
-        loader.finalize_worker_phases( ui );
+        loader.finalize_worker_phases(ui);
 
         // Resolve Lua callbacks for bionics and mutations
         cata::resolve_extra_lua_callbacks();
 
         // Run mod finalize scripts
-        for( const mod_id& mod : available ) {
-            if( mod->lua_api_version ) {
-                cata::set_mod_being_loaded( *loader.lua, mod );
-                cata::run_mod_finalize_script( *loader.lua, mod );
+        for (const mod_id& mod : available) {
+            if (mod->lua_api_version) {
+                cata::set_mod_being_loaded(*loader.lua, mod);
+                cata::run_mod_finalize_script(*loader.lua, mod);
             }
         }
 
-    } catch( const std::exception& e ) {
+    } catch (const std::exception& e) {
         auto result = prewarm_result{};
-        result.error = std::string( "Prewarm failed: " ) + e.what();
+        result.error = std::string("Prewarm failed: ") + e.what();
         return result;
-    } catch( ... ) {
+    } catch (...) {
         auto result = prewarm_result{};
         result.error = "Prewarm failed: unknown exception";
         return result;
@@ -336,9 +330,9 @@ static prewarm_result run_prewarm_load_for_world( std::string world_name,
 
     auto end = std::chrono::steady_clock::now();
     auto result = prewarm_result{};
-    result.world_name = std::move( world_name );
-    result.mod_ids = std::move( mod_ids );
-    result.wall_ms = std::chrono::duration_cast<std::chrono::milliseconds>( end - start );
+    result.world_name = std::move(world_name);
+    result.mod_ids = std::move(mod_ids);
+    result.wall_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     return result;
 }
 
@@ -348,8 +342,7 @@ DynamicDataLoader::DynamicDataLoader() { initialize(); }
 
 DynamicDataLoader::~DynamicDataLoader() = default;
 
-DynamicDataLoader &DynamicDataLoader::get_instance()
-{
+DynamicDataLoader& DynamicDataLoader::get_instance() {
     static DynamicDataLoader theDynamicDataLoader;
     return theDynamicDataLoader;
 }
@@ -359,88 +352,85 @@ void DynamicDataLoader::finalize_trait_flags() { json_trait_flag::finalize_all()
 
 void DynamicDataLoader::load_object(
     const JsonObject& jo, const std::string& src, const std::string& base_path,
-    const std::string& full_path )
-{
-    const std::string type = jo.get_string( "type" );
-    const t_type_function_map::iterator it = type_function_map.find( type );
-    if( it == type_function_map.end() ) { jo.throw_error( "unrecognized JSON object", "type" ); }
-    it->second( jo, src, base_path, full_path );
+    const std::string& full_path) {
+    const std::string type = jo.get_string("type");
+    const t_type_function_map::iterator it = type_function_map.find(type);
+    if (it == type_function_map.end()) { jo.throw_error("unrecognized JSON object", "type"); }
+    it->second(jo, src, base_path, full_path);
 }
 
-shared_ptr_fast<std::istream> DynamicDataLoader::get_cached_stream( const std::string& path )
-{
-    assert( !finalized && "Cannot open data file after finalization." );
-    assert( stream_cache && "Stream cache is only available during finalization" );
-    shared_ptr_fast<std::istringstream> cached = stream_cache->cache.get( path, nullptr );
+shared_ptr_fast<std::istream> DynamicDataLoader::get_cached_stream(const std::string& path) {
+    assert(!finalized && "Cannot open data file after finalization.");
+    assert(stream_cache && "Stream cache is only available during finalization");
+    shared_ptr_fast<std::istringstream> cached = stream_cache->cache.get(path, nullptr);
     // Create a new stream if the file is not opened yet, or if some code is still
     // using the previous stream (in such case, `cached` and `stream_cache` have
     // two references to the stream, hence the test for > 2).
-    if( !cached ) {
+    if (!cached) {
         // Use preloaded content when available (Phase A pre-loaded all mod files);
         // this avoids re-reading from disk during finalization — critical on Windows
         // where every CreateFile triggers an AV scan.
-        auto it = preloaded_content_.find( path );
+        auto it = preloaded_content_.find(path);
         const std::string content =
-            ( it != preloaded_content_.end() ) ? it->second : read_entire_file( path );
-        cached = make_shared_fast<std::istringstream>( content );
-    } else if( cached.use_count() > 2 ) {
-        cached = make_shared_fast<std::istringstream>( cached->str() );
+            (it != preloaded_content_.end()) ? it->second : read_entire_file(path);
+        cached = make_shared_fast<std::istringstream>(content);
+    } else if (cached.use_count() > 2) {
+        cached = make_shared_fast<std::istringstream>(cached->str());
     }
-    stream_cache->cache.insert( stream_cache_limit, path, cached );
+    stream_cache->cache.insert(stream_cache_limit, path, cached);
     return cached;
 }
 
 
-void DynamicDataLoader::sort_deferred( deferred_json& data, std::string_view id_field )
-{
-    if( data.size() <= 1 ) { return; }
+void DynamicDataLoader::sort_deferred(deferred_json& data, std::string_view id_field) {
+    if (data.size() <= 1) { return; }
 
     struct entry_meta {
         std::string self_id;
         std::string copy_from;
     };
 
-    const auto id_field_str = std::string( id_field );
-    auto metas = std::vector<entry_meta>( data.size() );
+    const auto id_field_str = std::string(id_field);
+    auto metas = std::vector<entry_meta>(data.size());
 
     // Pre-pass: extract self_id and copy_from from each entry's JSON.
     // Re-uses get_cached_stream (stream is either cached or file-read once).
-    for( size_t i = 0; i < data.size(); ++i ) {
-        if( !data[i].first.path ) { continue; }
+    for (size_t i = 0; i < data.size(); ++i) {
+        if (!data[i].first.path) { continue; }
         try {
-            auto stream = get_cached_stream( *data[i].first.path );
-            JsonIn jsin( *stream, data[i].first );
+            auto stream = get_cached_stream(*data[i].first.path);
+            JsonIn jsin(*stream, data[i].first);
             auto jo = jsin.get_object();
-            if( jo.has_string( "copy-from" ) ) { metas[i].copy_from = jo.get_string( "copy-from" ); }
-            if( jo.has_string( id_field_str ) ) {
-                metas[i].self_id = jo.get_string( id_field_str );
-            } else if( jo.has_string( "ident" ) ) {
-                metas[i].self_id = jo.get_string( "ident" );
-            } else if( jo.has_string( "abstract" ) ) {
-                metas[i].self_id = jo.get_string( "abstract" );
+            if (jo.has_string("copy-from")) { metas[i].copy_from = jo.get_string("copy-from"); }
+            if (jo.has_string(id_field_str)) {
+                metas[i].self_id = jo.get_string(id_field_str);
+            } else if (jo.has_string("ident")) {
+                metas[i].self_id = jo.get_string("ident");
+            } else if (jo.has_string("abstract")) {
+                metas[i].self_id = jo.get_string("abstract");
             }
             jo.allow_omitted_members();
-        } catch( const JsonError & ) {
+        } catch (const JsonError&) {
             // Skip malformed entries; load_deferred will report them.
         }
     }
 
     // Build id→index map. Last writer wins for duplicate ids (mod override).
-    auto id_to_idx = std::unordered_map<std::string, size_t> {};
-    id_to_idx.reserve( data.size() );
-    for( size_t i = 0; i < data.size(); ++i ) {
-        if( !metas[i].self_id.empty() ) { id_to_idx[metas[i].self_id] = i; }
+    auto id_to_idx = std::unordered_map<std::string, size_t>{};
+    id_to_idx.reserve(data.size());
+    for (size_t i = 0; i < data.size(); ++i) {
+        if (!metas[i].self_id.empty()) { id_to_idx[metas[i].self_id] = i; }
     }
 
     // Build adjacency list and in-degree array for topological sort.
-    auto adj = std::vector<std::vector<size_t>>( data.size() );
-    auto in_deg = std::vector<size_t>( data.size(), 0 );
-    for( size_t i = 0; i < data.size(); ++i ) {
-        if( !metas[i].copy_from.empty() ) {
-            const auto it = id_to_idx.find( metas[i].copy_from );
-            if( it != id_to_idx.end() ) {
+    auto adj = std::vector<std::vector<size_t>>(data.size());
+    auto in_deg = std::vector<size_t>(data.size(), 0);
+    for (size_t i = 0; i < data.size(); ++i) {
+        if (!metas[i].copy_from.empty()) {
+            const auto it = id_to_idx.find(metas[i].copy_from);
+            if (it != id_to_idx.end()) {
                 const auto parent = it->second;
-                adj[parent].push_back( i );
+                adj[parent].push_back(i);
                 ++in_deg[i];
             }
             // else: copy-from target already loaded (not in deferred) — treat as root.
@@ -450,77 +440,76 @@ void DynamicDataLoader::sort_deferred( deferred_json& data, std::string_view id_
     // Kahn's algorithm with min-heap: independent entries are processed in
     // ascending original-index order, preserving mod override semantics for
     // duplicate-id entries.
-    auto pq = std::priority_queue<size_t, std::vector<size_t>, std::greater<size_t >> {};
-    auto sorted_order = std::vector<size_t> {};
-    sorted_order.reserve( data.size() );
-    for( size_t i = 0; i < data.size(); ++i ) {
-        if( in_deg[i] == 0 ) { pq.push( i ); }
+    auto pq = std::priority_queue<size_t, std::vector<size_t>, std::greater<size_t>>{};
+    auto sorted_order = std::vector<size_t>{};
+    sorted_order.reserve(data.size());
+    for (size_t i = 0; i < data.size(); ++i) {
+        if (in_deg[i] == 0) { pq.push(i); }
     }
-    while( !pq.empty() ) {
+    while (!pq.empty()) {
         const auto n = pq.top();
         pq.pop();
-        sorted_order.push_back( n );
-        for( const auto m : adj[n] ) {
-            if( --in_deg[m] == 0 ) { pq.push( m ); }
+        sorted_order.push_back(n);
+        for (const auto m : adj[n]) {
+            if (--in_deg[m] == 0) { pq.push(m); }
         }
     }
     // Circular entries: append in ascending original-index order.
     // load_deferred's existing circular-dep error path handles them.
-    for( size_t i = 0; i < data.size(); ++i ) {
-        if( in_deg[i] > 0 ) { sorted_order.push_back( i ); }
+    for (size_t i = 0; i < data.size(); ++i) {
+        if (in_deg[i] > 0) { sorted_order.push_back(i); }
     }
 
     // Reorder data in-place.
     auto sorted = deferred_json{};
-    sorted.reserve( data.size() );
-    for( const auto i : sorted_order ) { sorted.push_back( std::move( data[i] ) ); }
-    data = std::move( sorted );
+    sorted.reserve(data.size());
+    for (const auto i : sorted_order) { sorted.push_back(std::move(data[i])); }
+    data = std::move(sorted);
 }
 
-void DynamicDataLoader::load_deferred( deferred_json& data )
-{
+void DynamicDataLoader::load_deferred(deferred_json& data) {
     const auto td0 = std::chrono::steady_clock::now();
-    on_out_of_scope record_time( [&td0]() {
+    on_out_of_scope record_time([&td0]() {
         g_deferred_stats.us +=
             std::chrono::duration_cast<std::chrono::microseconds>(
-                std::chrono::steady_clock::now() - td0 )
-            .count();
-    } );
-    while( !data.empty() ) {
+                std::chrono::steady_clock::now() - td0)
+                .count();
+    });
+    while (!data.empty()) {
         const size_t n = data.size();
-        g_deferred_stats.reparsed += static_cast<int>( n );
-        for( size_t idx = 0; idx != n; ++idx ) {
+        g_deferred_stats.reparsed += static_cast<int>(n);
+        for (size_t idx = 0; idx != n; ++idx) {
             auto it = data.begin();
-            std::advance( it, idx );
-            if( !it->first.path ) {
-                debugmsg( "JSON source location has null path, data may load incorrectly" );
+            std::advance(it, idx);
+            if (!it->first.path) {
+                debugmsg("JSON source location has null path, data may load incorrectly");
             } else {
                 try {
-                    shared_ptr_fast<std::istream> stream = get_cached_stream( *it->first.path );
-                    JsonIn jsin( *stream, it->first );
+                    shared_ptr_fast<std::istream> stream = get_cached_stream(*it->first.path);
+                    JsonIn jsin(*stream, it->first);
                     JsonObject jo = jsin.get_object();
-                    load_object( jo, it->second );
-                } catch( const JsonError& err ) { debugmsg( "(json-error)\n%s", err.what() ); }
+                    load_object(jo, it->second);
+                } catch (const JsonError& err) { debugmsg("(json-error)\n%s", err.what()); }
             }
             inp_mngr.pump_events();
         }
         auto it = data.begin();
-        std::advance( it, n );
-        data.erase( data.begin(), it );
+        std::advance(it, n);
+        data.erase(data.begin(), it);
         ++g_deferred_stats.rounds;
-        if( data.size() == n ) {
-            for( const auto& elem : data ) {
-                if( !elem.first.path ) {
+        if (data.size() == n) {
+            for (const auto& elem : data) {
+                if (!elem.first.path) {
                     debugmsg(
                         "JSON source location has null path when reporting circular "
-                        "dependency" );
+                        "dependency");
                 } else {
                     try {
                         throw_error_at_json_loc(
                             elem.first,
                             "JSON contains circular dependency, "
-                            "this object is discarded" );
-                    } catch( const JsonError& err ) { debugmsg( "(json-error)\n%s", err.what() ); }
+                            "this object is discarded");
+                    } catch (const JsonError& err) { debugmsg("(json-error)\n%s", err.what()); }
                 }
                 inp_mngr.pump_events();
             }
@@ -530,8 +519,7 @@ void DynamicDataLoader::load_deferred( deferred_json& data )
     }
 }
 
-static void load_ignored_type( const JsonObject& jo )
-{
+static void load_ignored_type(const JsonObject& jo) {
     // This does nothing!
     // This function is used for types that are to be ignored
     // (for example for testing or for unimplemented types)
@@ -540,263 +528,258 @@ static void load_ignored_type( const JsonObject& jo )
 
 void DynamicDataLoader::add(
     const std::string& type,
-    std::function <
-    void( const JsonObject &, const std::string &, const std::string &, const std::string & ) >
-    f )
-{
-    const auto pair = type_function_map.emplace( type, f );
-    if( !pair.second ) {
-        debugmsg( "tried to insert a second handler for type %s into the DynamicDataLoader",
-                  type.c_str() );
+    std::function<
+        void(const JsonObject&, const std::string&, const std::string&, const std::string&)>
+        f) {
+    const auto pair = type_function_map.emplace(type, f);
+    if (!pair.second) {
+        debugmsg("tried to insert a second handler for type %s into the DynamicDataLoader",
+                 type.c_str());
     }
 }
 
 void DynamicDataLoader::add(
-    const std::string& type, const std::function<void( const JsonObject &, const std::string & )> &f )
-{
+    const std::string& type, const std::function<void(const JsonObject&, const std::string&)>& f) {
     const auto pair = type_function_map.emplace(
-                          type,
-    [f]( const JsonObject & obj, const std::string & src, const std::string &, const std::string & ) {
-        f( obj, src );
-    } );
-    if( !pair.second ) {
-        debugmsg( "tried to insert a second handler for type %s into the DynamicDataLoader",
-                  type.c_str() );
+        type,
+        [f](const JsonObject& obj, const std::string& src, const std::string&, const std::string&) {
+            f(obj, src);
+        });
+    if (!pair.second) {
+        debugmsg("tried to insert a second handler for type %s into the DynamicDataLoader",
+                 type.c_str());
     }
 }
 
 void DynamicDataLoader::add(
-    const std::string& type, const std::function<void( const JsonObject & )> &f )
-{
+    const std::string& type, const std::function<void(const JsonObject&)>& f) {
     const auto pair = type_function_map.emplace(
-                          type,
-    [f]( const JsonObject & obj, const std::string &, const std::string &, const std::string & ) {
-        f( obj );
-    } );
-    if( !pair.second ) {
-        debugmsg( "tried to insert a second handler for type %s into the DynamicDataLoader",
-                  type.c_str() );
+        type,
+        [f](const JsonObject& obj, const std::string&, const std::string&, const std::string&) {
+            f(obj);
+        });
+    if (!pair.second) {
+        debugmsg("tried to insert a second handler for type %s into the DynamicDataLoader",
+                 type.c_str());
     }
 }
 
-void DynamicDataLoader::initialize()
-{
+void DynamicDataLoader::initialize() {
     // all of the applicable types that can be loaded, along with their loading functions
     // Add to this as needed with new StaticFunctionAccessors or new ClassFunctionAccessors for new
     // applicable types Static Function Access
-    add( "WORLD_OPTION", &load_world_option );
-    add( "EXTERNAL_OPTION", &load_external_option );
-    add( "json_flag", &json_flag::load_all );
-    add( "mutation_flag", &json_trait_flag::load_all );
-    add( "fault", &fault::load_fault );
-    add( "field_type", &field_types::load );
-    add( "weather_type", &weather_types::load );
-    add( "world_type", &world_types::load );
-    add( "ammo_effect", &ammo_effects::load );
-    add( "emit", &emit::load_emit );
-    add( "activity_type", &activity_type::load );
-    add( "vitamin", &vitamin::load_vitamin );
-    add( "material", &materials::load );
-    add( "bionic", &bionic_data::load_bionic );
-    add( "profession", &profession::load_profession );
-    add( "profession_item_substitutions", &profession::load_item_substitutions );
-    add( "skill", &Skill::load_skill );
-    add( "skill_display_type", &SkillDisplayType::load );
-    add( "dream", &dreams::load );
-    add( "mutation_category", &mutation_category_trait::load );
-    add( "mutation_type", &load_mutation_type );
-    add( "mutation", &mutation_branch::load_trait );
-    add( "furniture", &load_furniture );
-    add( "terrain", &load_terrain );
-    add( "monstergroup", &MonsterGroupManager::LoadMonsterGroup );
-    add( "MONSTER_BLACKLIST", &MonsterGroupManager::LoadMonsterBlacklist );
-    add( "MONSTER_WHITELIST", &MonsterGroupManager::LoadMonsterWhitelist );
-    add( "speech", &load_speech );
-    add( "ammunition_type", &ammunition_type::load_ammunition_type );
-    add( "start_location", &start_locations::load );
-    add( "scenario", &scenario::load_scenario );
-    add( "SCENARIO_BLACKLIST", &scen_blacklist::load_scen_blacklist );
-    add( "skill_boost", &skill_boost::load_boost );
-    add( "enchantment", &enchantment::load_enchantment );
-    add( "enchantment_value", &enchantment_value::load_enchantment_values );
-    add( "enchantment_flag", &enchantment_flag::load_enchantment_flags );
-    add( "enchantment_condition", &enchantment_condition::load_enchantment_conditions );
-    add( "hit_range", &Creature::load_hit_range );
-    add( "scent_type", &scent_type::load_scent_type );
-    add( "disease_type", &disease_type::load_disease_type );
-    add( "ascii_art", &ascii_art::load_ascii_art );
-    add( "widget", &widget::load_widget );
+    add("WORLD_OPTION", &load_world_option);
+    add("EXTERNAL_OPTION", &load_external_option);
+    add("json_flag", &json_flag::load_all);
+    add("mutation_flag", &json_trait_flag::load_all);
+    add("fault", &fault::load_fault);
+    add("field_type", &field_types::load);
+    add("weather_type", &weather_types::load);
+    add("world_type", &world_types::load);
+    add("ammo_effect", &ammo_effects::load);
+    add("emit", &emit::load_emit);
+    add("activity_type", &activity_type::load);
+    add("vitamin", &vitamin::load_vitamin);
+    add("material", &materials::load);
+    add("bionic", &bionic_data::load_bionic);
+    add("profession", &profession::load_profession);
+    add("profession_item_substitutions", &profession::load_item_substitutions);
+    add("skill", &Skill::load_skill);
+    add("skill_display_type", &SkillDisplayType::load);
+    add("dream", &dreams::load);
+    add("mutation_category", &mutation_category_trait::load);
+    add("mutation_type", &load_mutation_type);
+    add("mutation", &mutation_branch::load_trait);
+    add("furniture", &load_furniture);
+    add("terrain", &load_terrain);
+    add("monstergroup", &MonsterGroupManager::LoadMonsterGroup);
+    add("MONSTER_BLACKLIST", &MonsterGroupManager::LoadMonsterBlacklist);
+    add("MONSTER_WHITELIST", &MonsterGroupManager::LoadMonsterWhitelist);
+    add("speech", &load_speech);
+    add("ammunition_type", &ammunition_type::load_ammunition_type);
+    add("start_location", &start_locations::load);
+    add("scenario", &scenario::load_scenario);
+    add("SCENARIO_BLACKLIST", &scen_blacklist::load_scen_blacklist);
+    add("skill_boost", &skill_boost::load_boost);
+    add("enchantment", &enchantment::load_enchantment);
+    add("enchantment_value", &enchantment_value::load_enchantment_values);
+    add("enchantment_flag", &enchantment_flag::load_enchantment_flags);
+    add("enchantment_condition", &enchantment_condition::load_enchantment_conditions);
+    add("hit_range", &Creature::load_hit_range);
+    add("scent_type", &scent_type::load_scent_type);
+    add("disease_type", &disease_type::load_disease_type);
+    add("ascii_art", &ascii_art::load_ascii_art);
+    add("widget", &widget::load_widget);
 
     // json/colors.json would be listed here, but it's loaded before the others (see init_colors())
     // Non Static Function Access
-    add( "snippet", []( const JsonObject & jo ) { SNIPPET.load_snippet( jo ); } );
-    add( "item_group", []( const JsonObject & jo ) { item_controller->load_item_group( jo ); } );
-    add( "trait_group", []( const JsonObject & jo ) { mutation_branch::load_trait_group( jo ); } );
-    add( "item_action", []( const JsonObject & jo ) {
-        item_action_generator::generator().load_item_action( jo );
-    } );
+    add("snippet", [](const JsonObject& jo) { SNIPPET.load_snippet(jo); });
+    add("item_group", [](const JsonObject& jo) { item_controller->load_item_group(jo); });
+    add("trait_group", [](const JsonObject& jo) { mutation_branch::load_trait_group(jo); });
+    add("item_action", [](const JsonObject& jo) {
+        item_action_generator::generator().load_item_action(jo);
+    });
 
-    add( "vehicle_part",  &vpart_info::load_vehicle_parts );
-    add( "vehicle_color_palette",  &VehiclePalette::load_palette );
-    add( "vehicle",  &vehicle_prototype::load );
-    add( "vehicle_group",  &VehicleGroup::load );
-    add( "vehicle_placement",  &VehiclePlacement::load );
-    add( "vehicle_spawn",  &VehicleSpawn::load );
+    add("vehicle_part", &vpart_info::load_vehicle_parts);
+    add("vehicle_color_palette", &VehiclePalette::load_palette);
+    add("vehicle", &vehicle_prototype::load);
+    add("vehicle_group", &VehicleGroup::load);
+    add("vehicle_placement", &VehiclePlacement::load);
+    add("vehicle_spawn", &VehicleSpawn::load);
 
-    add( "requirement", []( const JsonObject & jo ) { requirement_data::load_requirement( jo ); } );
-    add( "trap", &trap::load_trap );
+    add("requirement", [](const JsonObject& jo) { requirement_data::load_requirement(jo); });
+    add("trap", &trap::load_trap);
 
-    add( "AMMO", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_ammo( jo, src );
-    } );
-    add( "GUN", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_gun( jo, src );
-    } );
-    add( "ARMOR", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_armor( jo, src );
-    } );
-    add( "PET_ARMOR", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_pet_armor( jo, src );
-    } );
-    add( "TOOL", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_tool( jo, src );
-    } );
-    add( "TOOLMOD", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_toolmod( jo, src );
-    } );
-    add( "TOOL_ARMOR", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_tool_armor( jo, src );
-    } );
-    add( "BOOK", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_book( jo, src );
-    } );
-    add( "COMESTIBLE", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_comestible( jo, src );
-    } );
-    add( "CONTAINER", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_container( jo, src );
-    } );
-    add( "ENGINE", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_engine( jo, src );
-    } );
-    add( "WHEEL", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_wheel( jo, src );
-    } );
-    add( "FUEL", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_fuel( jo, src );
-    } );
-    add( "GUNMOD", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_gunmod( jo, src );
-    } );
-    add( "MAGAZINE", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_magazine( jo, src );
-    } );
-    add( "BATTERY", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_battery( jo, src );
-    } );
-    add( "GENERIC", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_generic( jo, src );
-    } );
-    add( "BIONIC_ITEM", []( const JsonObject & jo, const std::string & src ) {
-        item_controller->load_bionic( jo, src );
-    } );
+    add("AMMO", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_ammo(jo, src);
+    });
+    add("GUN", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_gun(jo, src);
+    });
+    add("ARMOR", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_armor(jo, src);
+    });
+    add("PET_ARMOR", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_pet_armor(jo, src);
+    });
+    add("TOOL", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_tool(jo, src);
+    });
+    add("TOOLMOD", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_toolmod(jo, src);
+    });
+    add("TOOL_ARMOR", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_tool_armor(jo, src);
+    });
+    add("BOOK", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_book(jo, src);
+    });
+    add("COMESTIBLE", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_comestible(jo, src);
+    });
+    add("CONTAINER", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_container(jo, src);
+    });
+    add("ENGINE", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_engine(jo, src);
+    });
+    add("WHEEL", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_wheel(jo, src);
+    });
+    add("FUEL", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_fuel(jo, src);
+    });
+    add("GUNMOD", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_gunmod(jo, src);
+    });
+    add("MAGAZINE", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_magazine(jo, src);
+    });
+    add("BATTERY", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_battery(jo, src);
+    });
+    add("GENERIC", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_generic(jo, src);
+    });
+    add("BIONIC_ITEM", [](const JsonObject& jo, const std::string& src) {
+        item_controller->load_bionic(jo, src);
+    });
 
-    add( "ITEM_CATEGORY", &item_category::load_item_cat );
+    add("ITEM_CATEGORY", &item_category::load_item_cat);
 
-    add( "MIGRATION", []( const JsonObject & jo ) { item_controller->load_migration( jo ); } );
+    add("MIGRATION", [](const JsonObject& jo) { item_controller->load_migration(jo); });
 
-    add( "charge_removal_blacklist", charge_removal_blacklist::load );
-    add( "to_cbc_migration", to_cbc_migration::load );
+    add("charge_removal_blacklist", charge_removal_blacklist::load);
+    add("to_cbc_migration", to_cbc_migration::load);
 
-    add( "MONSTER", []( const JsonObject & jo, const std::string & src ) {
-        MonsterGenerator::generator().load_monster( jo, src );
-    } );
-    add( "SPECIES", []( const JsonObject & jo, const std::string & src ) {
-        MonsterGenerator::generator().load_species( jo, src );
-    } );
+    add("MONSTER", [](const JsonObject& jo, const std::string& src) {
+        MonsterGenerator::generator().load_monster(jo, src);
+    });
+    add("SPECIES", [](const JsonObject& jo, const std::string& src) {
+        MonsterGenerator::generator().load_species(jo, src);
+    });
 
-    add( "LOOT_ZONE", &zone_type::load_zones );
-    add( "monster_adjustment", &load_monster_adjustment );
-    add( "recipe_category", &load_recipe_category );
-    add( "recipe", &recipe_dictionary::load_recipe );
-    add( "uncraft", &recipe_dictionary::load_uncraft );
-    add( "nested_category", &recipe_dictionary::load_nested_category );
-    add( "recipe_group", &recipe_group::load );
+    add("LOOT_ZONE", &zone_type::load_zones);
+    add("monster_adjustment", &load_monster_adjustment);
+    add("recipe_category", &load_recipe_category);
+    add("recipe", &recipe_dictionary::load_recipe);
+    add("uncraft", &recipe_dictionary::load_uncraft);
+    add("nested_category", &recipe_dictionary::load_nested_category);
+    add("recipe_group", &recipe_group::load);
 
-    add( "tool_quality", &quality::load_static );
-    add( "technique", &load_technique );
-    add( "weapon_category", &weapon_category::load_weapon_categories );
-    add( "martial_art", &load_martial_art );
-    add( "effect_type", &load_effect_type );
-    add( "oter_id_migration", &overmap::load_oter_id_migration );
-    add( "overmap_terrain", &overmap_terrains::load );
-    add( "construction_category", &construction_categories::load );
-    add( "construction_group", &construction_groups::load );
-    add( "construction", &constructions::load );
-    add( "mapgen_color_palette",  &MapgenColorPalette::load_palette );
-    add( "mapgen", &load_mapgen );
-    add( "overmap_land_use_code", &overmap_land_use_codes::load );
-    add( "overmap_connection", &overmap_connections::load );
-    add( "overmap_location", &overmap_locations::load );
-    add( "overmap_special", &overmap_specials::load );
-    add( "city_building", &city_buildings::load );
-    add( "map_extra", &MapExtras::load );
-    add( "map_feature_description", &map_feature_descriptions::load_map_feature_descriptions );
+    add("tool_quality", &quality::load_static);
+    add("technique", &load_technique);
+    add("weapon_category", &weapon_category::load_weapon_categories);
+    add("martial_art", &load_martial_art);
+    add("effect_type", &load_effect_type);
+    add("oter_id_migration", &overmap::load_oter_id_migration);
+    add("overmap_terrain", &overmap_terrains::load);
+    add("construction_category", &construction_categories::load);
+    add("construction_group", &construction_groups::load);
+    add("construction", &constructions::load);
+    add("mapgen_color_palette", &MapgenColorPalette::load_palette);
+    add("mapgen", &load_mapgen);
+    add("overmap_land_use_code", &overmap_land_use_codes::load);
+    add("overmap_connection", &overmap_connections::load);
+    add("overmap_location", &overmap_locations::load);
+    add("overmap_special", &overmap_specials::load);
+    add("city_building", &city_buildings::load);
+    add("map_extra", &MapExtras::load);
+    add("map_feature_description", &map_feature_descriptions::load_map_feature_descriptions);
 
-    add( "region_settings", &load_region_settings );
-    add( "region_overlay", &load_region_overlay );
-    add( "ITEM_BLACKLIST", []( const JsonObject & jo ) { item_controller->load_item_blacklist( jo ); } );
-    add( "TRAIT_BLACKLIST", []( const JsonObject & jo ) { mutation_branch::load_trait_blacklist( jo ); } );
+    add("region_settings", &load_region_settings);
+    add("region_overlay", &load_region_overlay);
+    add("ITEM_BLACKLIST", [](const JsonObject& jo) { item_controller->load_item_blacklist(jo); });
+    add("TRAIT_BLACKLIST", [](const JsonObject& jo) { mutation_branch::load_trait_blacklist(jo); });
 
     // loaded earlier.
-    add( "colordef", &load_ignored_type );
+    add("colordef", &load_ignored_type);
     // mod information, ignored, handled by the mod manager
-    add( "MOD_INFO", &load_ignored_type );
+    add("MOD_INFO", &load_ignored_type);
 
-    add( "faction", &faction_template::load );
-    add( "npc", &npc_template::load );
-    add( "npc_class", &npc_class::load_npc_class );
-    add( "talk_topic", &load_talk_topic );
-    add( "behavior", &behavior::load_behavior );
+    add("faction", &faction_template::load);
+    add("npc", &npc_template::load);
+    add("npc_class", &npc_class::load_npc_class);
+    add("talk_topic", &load_talk_topic);
+    add("behavior", &behavior::load_behavior);
 
-    add( "MONSTER_FACTION", &monfactions::load_monster_faction );
+    add("MONSTER_FACTION", &monfactions::load_monster_faction);
 
-    add( "sound_effect", &sfx::load_sound_effects );
-    add( "sound_effect_preload", &sfx::load_sound_effect_preload );
-    add( "playlist", &sfx::load_playlist );
+    add("sound_effect", &sfx::load_sound_effects);
+    add("sound_effect_preload", &sfx::load_sound_effect_preload);
+    add("playlist", &sfx::load_playlist);
 
-    add( "gate", &gates::load );
-    add( "overlay_order", &load_overlay_ordering );
-    add( "mission_definition", []( const JsonObject & jo, const std::string & src ) {
-        mission_type::load_mission_type( jo, src );
-    } );
-    add( "harvest", []( const JsonObject & jo, const std::string & src ) {
-        harvest_list::load( jo, src );
-    } );
+    add("gate", &gates::load);
+    add("overlay_order", &load_overlay_ordering);
+    add("mission_definition", [](const JsonObject& jo, const std::string& src) {
+        mission_type::load_mission_type(jo, src);
+    });
+    add("harvest", [](const JsonObject& jo, const std::string& src) {
+        harvest_list::load(jo, src);
+    });
 
-    add( "monster_attack", []( const JsonObject & jo, const std::string & src ) {
-        MonsterGenerator::generator().load_monster_attack( jo, src );
-    } );
-    add( "palette", mapgen_palette::load );
-    add( "rotatable_symbol", &rotatable_symbols::load );
-    add( "body_part", &body_part_type::load_bp );
-    add( "anatomy", &anatomy::load_anatomy );
-    add( "morale_type", &morale_type_data::load_type );
-    add( "SPELL", &spell_type::load_spell );
-    add( "clothing_mod", &clothing_mods::load );
-    add( "ter_furn_transform", &ter_furn_transform::load_transform );
-    add( "event_transformation", &event_transformation::load_transformation );
-    add( "event_statistic", &event_statistic::load_statistic );
-    add( "score", &score::load_score );
-    add( "achievement", &achievement::load_achievement );
-    add( "named_color", &RGBColor::load_named_color );
-    add( "mod_tileset", &load_mod_tileset );
+    add("monster_attack", [](const JsonObject& jo, const std::string& src) {
+        MonsterGenerator::generator().load_monster_attack(jo, src);
+    });
+    add("palette", mapgen_palette::load);
+    add("rotatable_symbol", &rotatable_symbols::load);
+    add("body_part", &body_part_type::load_bp);
+    add("anatomy", &anatomy::load_anatomy);
+    add("morale_type", &morale_type_data::load_type);
+    add("SPELL", &spell_type::load_spell);
+    add("clothing_mod", &clothing_mods::load);
+    add("ter_furn_transform", &ter_furn_transform::load_transform);
+    add("event_transformation", &event_transformation::load_transformation);
+    add("event_statistic", &event_statistic::load_statistic);
+    add("score", &score::load_score);
+    add("achievement", &achievement::load_achievement);
+    add("named_color", &RGBColor::load_named_color);
+    add("mod_tileset", &load_mod_tileset);
 }
 
 void DynamicDataLoader::load_data_from_path(
-    const std::string& path, const std::string& src, loading_ui& ui )
-{
-    assert( !finalized && "Can't load additional data after finalization.  Must be unloaded first." );
+    const std::string& path, const std::string& src, loading_ui& ui) {
+    assert(!finalized && "Can't load additional data after finalization.  Must be unloaded first.");
 
     namespace ch = std::chrono;
     const auto t_begin = ch::steady_clock::now();
@@ -807,17 +790,17 @@ void DynamicDataLoader::load_data_from_path(
     // ── PHASE A (workers): parallel file reads ─────────────────────────────
     // Workers call ONLY read_entire_file().  No JSON parsing, no shared state.
     // Each slot written by exactly one worker (index i) — no mutex needed.
-    files = get_files_from_path( ".json", path, true, true );
-    if( files.empty() ) {
-        std::ifstream tmp( path.c_str(), std::ios::in );
-        if( tmp ) { files.push_back( path ); }
+    files = get_files_from_path(".json", path, true, true);
+    if (files.empty()) {
+        std::ifstream tmp(path.c_str(), std::ios::in);
+        if (tmp) { files.push_back(path); }
     }
     t_enumerated = ch::steady_clock::now();
 
-    file_contents.resize( files.size() );
-    parallel_for( 0, static_cast<int>( files.size() ), [&]( int i ) {
-        file_contents[i] = read_entire_file( files[i] );
-    } );
+    file_contents.resize(files.size());
+    parallel_for(0, static_cast<int>(files.size()), [&](int i) {
+        file_contents[i] = read_entire_file(files[i]);
+    });
     const auto t_read = ch::steady_clock::now();
 
     // ── PHASE BOUNDARY ─────────────────────────────────────────────────────────
@@ -825,77 +808,77 @@ void DynamicDataLoader::load_data_from_path(
     // preloaded_content_ is populated for use by get_cached_stream during
     // finalization (deferred mapgen re-reads hit memory instead of disk).
     g_last_load_metrics = {};
-    g_last_load_metrics.files = static_cast<int>( files.size() );
-    for( size_t i = 0; i < files.size(); ++i ) {
+    g_last_load_metrics.files = static_cast<int>(files.size());
+    for (size_t i = 0; i < files.size(); ++i) {
         g_last_load_metrics.bytes += file_contents[i].size();
         // try_emplace: first mod to load a path wins (mod-override semantics).
-        preloaded_content_.try_emplace( files[i], file_contents[i] );
+        preloaded_content_.try_emplace(files[i], file_contents[i]);
     }
     const auto t_preloaded = ch::steady_clock::now();
     g_last_load_metrics.enumerate_us =
-        ch::duration_cast<ch::microseconds>( t_enumerated - t_begin ).count();
-    g_last_load_metrics.read_us = ch::duration_cast<ch::microseconds>( t_read - t_enumerated ).count();
+        ch::duration_cast<ch::microseconds>(t_enumerated - t_begin).count();
+    g_last_load_metrics.read_us =
+        ch::duration_cast<ch::microseconds>(t_read - t_enumerated).count();
     g_last_load_metrics.preload_us =
-        ch::duration_cast<ch::microseconds>( t_preloaded - t_read ).count();
+        ch::duration_cast<ch::microseconds>(t_preloaded - t_read).count();
 
     // ── PHASE B (main thread): serial dispatch — original proven path ──────────
     // Uses std::istringstream + load_all_from_json, identical to the original
     // serial baseline.  std::move avoids a copy into the istringstream.
-    for( size_t i = 0; i < files.size(); ++i ) {
+    for (size_t i = 0; i < files.size(); ++i) {
         const auto t_stream_0 = ch::steady_clock::now();
-        std::istringstream iss( std::move( file_contents[i] ) );
+        std::istringstream iss(std::move(file_contents[i]));
         try {
-            JsonIn jsin( iss, files[i] );
+            JsonIn jsin(iss, files[i]);
             const auto t_stream_1 = ch::steady_clock::now();
             g_last_load_metrics.stream_us +=
-                ch::duration_cast<ch::microseconds>( t_stream_1 - t_stream_0 ).count();
-            load_all_from_json( jsin, src, ui, path, files[i] );
+                ch::duration_cast<ch::microseconds>(t_stream_1 - t_stream_0).count();
+            load_all_from_json(jsin, src, ui, path, files[i]);
             g_last_load_metrics.dispatch_us +=
-                ch::duration_cast<ch::microseconds>( ch::steady_clock::now() - t_stream_1 ).count();
-        } catch( const JsonError& err ) { throw std::runtime_error( err.what() ); }
+                ch::duration_cast<ch::microseconds>(ch::steady_clock::now() - t_stream_1).count();
+        } catch (const JsonError& err) { throw std::runtime_error(err.what()); }
     }
 }
 
 void DynamicDataLoader::load_all_from_json(
-    JsonIn& jsin, const std::string& src, loading_ui &, const std::string& base_path,
-    const std::string& full_path )
-{
+    JsonIn& jsin, const std::string& src, loading_ui&, const std::string& base_path,
+    const std::string& full_path) {
     // TEMPORARY until 0.G: Remove single object support for consistency
-    if( jsin.test_object() ) {
+    if (jsin.test_object()) {
         const auto t_scan_0 = std::chrono::steady_clock::now();
         JsonObject jo = jsin.get_object();
         const auto t_scan_1 = std::chrono::steady_clock::now();
         g_last_load_metrics.parse_scan_us +=
-            std::chrono::duration_cast<std::chrono::microseconds>( t_scan_1 - t_scan_0 ).count();
+            std::chrono::duration_cast<std::chrono::microseconds>(t_scan_1 - t_scan_0).count();
         const auto t_handler_0 = std::chrono::steady_clock::now();
-        load_object( jo, src, base_path, full_path );
+        load_object(jo, src, base_path, full_path);
         const auto t_handler_1 = std::chrono::steady_clock::now();
         g_last_load_metrics.parse_handler_us +=
-            std::chrono::duration_cast<std::chrono::microseconds>( t_handler_1 - t_handler_0 )
-            .count();
+            std::chrono::duration_cast<std::chrono::microseconds>(t_handler_1 - t_handler_0)
+                .count();
         jo.finish();
         jsin.eat_whitespace();
-        if( jsin.good() ) {
-            jsin.error( string_format( "expected single-object file but found '%c'", jsin.peek() ) );
+        if (jsin.good()) {
+            jsin.error(string_format("expected single-object file but found '%c'", jsin.peek()));
         }
-    } else if( jsin.test_array() ) {
+    } else if (jsin.test_array()) {
         jsin.start_array();
-        while( !jsin.end_array() ) {
+        while (!jsin.end_array()) {
             const auto t_scan_0 = std::chrono::steady_clock::now();
             JsonObject jo = jsin.get_object();
             const auto t_scan_1 = std::chrono::steady_clock::now();
             g_last_load_metrics.parse_scan_us +=
-                std::chrono::duration_cast<std::chrono::microseconds>( t_scan_1 - t_scan_0 ).count();
+                std::chrono::duration_cast<std::chrono::microseconds>(t_scan_1 - t_scan_0).count();
             const auto t_handler_0 = std::chrono::steady_clock::now();
-            load_object( jo, src, base_path, full_path );
+            load_object(jo, src, base_path, full_path);
             const auto t_handler_1 = std::chrono::steady_clock::now();
             g_last_load_metrics.parse_handler_us +=
-                std::chrono::duration_cast<std::chrono::microseconds>( t_handler_1 - t_handler_0 )
-                .count();
+                std::chrono::duration_cast<std::chrono::microseconds>(t_handler_1 - t_handler_0)
+                    .count();
             jo.finish();
         }
     } else {
-        jsin.error( "expected object or array" );
+        jsin.error("expected object or array");
     }
     // Keep the window responsive during a long load — but NOT once per file.
     // pump_events() presents a FULL frame whenever an RmlUi document is open
@@ -907,14 +890,13 @@ void DynamicDataLoader::load_all_from_json(
     // so a shared static would be a data race.
     thread_local auto last_pump = std::chrono::steady_clock::time_point{};
     const auto pump_now = std::chrono::steady_clock::now();
-    if( pump_now - last_pump >= std::chrono::milliseconds( 100 ) ) {
+    if (pump_now - last_pump >= std::chrono::milliseconds(100)) {
         last_pump = pump_now;
         inp_mngr.pump_events();
     }
 }
 
-void DynamicDataLoader::unload_data()
-{
+void DynamicDataLoader::unload_data() {
     finalized = false;
 
     // Moved to the top as a temp hack until vehicles are made into game objects
@@ -1026,63 +1008,59 @@ void DynamicDataLoader::unload_data()
     lua.reset();
 }
 
-void DynamicDataLoader::finalize_loaded_data( loading_ui& ui )
-{
-    assert( !finalized && "Can't finalize the data twice." );
-    assert( !stream_cache && "Expected stream cache to be null before finalization" );
+void DynamicDataLoader::finalize_loaded_data(loading_ui& ui) {
+    assert(!finalized && "Can't finalize the data twice.");
+    assert(!stream_cache && "Expected stream cache to be null before finalization");
 
-    on_out_of_scope reset_stream_cache( [this]() {
+    on_out_of_scope reset_stream_cache([this]() {
         stream_cache.reset();
         preloaded_content_.clear();
-    } );
+    });
     stream_cache = std::make_unique<cached_streams>();
     g_deferred_stats = {};
 
-    ui.new_context( _( "Finalizing" ) );
-    for( const named_entry& e : worker_safe_finalizers ) { ui.add_entry( _( e.first.c_str() ) ); }
-    for( const named_entry& e : main_thread_finalizers ) { ui.add_entry( _( e.first.c_str() ) ); }
+    ui.new_context(_("Finalizing"));
+    for (const named_entry& e : worker_safe_finalizers) { ui.add_entry(_(e.first.c_str())); }
+    for (const named_entry& e : main_thread_finalizers) { ui.add_entry(_(e.first.c_str())); }
     ui.show();
-    for( const named_entry& e : worker_safe_finalizers ) { _finalize_entry( ui, e ); }
-    for( const named_entry& e : main_thread_finalizers ) { _finalize_entry( ui, e ); }
+    for (const named_entry& e : worker_safe_finalizers) { _finalize_entry(ui, e); }
+    for (const named_entry& e : main_thread_finalizers) { _finalize_entry(ui, e); }
 
     finalized = true;
 }
 
-void DynamicDataLoader::finalize_worker_phases( loading_ui& ui )
-{
-    assert( !stream_cache && "Expected stream cache to be null" );
+void DynamicDataLoader::finalize_worker_phases(loading_ui& ui) {
+    assert(!stream_cache && "Expected stream cache to be null");
 
-    on_out_of_scope reset_stream_cache( [this]() {
+    on_out_of_scope reset_stream_cache([this]() {
         stream_cache.reset();
         preloaded_content_.clear();
-    } );
+    });
     stream_cache = std::make_unique<cached_streams>();
     g_deferred_stats = {};
 
-    ui.new_context( _( "Finalizing" ) );
-    for( const named_entry& e : worker_safe_finalizers ) { ui.add_entry( _( e.first.c_str() ) ); }
+    ui.new_context(_("Finalizing"));
+    for (const named_entry& e : worker_safe_finalizers) { ui.add_entry(_(e.first.c_str())); }
     ui.show();
-    for( const named_entry& e : worker_safe_finalizers ) { _finalize_entry( ui, e ); }
+    for (const named_entry& e : worker_safe_finalizers) { _finalize_entry(ui, e); }
 }
 
-void DynamicDataLoader::finalize_main_phases( loading_ui& ui )
-{
+void DynamicDataLoader::finalize_main_phases(loading_ui& ui) {
     // Load the tileset early — before the main_thread_finalizers loop — so that
     // sprite lookups during subsequent finalization (e.g. Localization triggers) or
     // early world rendering always find a valid tileset.  The idempotency guard in
     // cata_tiles::load_tileset() (cata_tiles_tileset.cpp) makes the duplicate call
     // inside the loop a no-op when args haven't changed.
     load_tileset();
-    for( const named_entry& e : main_thread_finalizers ) { ui.add_entry( _( e.first.c_str() ) ); }
+    for (const named_entry& e : main_thread_finalizers) { ui.add_entry(_(e.first.c_str())); }
     ui.show();
-    for( const named_entry& e : main_thread_finalizers ) { _finalize_entry( ui, e ); }
+    for (const named_entry& e : main_thread_finalizers) { _finalize_entry(ui, e); }
 
     finalized = true;
 }
 
-void DynamicDataLoader::check_consistency( loading_ui& ui )
-{
-    ui.new_context( _( "Verifying" ) );
+void DynamicDataLoader::check_consistency(loading_ui& ui) {
+    ui.new_context(_("Verifying"));
 
     using named_entry = std::pair<std::string, std::function<void()>>;
     const std::vector<named_entry> entries = {{
@@ -1154,10 +1132,10 @@ void DynamicDataLoader::check_consistency( loading_ui& ui )
         {_("Effects"), &effect_type::check_consistency},
     }};
 
-    for( const named_entry& e : entries ) { ui.add_entry( e.first ); }
+    for (const named_entry& e : entries) { ui.add_entry(e.first); }
 
     ui.show();
-    for( const named_entry& e : entries ) {
+    for (const named_entry& e : entries) {
         const auto t_entry = std::chrono::steady_clock::now();
         e.second();
         if (s_json_perf_enabled) {
@@ -1165,7 +1143,6 @@ void DynamicDataLoader::check_consistency( loading_ui& ui )
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     std::chrono::steady_clock::now() - t_entry)
                     .count();
-            // NOLINTNEXTLINE(cata-text-style)
             fprintf(stderr, "[JSON_PERF] check_entry=%s us=%lld\n", e.first.c_str(),
                     static_cast<long long>(us));
         }
@@ -1182,40 +1159,39 @@ void DynamicDataLoader::check_consistency( loading_ui& ui )
  * @param packs content packs to load in correct dependent order
  */
 static void load_and_finalize_packs(
-    loading_ui& ui, const std::string& msg, const std::vector<mod_id> &packs )
-{
-    ui.new_context( msg );
+    loading_ui& ui, const std::string& msg, const std::vector<mod_id>& packs) {
+    ui.new_context(msg);
     std::vector<mod_id> missing;
     std::vector<mod_id> available;
 
-    for( const mod_id& e : packs ) {
-        if( e.is_valid() ) {
-            available.emplace_back( e );
-            ui.add_entry( e->name() );
+    for (const mod_id& e : packs) {
+        if (e.is_valid()) {
+            available.emplace_back(e);
+            ui.add_entry(e->name());
         } else {
-            missing.push_back( e );
+            missing.push_back(e);
         }
     }
 
-    for( const mod_id& e : missing ) { debugmsg( "unknown content pack [%s]", e ); }
+    for (const mod_id& e : missing) { debugmsg("unknown content pack [%s]", e); }
 
     DynamicDataLoader& loader = DynamicDataLoader::get_instance();
 
     cata::lua_sidebar_widgets::clear_widgets();
     loader.lua = cata::make_wrapped_state();
 
-    cata::init_global_state_tables( *loader.lua, available );
+    cata::init_global_state_tables(*loader.lua, available);
 
     ui.show();
-    for( const mod_id& mod : available ) {
-        if( mod->lua_api_version ) {
-            if( cata::get_lua_api_version() != *mod->lua_api_version ) {
+    for (const mod_id& mod : available) {
+        if (mod->lua_api_version) {
+            if (cata::get_lua_api_version() != *mod->lua_api_version) {
                 // The mod may be broken, but let's be user-friendly and try to load it anyway
-                debugmsg( "Content pack uses outdated Lua API (current: %d, uses: %d) %s [%s]",
-                          cata::get_lua_api_version(), *mod->lua_api_version, mod->name(), mod );
+                debugmsg("Content pack uses outdated Lua API (current: %d, uses: %d) %s [%s]",
+                         cata::get_lua_api_version(), *mod->lua_api_version, mod->name(), mod);
             }
-            cata::set_mod_being_loaded( *loader.lua, mod );
-            cata::run_mod_preload_script( *loader.lua, mod );
+            cata::set_mod_being_loaded(*loader.lua, mod);
+            cata::run_mod_preload_script(*loader.lua, mod);
         }
     }
 
@@ -1233,20 +1209,20 @@ static void load_and_finalize_packs(
         int64_t dispatch_us = 0;
     };
     std::vector<mod_timing> mod_timings;
-    mod_timings.reserve( available.size() );
+    mod_timings.reserve(available.size());
     const auto t_wall = std::chrono::steady_clock::now();
 
-    cata::reg_lua_icallback_actors( *loader.lua, *item_controller );
+    cata::reg_lua_icallback_actors(*loader.lua, *item_controller);
 
-    for( const mod_id& mod : available ) {
+    for (const mod_id& mod : available) {
         const auto t0 = std::chrono::steady_clock::now();
-        loader.load_data_from_path( mod->path, mod.str(), ui );
+        loader.load_data_from_path(mod->path, mod.str(), ui);
         const auto t1 = std::chrono::steady_clock::now();
-        mod_timings.push_back( mod_timing{
+        mod_timings.push_back(mod_timing{
             .id = mod.str(),
             .files = g_last_load_metrics.files,
             .bytes = g_last_load_metrics.bytes,
-            .parse_us = std::chrono::duration_cast<std::chrono::microseconds>( t1 - t0 ).count(),
+            .parse_us = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count(),
             .parse_scan_us = g_last_load_metrics.parse_scan_us,
             .parse_handler_us = g_last_load_metrics.parse_handler_us,
             .enumerate_us = g_last_load_metrics.enumerate_us,
@@ -1254,20 +1230,20 @@ static void load_and_finalize_packs(
             .preload_us = g_last_load_metrics.preload_us,
             .stream_us = g_last_load_metrics.stream_us,
             .dispatch_us = g_last_load_metrics.dispatch_us,
-        } );
+        });
         ui.proceed();
     }
 
     const auto t_finalize_0 = std::chrono::steady_clock::now();
-    loader.finalize_loaded_data( ui );
+    loader.finalize_loaded_data(ui);
     const auto t_finalize_1 = std::chrono::steady_clock::now();
 
     cata::resolve_extra_lua_callbacks();
 
-    for( const mod_id& mod : available ) {
-        if( mod->lua_api_version ) {
-            cata::set_mod_being_loaded( *loader.lua, mod );
-            cata::run_mod_finalize_script( *loader.lua, mod );
+    for (const mod_id& mod : available) {
+        if (mod->lua_api_version) {
+            cata::set_mod_being_loaded(*loader.lua, mod);
+            cata::run_mod_finalize_script(*loader.lua, mod);
         }
     }
 
@@ -1275,64 +1251,60 @@ static void load_and_finalize_packs(
     loader.check_consistency(ui);
     const auto t_check_1 = std::chrono::steady_clock::now();
     const auto t_wall_end = std::chrono::steady_clock::now();
-    if( s_json_perf_enabled ) {
+    if (s_json_perf_enabled) {
         namespace ch = std::chrono;
-        const auto wall_ms = ch::duration_cast<ch::milliseconds>( t_wall_end - t_wall ).count();
+        const auto wall_ms = ch::duration_cast<ch::milliseconds>(t_wall_end - t_wall).count();
         const auto fin_ms =
-            ch::duration_cast<ch::milliseconds>( t_finalize_1 - t_finalize_0 ).count();
-        const auto chk_ms = ch::duration_cast<ch::milliseconds>( t_check_1 - t_check_0 ).count();
-        // NOLINTNEXTLINE(cata-text-style)
-        fprintf( stderr, "[JSON_PERF] total_wall_ms=%lld  finalize_ms=%lld  check_ms=%lld\n",
-                 static_cast<long long>( wall_ms ), static_cast<long long>( fin_ms ),
-                 static_cast<long long>( chk_ms ) );
-        for( const auto& m : mod_timings ) {
-            // NOLINTNEXTLINE(cata-text-style)
+            ch::duration_cast<ch::milliseconds>(t_finalize_1 - t_finalize_0).count();
+        const auto chk_ms = ch::duration_cast<ch::milliseconds>(t_check_1 - t_check_0).count();
+        fprintf(stderr, "[JSON_PERF] total_wall_ms=%lld  finalize_ms=%lld  check_ms=%lld\n",
+                static_cast<long long>(wall_ms), static_cast<long long>(fin_ms),
+                static_cast<long long>(chk_ms));
+        for (const auto& m : mod_timings) {
             fprintf(
                 stderr,
                 "[JSON_PERF] mod=%s  files=%d  bytes=%llu  parse_ms=%lld  "
                 "enum_ms=%lld  read_ms=%lld  pre_ms=%lld  stream_ms=%lld  disp_ms=%lld  "
                 "scan_ms=%lld  handler_ms=%lld\n",
-                m.id.c_str(), m.files, static_cast<unsigned long long>( m.bytes ),
-                static_cast<long long>( m.parse_us / 1000 ),
-                static_cast<long long>( m.enumerate_us / 1000 ),
-                static_cast<long long>( m.read_us / 1000 ),
-                static_cast<long long>( m.preload_us / 1000 ),
-                static_cast<long long>( m.stream_us / 1000 ),
-                static_cast<long long>( m.dispatch_us / 1000 ),
-                static_cast<long long>( m.parse_scan_us / 1000 ),
-                static_cast<long long>( m.parse_handler_us / 1000 ) );
+                m.id.c_str(), m.files, static_cast<unsigned long long>(m.bytes),
+                static_cast<long long>(m.parse_us / 1000),
+                static_cast<long long>(m.enumerate_us / 1000),
+                static_cast<long long>(m.read_us / 1000),
+                static_cast<long long>(m.preload_us / 1000),
+                static_cast<long long>(m.stream_us / 1000),
+                static_cast<long long>(m.dispatch_us / 1000),
+                static_cast<long long>(m.parse_scan_us / 1000),
+                static_cast<long long>(m.parse_handler_us / 1000));
         }
-        // NOLINTNEXTLINE(cata-text-style)
-        fprintf( stderr, "[JSON_PERF] deferred_rounds=%d  deferred_reparsed=%d  deferred_ms=%lld\n",
-                 g_deferred_stats.rounds, g_deferred_stats.reparsed,
-                 static_cast<long long>( g_deferred_stats.us / 1000 ) );
+        fprintf(stderr, "[JSON_PERF] deferred_rounds=%d  deferred_reparsed=%d  deferred_ms=%lld\n",
+                g_deferred_stats.rounds, g_deferred_stats.reparsed,
+                static_cast<long long>(g_deferred_stats.us / 1000));
     }
 
 
-    init::load_main_lua_scripts( *loader.lua, packs );
-    cata::clear_mod_being_loaded( *loader.lua );
+    init::load_main_lua_scripts(*loader.lua, packs);
+    cata::clear_mod_being_loaded(*loader.lua);
     // Update cached hook-presence flag so worker threads know whether to queue
     // deferred mapgen postprocess hooks (avoids lock + allocation overhead per omt
     // when no on_mapgen_postprocess hooks are registered).
-    refresh_mapgen_postprocess_hook_presence( *loader.lua );
+    refresh_mapgen_postprocess_hook_presence(*loader.lua);
 }
 
-auto init::load_main_lua_scripts( cata::lua_state& state, const std::vector<mod_id> &packs ) -> int
-{
-    state.lua.script( R"(
+auto init::load_main_lua_scripts(cata::lua_state& state, const std::vector<mod_id>& packs) -> int {
+    state.lua.script(R"(
         for k, v in pairs(package.loaded)
             do package.loaded[k] = nil
         end
-    )" );
+    )");
     auto range =
-    packs | std::views::filter( []( const mod_id & mod ) {
-        return mod.is_valid() && mod->lua_api_version;
-    } );
-    for( const auto& mod : range ) {
-        cata::set_mod_being_loaded( state, mod );
-        cata::run_mod_main_script( state, mod );
+        packs | std::views::filter([](const mod_id& mod) {
+            return mod.is_valid() && mod->lua_api_version;
+        });
+    for (const auto& mod : range) {
+        cata::set_mod_being_loaded(state, mod);
+        cata::run_mod_main_script(state, mod);
     }
-    const auto loaded = std::ranges::distance( range );
+    const auto loaded = std::ranges::distance(range);
     panel_manager::get_manager().sync_lua_panels();
     return loaded;
 }
@@ -1341,136 +1313,126 @@ bool init::is_data_loaded() { return DynamicDataLoader::get_instance().is_data_f
 
 static void clear_loaded_data() { DynamicDataLoader::get_instance().unload_data(); }
 
-static auto normalize_mod_load_order( std::vector<mod_id> mods ) -> std::vector<mod_id>
-{
-    auto found = std::set<mod_id> {};
+static auto normalize_mod_load_order(std::vector<mod_id> mods) -> std::vector<mod_id> {
+    auto found = std::set<mod_id>{};
     mods.erase(
         std::remove_if(
             mods.begin(), mods.end(),
-    [&found]( const auto & e ) {
-        if( found.contains( e ) ) { return true; }
-        found.insert( e );
-        return false;
-    } ),
-    mods.end() );
+            [&found](const auto& e) {
+                if (found.contains(e)) { return true; }
+                found.insert(e);
+                return false;
+            }),
+        mods.end());
 
-    const auto core_iter = std::ranges::find_if( mods, []( const auto & e ) { return e->core; } );
-    if( core_iter != mods.end() ) {
+    const auto core_iter = std::ranges::find_if(mods, [](const auto& e) { return e->core; });
+    if (core_iter != mods.end()) {
         const auto core_pack = *core_iter;
-        mods.erase( core_iter );
-        mods.insert( mods.begin(), core_pack );
+        mods.erase(core_iter);
+        mods.insert(mods.begin(), core_pack);
     } else {
-        mods.insert( mods.begin(), mod_management::get_default_core_content_pack() );
+        mods.insert(mods.begin(), mod_management::get_default_core_content_pack());
     }
 
     return mods;
 }
 
-void init::load_core_bn_modfiles()
-{
+void init::load_core_bn_modfiles() {
     clear_loaded_data();
 
-    loading_ui ui( false );
+    loading_ui ui(false);
     load_and_finalize_packs(
-        ui, _( "Loading content packs" ), {mod_management::get_default_core_content_pack()} );
+        ui, _("Loading content packs"), {mod_management::get_default_core_content_pack()});
 }
 
 void init::load_world_modfiles(
-    loading_ui& ui, const world* world, const std::string& artifacts_file )
-{
+    loading_ui& ui, const world* world, const std::string& artifacts_file) {
     clear_loaded_data();
 
     auto& mods = world->info->active_mod_order;
-    mods = normalize_mod_load_order( mods );
+    mods = normalize_mod_load_order(mods);
 
     // TODO: get rid of artifacts
-    load_artifacts( world, artifacts_file );
+    load_artifacts(world, artifacts_file);
 
     // this code does not care about mod dependencies,
     // it assumes that those dependencies are static and
     // are resolved during the creation of the world.
     // That means world->active_mod_order contains a list
     // of mods in the correct order.
-    load_and_finalize_packs( ui, _( "Loading files" ), mods );
+    load_and_finalize_packs(ui, _("Loading files"), mods);
 }
 
-auto init::check_mods_for_errors( loading_ui &ui, const std::vector<mod_id> &opts,
-                                  const check_mods_mode mode ) -> bool
-{
+auto init::check_mods_for_errors(
+    loading_ui& ui, const std::vector<mod_id>& opts, const check_mods_mode mode) -> bool {
     const dependency_tree& tree = world_generator->get_mod_manager().get_tree();
 
     // Deduplicated list of mods to check
     std::set<mod_id> to_check;
 
-    for( const mod_id& id : opts ) {
-        if( !id.is_valid() ) {
-            std::cerr << string_format( "Unknown mod: [%s]\n", id );
+    for (const mod_id& id : opts) {
+        if (!id.is_valid()) {
+            std::cerr << string_format("Unknown mod: [%s]\n", id);
             return false;
         }
 
-        if( !tree.is_available( id ) ) {
+        if (!tree.is_available(id)) {
             std::cerr << string_format(
-                          "Missing dependencies: %s %s\n", id, tree.get_node( id )->s_errors() );
+                "Missing dependencies: %s %s\n", id, tree.get_node(id)->s_errors());
             return false;
         }
 
-        to_check.emplace( id );
+        to_check.emplace(id);
     }
 
-    if( to_check.empty() ) {
-        if( mode == check_mods_mode::all_mods ) {
-            for( const mod_id &mod : world_generator->get_mod_manager().all_mods() ) {
-                if( !mod->obsolete ) {
-                    to_check.emplace( mod );
-                }
+    if (to_check.empty()) {
+        if (mode == check_mods_mode::all_mods) {
+            for (const mod_id& mod : world_generator->get_mod_manager().all_mods()) {
+                if (!mod->obsolete) { to_check.emplace(mod); }
             }
         } else {
-            for( const mod_id &mod : world_generator->get_mod_manager().get_default_mods() ) {
-                to_check.emplace( mod );
+            for (const mod_id& mod : world_generator->get_mod_manager().get_default_mods()) {
+                to_check.emplace(mod);
             }
         }
     }
     // If no mode-selected mods are available then test core data only
-    if( to_check.empty() ) {
-        to_check.emplace( mod_management::get_default_core_content_pack() );
-    }
+    if (to_check.empty()) { to_check.emplace(mod_management::get_default_core_content_pack()); }
 
     // Ensure the last checked mod unloads before process exit so Lua-backed
     // mapgen functions do not outlive the active Lua state.
-    on_out_of_scope clear_last_checked_data( [] { clear_loaded_data(); } );
+    on_out_of_scope clear_last_checked_data([] { clear_loaded_data(); });
 
-    for( const mod_id& id : to_check ) {
+    for (const mod_id& id : to_check) {
         clear_loaded_data();
 
-        world_generator->set_active_world( nullptr );
+        world_generator->set_active_world(nullptr);
         world_generator->init();
         const std::vector<mod_id> mods_empty;
-        WORLDINFO* test_world = world_generator->make_new_world( mods_empty );
-        if( !test_world ) {
+        WORLDINFO* test_world = world_generator->make_new_world(mods_empty);
+        if (!test_world) {
             std::cerr << "Failed to generate test world." << '\n';
             return false;
         }
-        world_generator->set_active_world( test_world );
+        world_generator->set_active_world(test_world);
 
-        std::cout << string_format( "Checking mod %s [%s]\n", id->name(), id );
+        std::cout << string_format("Checking mod %s [%s]\n", id->name(), id);
 
         // Load all dependencies first
-        auto mods_list = tree.get_dependencies_of_X_as_strings( id );
+        auto mods_list = tree.get_dependencies_of_X_as_strings(id);
         // Load the mod itself
-        mods_list.push_back( id );
+        mods_list.push_back(id);
 
-        mods_list = normalize_mod_load_order( mods_list );
+        mods_list = normalize_mod_load_order(mods_list);
 
         try {
-            load_and_finalize_packs( ui, _( "Checking mods" ), mods_list );
-        } catch( const std::exception& err ) {
+            load_and_finalize_packs(ui, _("Checking mods"), mods_list);
+        } catch (const std::exception& err) {
             std::cerr << "Error loading data: " << err.what() << '\n';
-        } catch( const JsonError &err ) {
-            debugmsg( "(json-error)\n%s", err.what() );
-        }
+        } catch (const JsonError& err) { debugmsg("(json-error)\n%s", err.what()); }
 
         std::string world_name = world_generator->active_world->info->world_name;
-        world_generator->delete_world( world_name, true );
+        world_generator->delete_world(world_name, true);
 
         // TODO: Why would we need these calls?
         MAPBUFFER.clear();
@@ -1480,26 +1442,20 @@ auto init::check_mods_for_errors( loading_ui &ui, const std::vector<mod_id> &opt
     return !debug_has_error_been_observed();
 }
 
-void init::load_soundpack_files( const std::string& soundpack_path )
-{
+void init::load_soundpack_files(const std::string& soundpack_path) {
     // Leverage DynamicDataLoader to load a soundpack.
     // It's not a mod, so we avoid the regular mod loading routines.
     // clear_loaded_data() is not needed here, tileset gets loaded on game init before any mods
-    loading_ui ui( false );
-    DynamicDataLoader::get_instance().load_data_from_path( soundpack_path, "sound_core", ui );
+    loading_ui ui(false);
+    DynamicDataLoader::get_instance().load_data_from_path(soundpack_path, "sound_core", ui);
 }
 
-void init::start_prewarm()
-{
+void init::start_prewarm() {
     // Gate: skip if no workers (avoids synchronous execution on single-core)
-    if( get_thread_pool().num_workers() <= 0 ) {
-        return;
-    }
+    if (get_thread_pool().num_workers() <= 0) { return; }
 
     // Don't start if already active
-    if( g_prewarm_thread.has_value() && g_prewarm_thread->joinable() ) {
-        return;
-    }
+    if (g_prewarm_thread.has_value() && g_prewarm_thread->joinable()) { return; }
     // Initialize world generator (loads last_world_name and world list)
     world_generator->init();
 
@@ -1508,25 +1464,22 @@ void init::start_prewarm()
     // error: skip the pre-warm silently. get_world() debugmsgs on a miss, and a
     // modal error prompt here — before the main menu exists — leaves the player
     // staring at a blocking prompt on an otherwise empty screen.
-    if( last_world.empty() || !world_generator->has_world( last_world ) ) {
-        return;
-    }
+    if (last_world.empty() || !world_generator->has_world(last_world)) { return; }
 
-    const WORLDINFO *world = world_generator->get_world( last_world );
+    const WORLDINFO* world = world_generator->get_world(last_world);
 
     // Snapshot mod IDs by value (never pass live world* to worker)
-    auto mod_ids = normalize_mod_load_order( world->active_mod_order );
+    auto mod_ids = normalize_mod_load_order(world->active_mod_order);
 
     g_prewarm_joined = false;
-    g_prewarm_thread = std::thread( [last_world, mod_ids]() {
+    g_prewarm_thread = std::thread([last_world, mod_ids]() {
         worker_thread_guard guard;
-        g_prewarm_result = run_prewarm_load_for_world( last_world, std::move( mod_ids ) );
-    } );
+        g_prewarm_result = run_prewarm_load_for_world(last_world, std::move(mod_ids));
+    });
 }
 
-void init::join_prewarm()
-{
-    if( g_prewarm_thread.has_value() && g_prewarm_thread->joinable() ) {
+void init::join_prewarm() {
+    if (g_prewarm_thread.has_value() && g_prewarm_thread->joinable()) {
         g_prewarm_thread->join();
         g_prewarm_thread.reset();
         g_prewarm_joined = true;
@@ -1535,23 +1488,18 @@ void init::join_prewarm()
     }
 }
 
-void init::clear_prewarm()
-{
+void init::clear_prewarm() {
     // MUST join, not detach — detach leaves worker mutating DDL globals
     // while main thread does clear_loaded_data() = concurrent mutation crash.
     join_prewarm();
     g_prewarm_result.reset();
 }
 
-bool init::is_prewarm_active()
-{
+bool init::is_prewarm_active() {
     return g_prewarm_thread.has_value() && g_prewarm_thread->joinable();
 }
 
-auto init::get_prewarm_result() -> const prewarm_result*
-{
-    if( g_prewarm_joined && g_prewarm_result.has_value() ) {
-        return &g_prewarm_result.value();
-    }
+auto init::get_prewarm_result() -> const prewarm_result* {
+    if (g_prewarm_joined && g_prewarm_result.has_value()) { return &g_prewarm_result.value(); }
     return nullptr;
 }

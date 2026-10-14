@@ -1,11 +1,11 @@
 #pragma once
 
 #include <array>
+#include <iosfwd>
 #include <list>
 #include <string>
 #include <unordered_map>
 #include <utility>
-#include <iosfwd>
 
 class nc_color;
 class translation;
@@ -332,124 +332,107 @@ class JsonIn;
 void init_colors();
 
 // Index for highlight cache
-enum hl_enum {
-    HL_BLUE = 0,
-    HL_RED,
-    HL_WHITE,
-    HL_GREEN,
-    HL_YELLOW,
-    HL_MAGENTA,
-    HL_CYAN,
-    NUM_HL
-};
+enum hl_enum { HL_BLUE = 0, HL_RED, HL_WHITE, HL_GREEN, HL_YELLOW, HL_MAGENTA, HL_CYAN, NUM_HL };
 
-class nc_color
-{
-    private:
-        // color is actually an ncurses attribute.
-        int attribute_value;
+class nc_color {
+private:
+    // color is actually an ncurses attribute.
+    int attribute_value;
 
-        nc_color( const int a ) : attribute_value( a ) { }
+    nc_color(const int a): attribute_value(a) {}
 
-    public:
-        nc_color() : attribute_value( 0 ) { }
+public:
+    nc_color(): attribute_value(0) {}
 
-        // Most of the functions here are implemented in ncurses_def.cpp
-        // (for ncurses builds) *and* in cursesport.cpp (for other builds).
+    // Most of the functions here are implemented in ncurses_def.cpp
+    // (for ncurses builds) *and* in cursesport.cpp (for other builds).
 
-        static nc_color from_color_pair_index( int index );
-        int to_color_pair_index() const;
+    static nc_color from_color_pair_index(int index);
+    int to_color_pair_index() const;
 
-        operator int() const {
-            return attribute_value;
-        }
+    operator int() const { return attribute_value; }
 
-        // Returns this attribute plus A_BOLD.
-        nc_color bold() const;
-        bool is_bold() const;
-        // Returns this attribute plus A_BLINK.
-        nc_color blink() const;
-        bool is_blink() const;
+    // Returns this attribute plus A_BOLD.
+    nc_color bold() const;
+    bool is_bold() const;
+    // Returns this attribute plus A_BLINK.
+    nc_color blink() const;
+    bool is_blink() const;
 
-        void serialize( JsonOut &jsout ) const;
-        void deserialize( JsonIn &jsin );
+    void serialize(JsonOut& jsout) const;
+    void deserialize(JsonIn& jsin);
 };
 
 // Support hashing of nc_color by forwarding the hash of the contained int.
-namespace std
-{
-template<>
-struct hash<nc_color> {
-    std::size_t operator()( const nc_color &v ) const noexcept {
-        return hash<int>()( v.operator int() );
+namespace std {
+template <> struct hash<nc_color> {
+    std::size_t operator()(const nc_color& v) const noexcept {
+        return hash<int>()(v.operator int());
     }
 };
 } // namespace std
 
-enum class report_color_error {
-    no, yes
+enum class report_color_error { no, yes };
+
+class color_manager {
+private:
+    void add_color(
+        color_id col, const std::string& name, const nc_color& color_pair, color_id inv_id);
+    void clear();
+    void finalize(); // Caches colors properly
+
+    struct color_struct {
+        nc_color color;         // Default color
+        nc_color invert;        // Inverted color (not set until finalization)
+        nc_color custom;        // Custom color if > 0 (not set until finalization)
+        nc_color invert_custom; // Custom inverted color if > 0 (not set until finalization)
+        std::array<nc_color, NUM_HL> highlight; // Cached highlights (not set until finalization)
+
+        color_id col_id;    // Index of this color
+        color_id invert_id; // Index of inversion of this color
+        std::string name;
+        // String names for custom colors
+        std::string name_custom;
+        std::string name_invert_custom;
+    };
+
+    std::array<color_struct, num_colors> color_array;
+    std::unordered_map<nc_color, color_id> inverted_map;
+    std::unordered_map<std::string, color_id> name_map;
+
+    bool save_custom();
+
+public:
+    color_manager() = default;
+
+    nc_color get(color_id id) const;
+
+    nc_color get_invert(const nc_color& color) const;
+    nc_color get_highlight(const nc_color& color, hl_enum bg) const;
+    nc_color get_random() const;
+
+    color_id color_to_id(const nc_color& color) const;
+    color_id name_to_id(
+        const std::string& name, report_color_error color_error = report_color_error::yes) const;
+
+    std::string get_name(const nc_color& color) const;
+    std::string id_to_name(color_id id) const;
+
+    nc_color name_to_color(
+        const std::string& name, report_color_error color_error = report_color_error::yes) const;
+
+    nc_color highlight_from_names(const std::string& name, const std::string& bg_name) const;
+
+    void load_default();
+    void load_custom(const std::string& sPath = "");
+
+    void show_gui();
+
+    void serialize(JsonOut& json) const;
+    void deserialize(JsonIn& jsin);
 };
 
-class color_manager
-{
-    private:
-        void add_color( color_id col, const std::string &name,
-                        const nc_color &color_pair, color_id inv_id );
-        void clear();
-        void finalize(); // Caches colors properly
-
-        struct color_struct {
-            nc_color color; // Default color
-            nc_color invert; // Inverted color (not set until finalization)
-            nc_color custom; // Custom color if > 0 (not set until finalization)
-            nc_color invert_custom; // Custom inverted color if > 0 (not set until finalization)
-            std::array<nc_color, NUM_HL> highlight; // Cached highlights (not set until finalization)
-
-            color_id col_id; // Index of this color
-            color_id invert_id; // Index of inversion of this color
-            std::string name;
-            // String names for custom colors
-            std::string name_custom;
-            std::string name_invert_custom;
-        };
-
-        std::array<color_struct, num_colors> color_array;
-        std::unordered_map<nc_color, color_id> inverted_map;
-        std::unordered_map<std::string, color_id> name_map;
-
-        bool save_custom();
-
-    public:
-        color_manager() = default;
-
-        nc_color get( color_id id ) const;
-
-        nc_color get_invert( const nc_color &color ) const;
-        nc_color get_highlight( const nc_color &color, hl_enum bg ) const;
-        nc_color get_random() const;
-
-        color_id color_to_id( const nc_color &color ) const;
-        color_id name_to_id( const std::string &name,
-                             report_color_error color_error = report_color_error::yes ) const;
-
-        std::string get_name( const nc_color &color ) const;
-        std::string id_to_name( color_id id ) const;
-
-        nc_color name_to_color( const std::string &name,
-                                report_color_error color_error = report_color_error::yes ) const;
-
-        nc_color highlight_from_names( const std::string &name, const std::string &bg_name ) const;
-
-        void load_default();
-        void load_custom( const std::string &sPath = "" );
-
-        void show_gui();
-
-        void serialize( JsonOut &json ) const;
-        void deserialize( JsonIn &jsin );
-};
-
-color_manager &get_all_colors();
+color_manager& get_all_colors();
 
 /**
  * For color values that are created *before* the color definitions are loaded
@@ -459,15 +442,13 @@ color_manager &get_all_colors();
  * later. This is done by this class: it stores the id and translates it
  * when needed to the color value.
  */
-class deferred_color
-{
-    private:
-        color_id id;
-    public:
-        deferred_color( const color_id id ) : id( id ) { }
-        operator nc_color() const {
-            return all_colors.get( id );
-        }
+class deferred_color {
+private:
+    color_id id;
+
+public:
+    deferred_color(const color_id id): id(id) {}
+    operator nc_color() const { return all_colors.get(id); }
 };
 
 struct note_color {
@@ -487,27 +468,25 @@ struct color_tag_parse_result {
 
 extern std::unordered_map<std::string, note_color> color_by_string_map;
 
-nc_color hilite( const nc_color &c );
-nc_color invert_color( const nc_color &c );
-nc_color red_background( const nc_color &c );
-nc_color white_background( const nc_color &c );
-nc_color green_background( const nc_color &c );
-nc_color yellow_background( const nc_color &c );
-nc_color magenta_background( const nc_color &c );
-nc_color cyan_background( const nc_color &c );
+nc_color hilite(const nc_color& c);
+nc_color invert_color(const nc_color& c);
+nc_color red_background(const nc_color& c);
+nc_color white_background(const nc_color& c);
+nc_color green_background(const nc_color& c);
+nc_color yellow_background(const nc_color& c);
+nc_color magenta_background(const nc_color& c);
+nc_color cyan_background(const nc_color& c);
 
-nc_color color_from_string( const std::string &color,
-                            report_color_error color_error = report_color_error::yes );
-std::string string_from_color( const nc_color &color );
-nc_color bgcolor_from_string( const std::string &color );
-color_tag_parse_result get_color_from_tag( const std::string &s,
-        report_color_error color_error = report_color_error::yes );
-std::string get_tag_from_color( const nc_color &color );
-std::string colorize( const std::string &text, const nc_color &color );
-std::string colorize( const translation &text, const nc_color &color );
+nc_color color_from_string(
+    const std::string& color, report_color_error color_error = report_color_error::yes);
+std::string string_from_color(const nc_color& color);
+nc_color bgcolor_from_string(const std::string& color);
+color_tag_parse_result get_color_from_tag(
+    const std::string& s, report_color_error color_error = report_color_error::yes);
+std::string get_tag_from_color(const nc_color& color);
+std::string colorize(const std::string& text, const nc_color& color);
+std::string colorize(const translation& text, const nc_color& color);
 
-std::string get_note_string_from_color( const nc_color &color );
-nc_color get_note_color( const std::string &note_id );
+std::string get_note_string_from_color(const nc_color& color);
+nc_color get_note_color(const std::string& note_id);
 std::list<std::pair<std::string, std::string>> get_note_color_names();
-
-

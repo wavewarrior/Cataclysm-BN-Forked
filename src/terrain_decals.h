@@ -8,13 +8,13 @@
 //
 // Game-side API — the rendering integration lives in sdl_render_frame.cpp.
 // Stateless free functions mirror splatmap_stamps.h; the manager class mirrors
+#include "coordinates.h"
+#include "type_id.h"
+
 #include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
-
-#include "coordinates.h"
-#include "type_id.h"
 
 struct SDL_GPUTexture;
 /// One placed decal, anchored to a submap-local tile.
@@ -40,9 +40,9 @@ struct terrain_decal_draw {
 
 /// Per-terrain-type decal configuration (parsed from terrain JSON).
 struct terrain_decal_config {
-    std::string group;           // atlas group name (e.g. "grass")
-    float density = 0.12f;       // probability per eligible tile (0..1)
-    int min_spacing = 2;         // minimum tiles between decal centres
+    std::string group;     // atlas group name (e.g. "grass")
+    float density = 0.12f; // probability per eligible tile (0..1)
+    int min_spacing = 2;   // minimum tiles between decal centres
 };
 
 /// One packed sprite in the atlas: UV rect plus its footprint measured in TILES.
@@ -53,56 +53,55 @@ struct decal_variant_info {
     float w_tiles = 0.f, h_tiles = 0.f;
 };
 
-namespace lighting { class gpu_device; }
+namespace lighting {
+class gpu_device;
+}
 
-namespace terrain_decals
-{
+namespace terrain_decals {
 
 using lighting::gpu_device;
 
-class manager
-{
-    public:
-        manager() = default;
-        manager( const manager & ) = delete;
-        manager &operator=( const manager & ) = delete; // *NOPAD*
-        ~manager();
+class manager {
+public:
+    manager() = default;
+    manager(const manager&) = delete;
+    manager& operator=(const manager&) = delete;
+    ~manager();
 
-        auto init( gpu_device &dev ) -> bool;
-        auto shutdown() noexcept -> void;
-        auto ready() const noexcept -> bool;
+    auto init(gpu_device& dev) -> bool;
+    auto shutdown() noexcept -> void;
+    auto ready() const noexcept -> bool;
 
-        // Atlas access.
-        auto variant_count() const noexcept -> int;
-        auto atlas() const noexcept -> const SDL_GPUTexture *;
-        auto variants() const noexcept -> const std::vector<decal_variant_info> &;
+    // Atlas access.
+    auto variant_count() const noexcept -> int;
+    auto atlas() const noexcept -> const SDL_GPUTexture*;
+    auto variants() const noexcept -> const std::vector<decal_variant_info>&;
 
-        // Compute decal placements for a submap based on current terrain layout.
-        // Deterministic from absolute submap coordinates. Result cached per key.
-        // `ter_at` callback returns ter_id for submap-local tile (x,y).
-        auto compute_placements( std::uint64_t key,
-                                 const std::function<ter_id( int, int )> &ter_at )
-        -> const std::vector<terrain_decal_instance> &;
+    // Compute decal placements for a submap based on current terrain layout.
+    // Deterministic from absolute submap coordinates. Result cached per key.
+    // `ter_at` callback returns ter_id for submap-local tile (x,y).
+    auto compute_placements(std::uint64_t key, const std::function<ter_id(int, int)>& ter_at)
+        -> const std::vector<terrain_decal_instance>&;
 
-        // Invalidate cached placements for a submap (called on terrain change).
-        auto invalidate( std::uint64_t key ) -> void;
+    // Invalidate cached placements for a submap (called on terrain change).
+    auto invalidate(std::uint64_t key) -> void;
 
-        // Clear all caches (e.g. on dimension change).
-        auto clear() -> void;
+    // Clear all caches (e.g. on dimension change).
+    auto clear() -> void;
 
-    private:
-        auto load_atlas( gpu_device &dev ) -> bool;
+private:
+    auto load_atlas(gpu_device& dev) -> bool;
 
-        gpu_device *dev_ = nullptr;
-        SDL_GPUTexture *atlas_ = nullptr;
-        std::vector<decal_variant_info> variants_;
+    gpu_device* dev_ = nullptr;
+    SDL_GPUTexture* atlas_ = nullptr;
+    std::vector<decal_variant_info> variants_;
 
-        // Per-submap placement cache.
-        struct cache_entry {
-            std::uint64_t key = 0;
-            std::vector<terrain_decal_instance> placements;
-        };
-        std::vector<cache_entry> cache_;
+    // Per-submap placement cache.
+    struct cache_entry {
+        std::uint64_t key = 0;
+        std::vector<terrain_decal_instance> placements;
+    };
+    std::vector<cache_entry> cache_;
 };
 
 } // namespace terrain_decals

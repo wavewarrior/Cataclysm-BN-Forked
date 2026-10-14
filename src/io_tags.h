@@ -1,7 +1,6 @@
 #pragma once
 
-namespace io
-{
+namespace io {
 
 class JsonArrayInputArchive;
 class JsonArrayOutputArchive;
@@ -25,5 +24,3 @@ struct object_archive_tag {
 };
 
 } // namespace io
-
-

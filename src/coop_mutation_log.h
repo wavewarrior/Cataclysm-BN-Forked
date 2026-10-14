@@ -15,7 +15,8 @@ struct coop_world_event {
     tripoint_abs_ms pos;
     int value = 0;       ///< ter_id, furn_id, field intensity, hp, …
     int old_value = 0;   ///< previous value before mutation (for reversible deltas)
-    int creature_id = 0; ///< monster/npc id; for field events, the field intensity (see interpreter)
+    int creature_id = 0; ///< monster/npc id; for field events, the field intensity (see
+                         ///< interpreter)
     std::string str;     ///< mtype_id for creature_spawned; empty otherwise
 };
 
@@ -25,35 +26,32 @@ static constexpr uint64_t COOP_FNV_OFFSET = 0xcbf29ce484222325ULL;
 /// Mix one 64-bit value into an FNV-1a accumulator.  Pure; no side effects.
 /// Canonical shared implementation used by coop_server (build_and_send_sync)
 /// and coop_client (apply_sync) — a single site prevents hash-drift bugs.
-constexpr auto coop_fnv1a_mix( uint64_t h, uint64_t v ) -> uint64_t
-{
-    return ( h ^ v ) * 0x00000100000001B3ULL;
+constexpr auto coop_fnv1a_mix(uint64_t h, uint64_t v) -> uint64_t {
+    return (h ^ v) * 0x00000100000001B3ULL;
 }
 
 /// Hash one event's 6 fields in the canonical wire order (type,x,y,z,value,cid).
 /// creature_id is ALWAYS mixed even when 0 — the server omits "cid" from JSON
 /// when zero but the hash must include it; mix(0) is NOT a no-op (prime multiply).
 /// Server calls this after flushing the mutation log.
-constexpr auto coop_hash_event( uint64_t h, const coop_world_event& ev ) -> uint64_t
-{
-    h = coop_fnv1a_mix( h, static_cast<uint64_t>( ev.type ) );
-    h = coop_fnv1a_mix( h, static_cast<uint64_t>( ev.pos.x() ) );
-    h = coop_fnv1a_mix( h, static_cast<uint64_t>( ev.pos.y() ) );
-    h = coop_fnv1a_mix( h, static_cast<uint64_t>( ev.pos.z() ) );
-    h = coop_fnv1a_mix( h, static_cast<uint64_t>( ev.value ) );
-    h = coop_fnv1a_mix( h, static_cast<uint64_t>( ev.creature_id ) );
+constexpr auto coop_hash_event(uint64_t h, const coop_world_event& ev) -> uint64_t {
+    h = coop_fnv1a_mix(h, static_cast<uint64_t>(ev.type));
+    h = coop_fnv1a_mix(h, static_cast<uint64_t>(ev.pos.x()));
+    h = coop_fnv1a_mix(h, static_cast<uint64_t>(ev.pos.y()));
+    h = coop_fnv1a_mix(h, static_cast<uint64_t>(ev.pos.z()));
+    h = coop_fnv1a_mix(h, static_cast<uint64_t>(ev.value));
+    h = coop_fnv1a_mix(h, static_cast<uint64_t>(ev.creature_id));
     return h;
 }
 
 /// Extended hash that also incorporates the str field for creature_spawned events.
 /// Empty str contributes nothing (loop body never executes), so calling this for
 /// any event type is safe — it only adds cost when str is non-empty.
-constexpr auto coop_hash_event_extended( uint64_t h, const coop_world_event& ev ) -> uint64_t
-{
-    h = coop_hash_event( h, ev );
+constexpr auto coop_hash_event_extended(uint64_t h, const coop_world_event& ev) -> uint64_t {
+    h = coop_hash_event(h, ev);
     // Hash the str field byte-by-byte for events that use it (creature_spawned)
-    for( const char c : ev.str ) {
-        h = coop_fnv1a_mix( h, static_cast<uint64_t>( static_cast<unsigned char>( c ) ) );
+    for (const char c : ev.str) {
+        h = coop_fnv1a_mix(h, static_cast<uint64_t>(static_cast<unsigned char>(c)));
     }
     return h;
 }
@@ -61,14 +59,13 @@ constexpr auto coop_hash_event_extended( uint64_t h, const coop_world_event& ev 
 /// Client-side variant: mixes the same 6 fields from JSON-parsed integers.
 /// Called once per event after parsing "ev","x","y","z","v","cid" from JSON.
 constexpr auto coop_hash_event_fields(
-    uint64_t h, int type, int x, int y, int z, int value, int creature_id ) -> uint64_t
-{
-    h = coop_fnv1a_mix( h, static_cast<uint64_t>( type ) );
-    h = coop_fnv1a_mix( h, static_cast<uint64_t>( x ) );
-    h = coop_fnv1a_mix( h, static_cast<uint64_t>( y ) );
-    h = coop_fnv1a_mix( h, static_cast<uint64_t>( z ) );
-    h = coop_fnv1a_mix( h, static_cast<uint64_t>( value ) );
-    h = coop_fnv1a_mix( h, static_cast<uint64_t>( creature_id ) );
+    uint64_t h, int type, int x, int y, int z, int value, int creature_id) -> uint64_t {
+    h = coop_fnv1a_mix(h, static_cast<uint64_t>(type));
+    h = coop_fnv1a_mix(h, static_cast<uint64_t>(x));
+    h = coop_fnv1a_mix(h, static_cast<uint64_t>(y));
+    h = coop_fnv1a_mix(h, static_cast<uint64_t>(z));
+    h = coop_fnv1a_mix(h, static_cast<uint64_t>(value));
+    h = coop_fnv1a_mix(h, static_cast<uint64_t>(creature_id));
     return h;
 }
 
@@ -84,8 +81,7 @@ struct coop_streamable_result {
 /// Filter `events` to the A4 streamable set (terrain/furniture/field only),
 /// hash each retained event with coop_hash_event, and collect into sent.
 /// Called by build_and_send_sync (server) and exercised directly by unit tests.
-auto coop_collect_streamable( std::vector<coop_world_event> events ) // *NOPAD*
--> coop_streamable_result;
+auto coop_collect_streamable(std::vector<coop_world_event> events) -> coop_streamable_result;
 
 
 /// Per-tick mutation log.  Exactly one instance lives on the main thread while
@@ -97,25 +93,25 @@ auto coop_collect_streamable( std::vector<coop_world_event> events ) // *NOPAD*
 /// Thread safety: all world simulation runs on the main thread.  The IO thread
 /// (receiver_thread_) never touches the log.  No locking needed.
 struct coop_mutation_log {
-        /// Returns the active log for this thread, or nullptr (SP / outside tick).
-        static auto current() -> coop_mutation_log*;
+    /// Returns the active log for this thread, or nullptr (SP / outside tick).
+    static auto current() -> coop_mutation_log*;
 
-        /// Push an event into the buffer.
-        auto push( coop_world_event e ) -> void;
+    /// Push an event into the buffer.
+    auto push(coop_world_event e) -> void;
 
-        /// Drain and return the event buffer; clears it in place.
-        auto flush() -> std::vector<coop_world_event>;
+    /// Drain and return the event buffer; clears it in place.
+    auto flush() -> std::vector<coop_world_event>;
 
-        /// Running FNV-1a hash of all pushed events.  The client computes an
-        /// equivalent hash and sends resync_request on mismatch (A4).
-        auto hash() const -> uint64_t { return running_hash_; }
+    /// Running FNV-1a hash of all pushed events.  The client computes an
+    /// equivalent hash and sends resync_request on mismatch (A4).
+    auto hash() const -> uint64_t { return running_hash_; }
 
-        /// Total events pushed this tick.
-        auto size() const -> std::size_t { return events_.size(); }
+    /// Total events pushed this tick.
+    auto size() const -> std::size_t { return events_.size(); }
 
-    private:
-        std::vector<coop_world_event> events_;
-        uint64_t running_hash_ = COOP_FNV_OFFSET;
+private:
+    std::vector<coop_world_event> events_;
+    uint64_t running_hash_ = COOP_FNV_OFFSET;
 };
 
 /// RAII guard: installs a coop_mutation_log as the thread-local current log
@@ -126,15 +122,14 @@ struct coop_mutation_log {
 ///   g->post_action_world_step();   // all mutations inside are logged
 ///   auto events = guard.log().flush();
 struct coop_tick_log_guard {
-        explicit coop_tick_log_guard();
-        ~coop_tick_log_guard();
+    explicit coop_tick_log_guard();
+    ~coop_tick_log_guard();
 
-        coop_tick_log_guard( const coop_tick_log_guard & ) = delete;
-        coop_tick_log_guard &operator=( const coop_tick_log_guard & ) = delete;
+    coop_tick_log_guard(const coop_tick_log_guard&) = delete;
+    coop_tick_log_guard& operator=(const coop_tick_log_guard&) = delete;
 
-        auto log() -> coop_mutation_log & { return log_; }
+    auto log() -> coop_mutation_log& { return log_; }
 
-    private:
-        coop_mutation_log log_;
+private:
+    coop_mutation_log log_;
 };
-

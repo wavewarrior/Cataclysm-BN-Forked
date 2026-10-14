@@ -1,12 +1,11 @@
 #pragma once
 
+#include "options.h"
+
 #include <string>
 #include <vector>
 
-#include "options.h"
-
-namespace title_screen
-{
+namespace title_screen {
 
 inline constexpr auto option_id = "TITLE_SCREEN";
 inline constexpr auto default_option_id = "default";

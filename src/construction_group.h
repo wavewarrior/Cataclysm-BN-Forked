@@ -1,35 +1,32 @@
 #pragma once
 
-#include <string>
-#include <vector>
-
 #include "translations.h"
 #include "type_id.h"
+
+#include <string>
+#include <vector>
 
 class JsonObject;
 
 struct construction_group {
-        void load( const JsonObject &jo, const std::string &src );
+    void load(const JsonObject& jo, const std::string& src);
 
-        construction_group_str_id id;
-        bool was_loaded = false;
+    construction_group_str_id id;
+    bool was_loaded = false;
 
-        std::string name() const;
+    std::string name() const;
 
-        static size_t count();
+    static size_t count();
 
-    private:
-        translation _name;
+private:
+    translation _name;
 };
 
-namespace construction_groups
-{
+namespace construction_groups {
 
-void load( const JsonObject &jo, const std::string &src );
+void load(const JsonObject& jo, const std::string& src);
 void reset();
 
-const std::vector<construction_group> &get_all();
+const std::vector<construction_group>& get_all();
 
 } // namespace construction_groups
-
-

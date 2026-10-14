@@ -92,7 +92,7 @@ void prompt_select_lang_on_startup();
  * List of loaded language definitions.
  * Always contains at least 1 language (English).
  */
-const std::vector<language_info> &list_available_languages();
+const std::vector<language_info>& list_available_languages();
 
 /**
  * Set language and locale to current value of USE_LANG option.
@@ -106,32 +106,28 @@ void set_language();
  * if the option has been changed without subsequent `set_language()` call.
  * If lang system has not been initialized, falls back to English.
  */
-const language_info &get_language();
+const language_info& get_language();
 
 /**
  * Get prioritized list of substrings for language-dependent file paths.
  * The substrings can be used as file/folder names or as prefixes/suffixes.
  */
-std::vector<std::string> get_lang_path_substring( const std::string &lang_id );
+std::vector<std::string> get_lang_path_substring(const std::string& lang_id);
 
 /**
  * Check whether language has translation files compiled for it.
  */
-bool translations_exists_for_lang( const std::string &lang_id );
+bool translations_exists_for_lang(const std::string& lang_id);
 
-namespace cata_libintl
-{
+namespace cata_libintl {
 class trans_library;
 } // namespace cata_libintl
 
-namespace l10n_data
-{
-const cata_libintl::trans_library &get_library();
+namespace l10n_data {
+const cata_libintl::trans_library& get_library();
 
 void reload_catalogues();
 void unload_catalogues();
 void load_mod_catalogues();
 void unload_mod_catalogues();
 } // namespace l10n_data
-
-

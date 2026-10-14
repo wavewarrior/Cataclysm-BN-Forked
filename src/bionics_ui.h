@@ -2,6 +2,4 @@
 
 class Character;
 
-void show_bionics_ui( Character &who );
-
-
+void show_bionics_ui(Character& who);

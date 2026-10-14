@@ -1,8 +1,8 @@
 #pragma once
 #ifndef CATA_SRC_THROW_RADIAL_H
-#define CATA_SRC_THROW_RADIAL_H
+#    define CATA_SRC_THROW_RADIAL_H
 
-#include <optional>
+#    include <optional>
 
 class avatar;
 
@@ -39,6 +39,6 @@ struct throw_radial_result {
     std::optional<int> slot;
 };
 
-auto show_throw_quickslot_radial( avatar &u ) -> throw_radial_result;
+auto show_throw_quickslot_radial(avatar& u) -> throw_radial_result;
 
 #endif // CATA_SRC_THROW_RADIAL_H

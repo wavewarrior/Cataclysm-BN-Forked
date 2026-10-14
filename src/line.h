@@ -1,5 +1,11 @@
 #pragma once
 
+#include "cached_options.h"
+#include "coordinates.h"
+#include "math_defines.h"
+#include "point.h"
+#include "units_angle.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -9,12 +15,6 @@
 #include <string>
 #include <vector>
 
-#include "math_defines.h"
-#include "point.h"
-#include "cached_options.h"
-#include "units_angle.h"
-#include "coordinates.h"
-
 template <typename T> struct enum_traits;
 
 /**
@@ -23,179 +23,159 @@ template <typename T> struct enum_traits;
  * @param vertex the unequal angle
  * @returns base in equivalent units to distance
  */
-double iso_tangent( double distance, units::angle vertex );
+double iso_tangent(double distance, units::angle vertex);
 
-//! This compile-time usable function combines the sign of each (x, y, z) component into a single integer
-//! to allow simple runtime and compile-time mapping of (x, y, z) tuples to @ref direction enumerators.
-//! Specifically, (0, -, +) => (0, 1, 2); a base-3 number.
-//! This only works correctly for inputs between -1,-1,-1 and 1,1,1.
-//! For numbers outside that range, use make_xyz().
-constexpr unsigned make_xyz_unit( const tripoint &p ) noexcept
-{
-    return ( ( p.x > 0 ) ? 2u : ( p.x < 0 ) ? 1u : 0u ) * 1u +
-           ( ( p.y > 0 ) ? 2u : ( p.y < 0 ) ? 1u : 0u ) * 3u +
-           ( ( p.z > 0 ) ? 2u : ( p.z < 0 ) ? 1u : 0u ) * 9u;
+//! This compile-time usable function combines the sign of each (x, y, z) component into a single
+//! integer to allow simple runtime and compile-time mapping of (x, y, z) tuples to @ref direction
+//! enumerators. Specifically, (0, -, +) => (0, 1, 2); a base-3 number. This only works correctly
+//! for inputs between -1,-1,-1 and 1,1,1. For numbers outside that range, use make_xyz().
+constexpr unsigned make_xyz_unit(const tripoint& p) noexcept {
+    return ((p.x > 0)   ? 2u
+            : (p.x < 0) ? 1u
+                        : 0u)
+             * 1u
+         + ((p.y > 0)   ? 2u
+            : (p.y < 0) ? 1u
+                        : 0u)
+               * 3u
+         + ((p.z > 0)   ? 2u
+            : (p.z < 0) ? 1u
+                        : 0u)
+               * 9u;
 }
 
 // This more general version of this function gives correct values for larger inputs.
-unsigned make_xyz( const tripoint & );
+unsigned make_xyz(const tripoint&);
 
 enum class direction : unsigned {
-    ABOVENORTHWEST = make_xyz_unit( tripoint_above + tripoint_north_west ),
-    NORTHWEST      = make_xyz_unit( tripoint_north_west ),
-    BELOWNORTHWEST = make_xyz_unit( tripoint_below + tripoint_north_west ),
-    ABOVENORTH     = make_xyz_unit( tripoint_above + tripoint_north ),
-    NORTH          = make_xyz_unit( tripoint_north ),
-    BELOWNORTH     = make_xyz_unit( tripoint_below + tripoint_north ),
-    ABOVENORTHEAST = make_xyz_unit( tripoint_above + tripoint_north_east ),
-    NORTHEAST      = make_xyz_unit( tripoint_north_east ),
-    BELOWNORTHEAST = make_xyz_unit( tripoint_below + tripoint_north_east ),
+    ABOVENORTHWEST = make_xyz_unit(tripoint_above + tripoint_north_west),
+    NORTHWEST = make_xyz_unit(tripoint_north_west),
+    BELOWNORTHWEST = make_xyz_unit(tripoint_below + tripoint_north_west),
+    ABOVENORTH = make_xyz_unit(tripoint_above + tripoint_north),
+    NORTH = make_xyz_unit(tripoint_north),
+    BELOWNORTH = make_xyz_unit(tripoint_below + tripoint_north),
+    ABOVENORTHEAST = make_xyz_unit(tripoint_above + tripoint_north_east),
+    NORTHEAST = make_xyz_unit(tripoint_north_east),
+    BELOWNORTHEAST = make_xyz_unit(tripoint_below + tripoint_north_east),
 
-    ABOVEWEST      = make_xyz_unit( tripoint_above + tripoint_west ),
-    WEST           = make_xyz_unit( tripoint_west ),
-    BELOWWEST      = make_xyz_unit( tripoint_below + tripoint_west ),
-    ABOVECENTER    = make_xyz_unit( tripoint_above ),
-    CENTER         = make_xyz_unit( tripoint_zero ),
-    BELOWCENTER    = make_xyz_unit( tripoint_below ),
-    ABOVEEAST      = make_xyz_unit( tripoint_above + tripoint_east ),
-    EAST           = make_xyz_unit( tripoint_east ),
-    BELOWEAST      = make_xyz_unit( tripoint_below + tripoint_east ),
+    ABOVEWEST = make_xyz_unit(tripoint_above + tripoint_west),
+    WEST = make_xyz_unit(tripoint_west),
+    BELOWWEST = make_xyz_unit(tripoint_below + tripoint_west),
+    ABOVECENTER = make_xyz_unit(tripoint_above),
+    CENTER = make_xyz_unit(tripoint_zero),
+    BELOWCENTER = make_xyz_unit(tripoint_below),
+    ABOVEEAST = make_xyz_unit(tripoint_above + tripoint_east),
+    EAST = make_xyz_unit(tripoint_east),
+    BELOWEAST = make_xyz_unit(tripoint_below + tripoint_east),
 
-    ABOVESOUTHWEST = make_xyz_unit( tripoint_above + tripoint_south_west ),
-    SOUTHWEST      = make_xyz_unit( tripoint_south_west ),
-    BELOWSOUTHWEST = make_xyz_unit( tripoint_below + tripoint_south_west ),
-    ABOVESOUTH     = make_xyz_unit( tripoint_above + tripoint_south ),
-    SOUTH          = make_xyz_unit( tripoint_south ),
-    BELOWSOUTH     = make_xyz_unit( tripoint_below + tripoint_south ),
-    ABOVESOUTHEAST = make_xyz_unit( tripoint_above + tripoint_south_east ),
-    SOUTHEAST      = make_xyz_unit( tripoint_south_east ),
-    BELOWSOUTHEAST = make_xyz_unit( tripoint_below + tripoint_south_east ),
+    ABOVESOUTHWEST = make_xyz_unit(tripoint_above + tripoint_south_west),
+    SOUTHWEST = make_xyz_unit(tripoint_south_west),
+    BELOWSOUTHWEST = make_xyz_unit(tripoint_below + tripoint_south_west),
+    ABOVESOUTH = make_xyz_unit(tripoint_above + tripoint_south),
+    SOUTH = make_xyz_unit(tripoint_south),
+    BELOWSOUTH = make_xyz_unit(tripoint_below + tripoint_south),
+    ABOVESOUTHEAST = make_xyz_unit(tripoint_above + tripoint_south_east),
+    SOUTHEAST = make_xyz_unit(tripoint_south_east),
+    BELOWSOUTHEAST = make_xyz_unit(tripoint_below + tripoint_south_east),
 
     last = 27
 };
 
-template<>
-struct enum_traits<direction> {
+template <> struct enum_traits<direction> {
     static constexpr direction last = direction::last;
 };
 
-namespace std
-{
+namespace std {
 template <> struct hash<direction> {
-    std::size_t operator()( const direction &d ) const {
-        return static_cast<std::size_t>( d );
-    }
+    std::size_t operator()(const direction& d) const { return static_cast<std::size_t>(d); }
 };
 } // namespace std
 
-template< class T >
-constexpr direction operator%( const direction &lhs, const T &rhs )
-{
-    return static_cast<direction>( static_cast<T>( lhs ) % rhs );
+template <class T> constexpr direction operator%(const direction& lhs, const T& rhs) {
+    return static_cast<direction>(static_cast<T>(lhs) % rhs);
 }
 
-template< class T >
-constexpr T operator+( const direction &lhs, const T &rhs )
-{
-    return static_cast<T>( lhs ) + rhs;
+template <class T> constexpr T operator+(const direction& lhs, const T& rhs) {
+    return static_cast<T>(lhs) + rhs;
 }
 
-template< class T >
-constexpr bool operator==( const direction &lhs, const T &rhs )
-{
-    return static_cast<T>( lhs ) == rhs;
+template <class T> constexpr bool operator==(const direction& lhs, const T& rhs) {
+    return static_cast<T>(lhs) == rhs;
 }
 
-template< class T >
-constexpr bool operator==( const T &lhs, const direction &rhs )
-{
-    return operator==( rhs, lhs );
+template <class T> constexpr bool operator==(const T& lhs, const direction& rhs) {
+    return operator==(rhs, lhs);
 }
 
-template< class T >
-constexpr bool operator!=( const T &lhs, const direction &rhs )
-{
-    return !operator==( rhs, lhs );
+template <class T> constexpr bool operator!=(const T& lhs, const direction& rhs) {
+    return !operator==(rhs, lhs);
 }
 
-template< class T >
-constexpr bool operator!=( const direction &lhs, const T &rhs )
-{
-    return !operator==( lhs, rhs );
+template <class T> constexpr bool operator!=(const direction& lhs, const T& rhs) {
+    return !operator==(lhs, rhs);
 }
 
-direction direction_from( point p ) noexcept;
-direction direction_from( const tripoint &p ) noexcept;
-direction direction_from( point p1, point p2 ) noexcept;
-direction direction_from( const tripoint &p, const tripoint &q );
+direction direction_from(point p) noexcept;
+direction direction_from(const tripoint& p) noexcept;
+direction direction_from(point p1, point p2) noexcept;
+direction direction_from(const tripoint& p, const tripoint& q);
 
-tripoint displace( direction dir );
-point displace_XY( direction dir );
-std::string direction_name( direction dir );
-std::string direction_name_short( direction dir );
+tripoint displace(direction dir);
+point displace_XY(direction dir);
+std::string direction_name(direction dir);
+std::string direction_name_short(direction dir);
 
 /* Get suffix describing vector from p to q (e.g. 1NW, 2SE) or empty string if p == q */
-std::string direction_suffix( const tripoint &p, const tripoint &q );
+std::string direction_suffix(const tripoint& p, const tripoint& q);
 
 /**
  * The actual Bresenham algorithm in 2D and 3D, everything else should call these
  * and pass in an interact functor to iterate across a line between two points.
  */
-void bresenham( point p1, point p2, int t,
-                const std::function<bool( point )> &interact );
-void bresenham( const tripoint &loc1, const tripoint &loc2, int t, int t2,
-                const std::function<bool( const tripoint & )> &interact );
+void bresenham(point p1, point p2, int t, const std::function<bool(point)>& interact);
+void bresenham(
+    const tripoint& loc1, const tripoint& loc2, int t, int t2,
+    const std::function<bool(const tripoint&)>& interact);
 
-tripoint move_along_line( const tripoint &loc, const std::vector<tripoint> &line,
-                          int distance );
+tripoint move_along_line(const tripoint& loc, const std::vector<tripoint>& line, int distance);
 // The "t" value decides WHICH Bresenham line is used.
-std::vector<point> line_to( point p1, point p2, int t = 0 );
+std::vector<point> line_to(point p1, point p2, int t = 0);
 // t and t2 decide which Bresenham line is used.
-std::vector<tripoint> line_to( const tripoint &loc1, const tripoint &loc2, int t = 0, int t2 = 0 );
+std::vector<tripoint> line_to(const tripoint& loc1, const tripoint& loc2, int t = 0, int t2 = 0);
 // sqrt(dX^2 + dY^2)
 
-inline int trig_dist_squared( const tripoint &loc1, const tripoint &loc2 )
-{
-    return ( ( loc1.x - loc2.x ) * ( loc1.x - loc2.x ) ) +
-           ( ( loc1.y - loc2.y ) * ( loc1.y - loc2.y ) ) +
-           ( ( loc1.z - loc2.z ) * ( loc1.z - loc2.z ) );
+inline int trig_dist_squared(const tripoint& loc1, const tripoint& loc2) {
+    return ((loc1.x - loc2.x) * (loc1.x - loc2.x)) + ((loc1.y - loc2.y) * (loc1.y - loc2.y))
+         + ((loc1.z - loc2.z) * (loc1.z - loc2.z));
 }
-inline float trig_dist( const tripoint &loc1, const tripoint &loc2 )
-{
-    return std::sqrt( static_cast<double>( trig_dist_squared( loc1, loc2 ) ) );
+inline float trig_dist(const tripoint& loc1, const tripoint& loc2) {
+    return std::sqrt(static_cast<double>(trig_dist_squared(loc1, loc2)));
 }
-inline float trig_dist( point loc1, point loc2 )
-{
-    return trig_dist( tripoint( loc1, 0 ), tripoint( loc2, 0 ) );
+inline float trig_dist(point loc1, point loc2) {
+    return trig_dist(tripoint(loc1, 0), tripoint(loc2, 0));
 }
 
 // Chebyshev distance; maximum of dX and dY
-inline int square_dist( const tripoint &loc1, const tripoint &loc2 )
-{
-    const tripoint d = ( loc1 - loc2 ).abs();
-    return std::max( { d.x, d.y, d.z } );
+inline int square_dist(const tripoint& loc1, const tripoint& loc2) {
+    const tripoint d = (loc1 - loc2).abs();
+    return std::max({d.x, d.y, d.z});
 }
-inline int square_dist( point loc1, point loc2 )
-{
-    const point d = ( loc1 - loc2 ).abs();
-    return std::max( d.x, d.y );
+inline int square_dist(point loc1, point loc2) {
+    const point d = (loc1 - loc2).abs();
+    return std::max(d.x, d.y);
 }
 
 // Choose between the above two according to the "circular distances" option
-inline int rl_dist( const tripoint &loc1, const tripoint &loc2 )
-{
-    if( trigdist ) {
+inline int rl_dist(const tripoint& loc1, const tripoint& loc2) {
+    if (trigdist) {
         // Use rounding instead of truncation to avoid scalloped visibility boundaries.
         // Truncation causes artifacts at 22.5-degree intervals (octant centers) because
         // the euclidean distance truncates differently at various angles.
-        return static_cast<int>( std::round( trig_dist( loc1, loc2 ) ) );
+        return static_cast<int>(std::round(trig_dist(loc1, loc2)));
     }
-    return square_dist( loc1, loc2 );
+    return square_dist(loc1, loc2);
 }
-inline int rl_dist( point a, point b )
-{
-    return rl_dist( tripoint( a, 0 ), tripoint( b, 0 ) );
-}
+inline int rl_dist(point a, point b) { return rl_dist(tripoint(a, 0), tripoint(b, 0)); }
 
 struct rl_dist_lookup_table_dimensions {
     int max_dx = 0;
@@ -206,46 +186,41 @@ struct rl_dist_lookup_table_dimensions {
     /// True when every axis would hold at least one entry.  A negative extent
     /// means the caller had nothing to size the table from, and the resulting
     /// table would be empty; such callers must use rl_dist_from_deltas().
-    auto is_buildable() const -> bool {
-        return max_dx >= 0 && max_dy >= 0 && max_dz >= 0;
-    }
+    auto is_buildable() const -> bool { return max_dx >= 0 && max_dy >= 0 && max_dz >= 0; }
 };
 
 /// Distance between two points given as absolute per-axis deltas.
 ///
 /// This is the single definition of the metric rl_dist_lookup_table tabulates,
 /// so a caller that cannot use the table still produces identical values.
-auto rl_dist_from_deltas( int dx, int dy, int dz, bool use_trigdist ) -> int;
+auto rl_dist_from_deltas(int dx, int dy, int dz, bool use_trigdist) -> int;
 
 /// Precomputed |delta| -> distance table.  Immutable once published by
 /// get_rl_dist_lookup_table(); the distance_*() accessors do no bounds
 /// checking, so callers must size the table via matches() before indexing.
-class rl_dist_lookup_table
-{
-    public:
-        /// True when this table was built for the same distance mode and its
-        /// extent covers @p dimensions on every axis, i.e. every index a caller
-        /// asking for @p dimensions can produce is in range.
-        auto matches( const rl_dist_lookup_table_dimensions &dimensions ) const -> bool;
-        /// Build the table for exactly @p dimensions, which must be buildable.
-        auto reset( const rl_dist_lookup_table_dimensions &dimensions ) -> void;
+class rl_dist_lookup_table {
+public:
+    /// True when this table was built for the same distance mode and its
+    /// extent covers @p dimensions on every axis, i.e. every index a caller
+    /// asking for @p dimensions can produce is in range.
+    auto matches(const rl_dist_lookup_table_dimensions& dimensions) const -> bool;
+    /// Build the table for exactly @p dimensions, which must be buildable.
+    auto reset(const rl_dist_lookup_table_dimensions& dimensions) -> void;
 
-        auto dimensions() const -> const rl_dist_lookup_table_dimensions & {
-            return dimensions_;
-        }
+    auto dimensions() const -> const rl_dist_lookup_table_dimensions& { return dimensions_; }
 
-        auto distance_2d( int dx, int dy ) const -> int;
-        auto distance_3d( int dx, int dy, int dz ) const -> int;
-        auto row_2d( int dy ) const -> std::span<const uint16_t>;
-        auto row_3d( int dy, int dz ) const -> std::span<const uint16_t>;
+    auto distance_2d(int dx, int dy) const -> int;
+    auto distance_3d(int dx, int dy, int dz) const -> int;
+    auto row_2d(int dy) const -> std::span<const uint16_t>;
+    auto row_3d(int dy, int dz) const -> std::span<const uint16_t>;
 
-    private:
-        auto index_2d( int dx, int dy ) const -> size_t;
-        auto index_3d( int dx, int dy, int dz ) const -> size_t;
+private:
+    auto index_2d(int dx, int dy) const -> size_t;
+    auto index_3d(int dx, int dy, int dz) const -> size_t;
 
-        rl_dist_lookup_table_dimensions dimensions_;
-        std::vector<uint16_t> distances_2d_;
-        std::vector<uint16_t> distances_3d_;
+    rl_dist_lookup_table_dimensions dimensions_;
+    std::vector<uint16_t> distances_2d_;
+    std::vector<uint16_t> distances_3d_;
 };
 
 /// Return a table covering at least @p dimensions, publishing a freshly built
@@ -255,8 +230,8 @@ class rl_dist_lookup_table
 /// A published table is never mutated, and the returned shared_ptr keeps it
 /// alive, so a caller may hold it across a parallel region: a concurrent
 /// rebuild swaps in a new table instead of reallocating the one being read.
-auto get_rl_dist_lookup_table( const rl_dist_lookup_table_dimensions &dimensions ) ->
-std::shared_ptr<const rl_dist_lookup_table>;
+auto get_rl_dist_lookup_table(const rl_dist_lookup_table_dimensions& dimensions)
+    -> std::shared_ptr<const rl_dist_lookup_table>;
 
 /**
  * Helper type for the return value of dist_fast().
@@ -264,74 +239,60 @@ std::shared_ptr<const rl_dist_lookup_table>;
  * This lets us delay the sqrt() call of trigdist until the actual length is needed.
  */
 struct FastDistanceApproximation {
-    private:
-        int value;
-    public:
-        FastDistanceApproximation( int value ) : value( value ) { }
-        template<typename T>
-        bool operator<=( const T &rhs ) const {
-            if( trigdist ) {
-                return value <= rhs * rhs;
-            }
-            return value <= rhs;
-        }
-        template<typename T>
-        bool operator>=( const T &rhs ) const {
-            if( trigdist ) {
-                return value >= rhs * rhs;
-            }
-            return value >= rhs;
-        }
-        operator int() const {
-            if( trigdist ) {
-                return std::sqrt( value );
-            }
-            return value;
-        }
+private:
+    int value;
+
+public:
+    FastDistanceApproximation(int value): value(value) {}
+    template <typename T> bool operator<=(const T& rhs) const {
+        if (trigdist) { return value <= rhs * rhs; }
+        return value <= rhs;
+    }
+    template <typename T> bool operator>=(const T& rhs) const {
+        if (trigdist) { return value >= rhs * rhs; }
+        return value >= rhs;
+    }
+    operator int() const {
+        if (trigdist) { return std::sqrt(value); }
+        return value;
+    }
 };
 
-inline FastDistanceApproximation trig_dist_fast( const tripoint &loc1, const tripoint &loc2 )
-{
-    return ( loc1.x - loc2.x ) * ( loc1.x - loc2.x ) +
-           ( loc1.y - loc2.y ) * ( loc1.y - loc2.y ) +
-           ( loc1.z - loc2.z ) * ( loc1.z - loc2.z );
+inline FastDistanceApproximation trig_dist_fast(const tripoint& loc1, const tripoint& loc2) {
+    return (loc1.x - loc2.x) * (loc1.x - loc2.x) + (loc1.y - loc2.y) * (loc1.y - loc2.y)
+         + (loc1.z - loc2.z) * (loc1.z - loc2.z);
 }
-inline FastDistanceApproximation square_dist_fast( const tripoint &loc1, const tripoint &loc2 )
-{
-    const tripoint d = ( loc1 - loc2 ).abs();
-    return std::max( { d.x, d.y, d.z } );
+inline FastDistanceApproximation square_dist_fast(const tripoint& loc1, const tripoint& loc2) {
+    const tripoint d = (loc1 - loc2).abs();
+    return std::max({d.x, d.y, d.z});
 }
-inline FastDistanceApproximation rl_dist_fast( const tripoint &loc1, const tripoint &loc2 )
-{
-    if( trigdist ) {
-        return trig_dist_fast( loc1, loc2 );
-    }
-    return square_dist_fast( loc1, loc2 );
+inline FastDistanceApproximation rl_dist_fast(const tripoint& loc1, const tripoint& loc2) {
+    if (trigdist) { return trig_dist_fast(loc1, loc2); }
+    return square_dist_fast(loc1, loc2);
 }
-inline FastDistanceApproximation rl_dist_fast( point a, point b )
-{
-    return rl_dist_fast( tripoint( a, 0 ), tripoint( b, 0 ) );
+inline FastDistanceApproximation rl_dist_fast(point a, point b) {
+    return rl_dist_fast(tripoint(a, 0), tripoint(b, 0));
 }
 
-float rl_dist_exact( const tripoint &loc1, const tripoint &loc2 );
+float rl_dist_exact(const tripoint& loc1, const tripoint& loc2);
 // Sum of distance in both axes
-int manhattan_dist( point loc1, point loc2 );
+int manhattan_dist(point loc1, point loc2);
 
 // Travel distance between 2 points on a square grid, assuming diagonal moves
 // cost sqrt(2) and cardinal moves cost 1.
-int octile_dist( point loc1, point loc2, int multiplier = 1 );
-float octile_dist_exact( point loc1, point loc2 );
+int octile_dist(point loc1, point loc2, int multiplier = 1);
+float octile_dist_exact(point loc1, point loc2);
 
 // get angle of direction represented by point
-units::angle atan2( point );
+units::angle atan2(point);
 
 // Get the magnitude of the slope ranging from 0.0 to 1.0
-float get_normalized_angle( point start, point end );
-std::vector<tripoint> continue_line( const std::vector<tripoint> &line, int distance );
-std::vector<point> squares_in_direction( point p1, point p2 );
+float get_normalized_angle(point start, point end);
+std::vector<tripoint> continue_line(const std::vector<tripoint>& line, int distance);
+std::vector<point> squares_in_direction(point p1, point p2);
 // Returns a vector of squares adjacent to @from that are closer to @to than @from is.
-std::vector<tripoint> squares_closer_to( const tripoint &from, const tripoint &to );
-void calc_ray_end( units::angle, int range, const tripoint &p, tripoint &out );
+std::vector<tripoint> squares_closer_to(const tripoint& from, const tripoint& to);
+void calc_ray_end(units::angle, int range, const tripoint& p, tripoint& out);
 /**
  * Calculates the horizontal angle between the lines from (0,0,0) to @p a and
  * the line from (0,0,0) to @p b.
@@ -339,32 +300,28 @@ void calc_ray_end( units::angle, int range, const tripoint &p, tripoint &out );
  * Example: if @p a is (0,1) and @p b is (1,0), the result will 90 degree
  * The function currently ignores the z component.
  */
-units::angle coord_to_angle( const tripoint &a, const tripoint &b );
+units::angle coord_to_angle(const tripoint& a, const tripoint& b);
 
-template<IsCoordPoint C>
-auto rl_dist( const C &a, const C &b ) -> int
-{
-    return rl_dist( a.raw(), b.raw() );
+template <IsCoordPoint C> auto rl_dist(const C& a, const C& b) -> int {
+    return rl_dist(a.raw(), b.raw());
 }
 
-template<IsCoordPoint C>
-auto rl_dist_fast( const C &a, const C &b ) -> FastDistanceApproximation
-{
-    return rl_dist_fast( a.raw(), b.raw() );
+template <IsCoordPoint C> auto rl_dist_fast(const C& a, const C& b) -> FastDistanceApproximation {
+    return rl_dist_fast(a.raw(), b.raw());
 }
 
-template<IsCoordPoint C>
-auto line_to( const C &a, const C &b, int t = 0, int t2 = 0 ) -> std::vector<C>
-{
+template <IsCoordPoint C>
+auto line_to(const C& a, const C& b, int t = 0, int t2 = 0) -> std::vector<C> {
     std::vector<typename C::value_type> raw_line;
-    if constexpr( C::dimension == 2 ) {
-        raw_line = line_to( a.raw(), b.raw(), t );
+    if constexpr (C::dimension == 2) {
+        raw_line = line_to(a.raw(), b.raw(), t);
     } else {
-        raw_line = line_to( a.raw(), b.raw(), t, t2 );
+        raw_line = line_to(a.raw(), b.raw(), t, t2);
     }
-    auto result = std::vector<C> {};
-    result.reserve( raw_line.size() );
-    std::ranges::transform( raw_line, std::back_inserter( result ),
-    []( const auto & p ) { return C( p ); } );
+    auto result = std::vector<C>{};
+    result.reserve(raw_line.size());
+    std::ranges::transform(raw_line, std::back_inserter(result), [](const auto& p) {
+        return C(p);
+    });
     return result;
 }

@@ -2,13 +2,9 @@
 
 #include "enum_traits.h"
 
-template<typename T> struct enum_traits;
+template <typename T> struct enum_traits;
 
-template<typename T>
-constexpr int sgn( const T x )
-{
-    return x < 0 ? -1 : ( x > 0 ? 1 : 0 );
-}
+template <typename T> constexpr int sgn(const T x) { return x < 0 ? -1 : (x > 0 ? 1 : 0); }
 
 /**
  * Simplified attitude towards any creature:
@@ -17,29 +13,21 @@ constexpr int sgn( const T x )
  * friendly - avoid harming it, maybe even help.
  * any - any of the above, used in safemode_ui
  */
-enum Attitude : int {
-    A_HOSTILE,
-    A_NEUTRAL,
-    A_FRIENDLY,
-    A_ANY,
-    NUM_A
-};
+enum Attitude : int { A_HOSTILE, A_NEUTRAL, A_FRIENDLY, A_ANY, NUM_A };
 
-template<>
-struct enum_traits<Attitude> {
+template <> struct enum_traits<Attitude> {
     static constexpr Attitude last = Attitude::NUM_A;
 };
 
 enum class bionic_ui_sort_mode : int {
-    NONE   = 0,
-    POWER  = 1,
-    NAME   = 2,
+    NONE = 0,
+    POWER = 1,
+    NAME = 2,
     INVLET = 3,
-    nsort  = 4,
+    nsort = 4,
 };
 
-template<>
-struct enum_traits<bionic_ui_sort_mode> {
+template <> struct enum_traits<bionic_ui_sort_mode> {
     static constexpr bionic_ui_sort_mode last = bionic_ui_sort_mode::nsort;
 };
 
@@ -54,22 +42,20 @@ enum class holiday : int {
     num_holiday
 };
 
-template<>
-struct enum_traits<holiday> {
+template <> struct enum_traits<holiday> {
     static constexpr holiday last = holiday::num_holiday;
 };
 
 enum creature_size : int {
-    tiny = 0,    // Squirrel
-    small,      // Dog
-    medium,    // Human
-    large,    // Cow
-    huge,    // TAAAANK
+    tiny = 0,         // Squirrel
+    small,            // Dog
+    medium,           // Human
+    large,            // Cow
+    huge,             // TAAAANK
     num_creature_size // last
 };
 
-template<>
-struct enum_traits<creature_size> {
+template <> struct enum_traits<creature_size> {
     static constexpr creature_size last = creature_size::num_creature_size;
 };
 
@@ -81,21 +67,10 @@ enum class temperature_flag : int {
     TEMP_ROOT_CELLAR
 };
 
-//Used for autopickup and safemode rules
-enum rule_state : int {
-    RULE_NONE,
-    RULE_WHITELISTED,
-    RULE_BLACKLISTED
-};
+// Used for autopickup and safemode rules
+enum rule_state : int { RULE_NONE, RULE_WHITELISTED, RULE_BLACKLISTED };
 
-enum visibility_type {
-    VIS_HIDDEN,
-    VIS_CLEAR,
-    VIS_LIT,
-    VIS_BOOMER,
-    VIS_DARK,
-    VIS_BOOMER_DARK
-};
+enum visibility_type { VIS_HIDDEN, VIS_CLEAR, VIS_LIT, VIS_BOOMER, VIS_DARK, VIS_BOOMER_DARK };
 
 // Matching rules for comparing a string to an overmap terrain id.
 enum class ot_match_type : int {
@@ -118,99 +93,90 @@ enum class ot_match_type : int {
     num_ot_match_type
 };
 
-template<>
-struct enum_traits<ot_match_type> {
+template <> struct enum_traits<ot_match_type> {
     static constexpr ot_match_type last = ot_match_type::num_ot_match_type;
 };
 
-enum class special_game_type : int {
-    NONE = 0,
-    TUTORIAL,
-    DEFENSE,
-    NUM_SPECIAL_GAME_TYPES
-};
+enum class special_game_type : int { NONE = 0, TUTORIAL, DEFENSE, NUM_SPECIAL_GAME_TYPES };
 
 enum art_effect_passive : int {
     AEP_NULL = 0,
     // Good
-    AEP_STR_UP, // Strength + 4
-    AEP_DEX_UP, // Dexterity + 4
-    AEP_PER_UP, // Perception + 4
-    AEP_INT_UP, // Intelligence + 4
-    AEP_ALL_UP, // All stats + 2
-    AEP_SPEED_UP, // +20 speed
-    AEP_PBLUE, // Reduces radiation
-    AEP_SNAKES, // Summons friendly snakes when you're hit
-    AEP_INVISIBLE, // Makes you invisible
-    AEP_CLAIRVOYANCE, // See through walls
+    AEP_STR_UP,             // Strength + 4
+    AEP_DEX_UP,             // Dexterity + 4
+    AEP_PER_UP,             // Perception + 4
+    AEP_INT_UP,             // Intelligence + 4
+    AEP_ALL_UP,             // All stats + 2
+    AEP_SPEED_UP,           // +20 speed
+    AEP_PBLUE,              // Reduces radiation
+    AEP_SNAKES,             // Summons friendly snakes when you're hit
+    AEP_INVISIBLE,          // Makes you invisible
+    AEP_CLAIRVOYANCE,       // See through walls
     AEP_SUPER_CLAIRVOYANCE, // See through walls to a great distance
-    AEP_STEALTH, // Your steps are quieted
-    AEP_EXTINGUISH, // May extinguish nearby flames
-    AEP_GLOW, // Four-tile light source
-    AEP_PSYSHIELD, // Protection from fear paralyze attack
+    AEP_STEALTH,            // Your steps are quieted
+    AEP_EXTINGUISH,         // May extinguish nearby flames
+    AEP_GLOW,               // Four-tile light source
+    AEP_PSYSHIELD,          // Protection from fear paralyze attack
     AEP_RESIST_ELECTRICITY, // Protection from electricity
-    AEP_CARRY_MORE, // Increases carrying capacity by 200
-    AEP_SAP_LIFE, // Killing non-zombie monsters may heal you
-    AEP_FUN, // Slight passive morale
+    AEP_CARRY_MORE,         // Increases carrying capacity by 200
+    AEP_SAP_LIFE,           // Killing non-zombie monsters may heal you
+    AEP_FUN,                // Slight passive morale
     // Splits good from bad
     AEP_SPLIT,
     // Bad
-    AEP_HUNGER, // Increases hunger
-    AEP_THIRST, // Increases thirst
-    AEP_SMOKE, // Emits smoke occasionally
-    AEP_EVIL, // Addiction to the power
-    AEP_SCHIZO, // Mimicks schizophrenia
-    AEP_RADIOACTIVE, // Increases your radiation
-    AEP_MUTAGENIC, // Mutates you slowly
-    AEP_ATTENTION, // Draws netherworld attention slowly
-    AEP_STR_DOWN, // Strength - 3
-    AEP_DEX_DOWN, // Dex - 3
-    AEP_PER_DOWN, // Per - 3
-    AEP_INT_DOWN, // Int - 3
-    AEP_ALL_DOWN, // All stats - 2
-    AEP_SPEED_DOWN, // -20 speed
-    AEP_FORCE_TELEPORT, // Occasionally force a teleport
-    AEP_MOVEMENT_NOISE, // Makes noise when you move
-    AEP_BAD_WEATHER, // More likely to experience bad weather
-    AEP_SICK, // Decreases health over time
-    AEP_CLAIRVOYANCE_PLUS, // See through walls to a larger distance; not bad effect, placement to preserve old saves.
+    AEP_HUNGER,            // Increases hunger
+    AEP_THIRST,            // Increases thirst
+    AEP_SMOKE,             // Emits smoke occasionally
+    AEP_EVIL,              // Addiction to the power
+    AEP_SCHIZO,            // Mimicks schizophrenia
+    AEP_RADIOACTIVE,       // Increases your radiation
+    AEP_MUTAGENIC,         // Mutates you slowly
+    AEP_ATTENTION,         // Draws netherworld attention slowly
+    AEP_STR_DOWN,          // Strength - 3
+    AEP_DEX_DOWN,          // Dex - 3
+    AEP_PER_DOWN,          // Per - 3
+    AEP_INT_DOWN,          // Int - 3
+    AEP_ALL_DOWN,          // All stats - 2
+    AEP_SPEED_DOWN,        // -20 speed
+    AEP_FORCE_TELEPORT,    // Occasionally force a teleport
+    AEP_MOVEMENT_NOISE,    // Makes noise when you move
+    AEP_BAD_WEATHER,       // More likely to experience bad weather
+    AEP_SICK,              // Decreases health over time
+    AEP_CLAIRVOYANCE_PLUS, // See through walls to a larger distance; not bad effect, placement to
+                           // preserve old saves.
 
     NUM_AEPS
 };
 
-template<>
-struct enum_traits<art_effect_passive> {
+template <> struct enum_traits<art_effect_passive> {
     static constexpr art_effect_passive last = art_effect_passive::NUM_AEPS;
 };
 
 enum artifact_natural_property {
     ARTPROP_NULL,
-    ARTPROP_WRIGGLING, //
-    ARTPROP_GLOWING, //
-    ARTPROP_HUMMING, //
-    ARTPROP_MOVING, //
+    ARTPROP_WRIGGLING,  //
+    ARTPROP_GLOWING,    //
+    ARTPROP_HUMMING,    //
+    ARTPROP_MOVING,     //
     ARTPROP_WHISPERING, //
-    ARTPROP_BREATHING, //
-    ARTPROP_DEAD, //
-    ARTPROP_ITCHY, //
+    ARTPROP_BREATHING,  //
+    ARTPROP_DEAD,       //
+    ARTPROP_ITCHY,      //
     ARTPROP_GLITTERING, //
-    ARTPROP_ELECTRIC, //
-    ARTPROP_SLIMY, //
-    ARTPROP_ENGRAVED, //
-    ARTPROP_CRACKLING, //
-    ARTPROP_WARM, //
-    ARTPROP_RATTLING, //
+    ARTPROP_ELECTRIC,   //
+    ARTPROP_SLIMY,      //
+    ARTPROP_ENGRAVED,   //
+    ARTPROP_CRACKLING,  //
+    ARTPROP_WARM,       //
+    ARTPROP_RATTLING,   //
     ARTPROP_SCALED,
     ARTPROP_FRACTAL,
     ARTPROP_MAX
 };
 
-enum phase_id : int {
-    PNULL, SOLID, LIQUID, GAS, PLASMA, num_phases
-};
+enum phase_id : int { PNULL, SOLID, LIQUID, GAS, PLASMA, num_phases };
 
-template<>
-struct enum_traits<phase_id> {
+template <> struct enum_traits<phase_id> {
     static constexpr phase_id last = phase_id::num_phases;
 };
 
@@ -218,21 +184,22 @@ struct enum_traits<phase_id> {
 //   ex; if ( player.grab_type == OBJECT_VEHICLE ) { ...
 //   or; if ( baseactor_just_shot_at.object_type() == OBJECT_NPC ) { ...
 enum object_type {
-    OBJECT_NONE,      // Nothing, invalid.
-    OBJECT_ITEM,      // item.h
-    OBJECT_ACTOR,     // potential virtual base class, get_object_type() would return one of the types below
+    OBJECT_NONE,    // Nothing, invalid.
+    OBJECT_ITEM,    // item.h
+    OBJECT_ACTOR,   // potential virtual base class, get_object_type() would return one of the types
+                    // below
     OBJECT_PLAYER,  // player.h, npc.h
-    OBJECT_NPC,   // nph.h
+    OBJECT_NPC,     // nph.h
     OBJECT_MONSTER, // monster.h
-    OBJECT_VEHICLE,   // vehicle.h
-    OBJECT_TRAP,      // trap.h
-    OBJECT_FIELD,     // field.h; field_entry
-    OBJECT_TERRAIN,   // Not a real object
+    OBJECT_VEHICLE, // vehicle.h
+    OBJECT_TRAP,    // trap.h
+    OBJECT_FIELD,   // field.h; field_entry
+    OBJECT_TERRAIN, // Not a real object
     OBJECT_FURNITURE, // Not a real object
     NUM_OBJECTS,
 };
 
-enum liquid_source_type { LST_INFINITE_MAP = 1, LST_VEHICLE = 2};
+enum liquid_source_type { LST_INFINITE_MAP = 1, LST_VEHICLE = 2 };
 
 enum liquid_target_type { LTT_CONTAINER = 1, LTT_VEHICLE = 2, LTT_MAP = 3, LTT_MONSTER = 4 };
 
@@ -264,14 +231,12 @@ enum layer_level {
     MAX_CLOTHING_LAYER
 };
 
-template<>
-struct enum_traits<layer_level> {
+template <> struct enum_traits<layer_level> {
     static constexpr layer_level last = layer_level::MAX_CLOTHING_LAYER;
 };
 
-inline layer_level &operator++( layer_level &l )
-{
-    l = static_cast<layer_level>( l + 1 );
+inline layer_level& operator++(layer_level& l) {
+    l = static_cast<layer_level>(l + 1);
     return l;
 }
 
@@ -290,22 +255,24 @@ enum class distraction_type {
     num_distraction_type,
 };
 
-template<>
-struct enum_traits<distraction_type> {
+template <> struct enum_traits<distraction_type> {
     static constexpr distraction_type last = distraction_type::num_distraction_type;
 };
 
 enum game_message_type : int {
-    m_good,    /* something good happened to the player character, e.g. health boost, increasing in skill */
-    m_bad,      /* something bad happened to the player character, e.g. damage, decreasing in skill */
-    m_mixed,   /* something happened to the player character which is mixed (has good and bad parts),
-                  e.g. gaining a mutation with mixed effect*/
-    m_warning, /* warns the player about a danger. e.g. enemy appeared, an alarm sounds, noise heard. */
+    m_good,  /* something good happened to the player character, e.g. health boost, increasing in
+                skill */
+    m_bad,   /* something bad happened to the player character, e.g. damage, decreasing in skill */
+    m_mixed, /* something happened to the player character which is mixed (has good and bad parts),
+                e.g. gaining a mutation with mixed effect*/
+    m_warning, /* warns the player about a danger. e.g. enemy appeared, an alarm sounds, noise
+                  heard. */
     m_info,    /* informs the player about something, e.g. on examination, seeing an item,
                   about how to use a certain function, etc. */
-    m_neutral,  /* neutral or indifferent events which aren’t informational or nothing really happened e.g.
-                  a miss, a non-critical failure. May also effect for good or bad effects which are
-                  just very slight to be notable. This is the default message type. */
+    m_neutral, /* neutral or indifferent events which aren’t informational or nothing really
+                 happened e.g. a miss, a non-critical failure. May also effect for good or bad
+                 effects which are just very slight to be notable. This is the default message type.
+               */
 
     m_debug, /* only shown when debug_mode is true */
     /* custom SCT colors */
@@ -315,8 +282,7 @@ enum game_message_type : int {
     num_game_message_type
 };
 
-template<>
-struct enum_traits<game_message_type> {
+template <> struct enum_traits<game_message_type> {
     static constexpr game_message_type last = game_message_type::num_game_message_type;
 };
 
@@ -330,10 +296,13 @@ enum game_message_flags {
 /** Structure allowing a combination of `game_message_type` and `game_message_flags`.
  */
 struct game_message_params {
-    game_message_params( const game_message_type message_type ) : type( message_type ),
-        flags( gmf_none ) {}
-    game_message_params( const game_message_type message_type,
-                         const game_message_flags message_flags ) : type( message_type ), flags( message_flags ) {}
+    game_message_params(const game_message_type message_type)
+        : type(message_type),
+          flags(gmf_none) {}
+    game_message_params(
+        const game_message_type message_type, const game_message_flags message_flags)
+        : type(message_type),
+          flags(message_flags) {}
 
     /* Type of the message */
     game_message_type type;
@@ -348,13 +317,11 @@ enum class monotonically : int {
     unknown,
 };
 
-constexpr bool is_increasing( monotonically m )
-{
+constexpr bool is_increasing(monotonically m) {
     return m == monotonically::constant || m == monotonically::increasing;
 }
 
-constexpr bool is_decreasing( monotonically m )
-{
+constexpr bool is_decreasing(monotonically m) {
     return m == monotonically::constant || m == monotonically::decreasing;
 }
 
@@ -369,5 +336,3 @@ enum MULTITILE_TYPE {
     broken,
     num_multitile_types
 };
-
-

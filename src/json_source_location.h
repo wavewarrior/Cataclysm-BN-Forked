@@ -1,8 +1,8 @@
 #pragma once
 
-#include <string>
-
 #include "memory_fast.h"
+
+#include <string>
 
 struct json_source_location {
     shared_ptr_fast<std::string> path;
@@ -11,9 +11,7 @@ struct json_source_location {
 
 /** Throw error at given JSON location. */
 [[noreturn]]
-void throw_error_at_json_loc( const json_source_location &loc, const std::string &message );
+void throw_error_at_json_loc(const json_source_location& loc, const std::string& message);
 
 /** Show warning at given JSON location. */
-void show_warning_at_json_loc( const json_source_location &loc, const std::string &message );
-
-
+void show_warning_at_json_loc(const json_source_location& loc, const std::string& message);

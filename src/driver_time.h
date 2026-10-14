@@ -8,8 +8,7 @@
 /// `time_of_day` ask. The game has no months: its calendar is year, season and day of the season,
 /// so the date is written `YYYY-SS-DD` (year from 0001, season 01 spring to 04 winter, day of the
 /// season from 01 to the world's season length) and the time `HH:MM`.
-namespace driver_time
-{
+namespace driver_time {
 
 /// What to pin; a field left out keeps the clock's current value for it (the day for a time,
 /// the time of day for a date).
@@ -28,6 +27,6 @@ struct pinned {
 
 /// Moves `calendar::turn` as asked and reports where it landed. Time jumps without the world
 /// simulating the interval. A refused request names why and leaves the clock where it was.
-auto pin( const request &asked ) -> std::expected<pinned, std::string>;
+auto pin(const request& asked) -> std::expected<pinned, std::string>;
 
 } // namespace driver_time

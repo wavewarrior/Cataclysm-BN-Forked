@@ -1,13 +1,13 @@
 #pragma once
 
+#include "clone_ptr.h"
+#include "string_id.h"
+#include "translations.h"
+
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-#include "clone_ptr.h"
-#include "string_id.h"
-#include "translations.h"
 
 class cata_variant;
 enum class cata_variant_type : int;
@@ -35,82 +35,78 @@ using event_fields_type = std::unordered_map<std::string, cata_variant_type>;
 // event_statistics.cpp.
 
 // A transformation from one multiset of events to another
-class event_transformation
-{
-    public:
-        ~event_transformation();
+class event_transformation {
+public:
+    ~event_transformation();
 
-        event_multiset value( stats_tracker & ) const;
-        std::unique_ptr<stats_tracker_state> watch( stats_tracker & ) const;
+    event_multiset value(stats_tracker&) const;
+    std::unique_ptr<stats_tracker_state> watch(stats_tracker&) const;
 
-        void load( const JsonObject &, const std::string & );
-        void check() const;
-        static void load_transformation( const JsonObject &, const std::string & );
-        static void check_consistency();
-        static void reset();
+    void load(const JsonObject&, const std::string&);
+    void check() const;
+    static void load_transformation(const JsonObject&, const std::string&);
+    static void check_consistency();
+    static void reset();
 
-        string_id<event_transformation> id;
-        bool was_loaded = false;
+    string_id<event_transformation> id;
+    bool was_loaded = false;
 
-        event_fields_type fields() const;
-        monotonically monotonicity() const;
+    event_fields_type fields() const;
+    monotonically monotonicity() const;
 
-        class impl;
-    private:
-        cata::clone_ptr<impl> impl_;
+    class impl;
+
+private:
+    cata::clone_ptr<impl> impl_;
 };
 
 // A value computed from events somehow
-class event_statistic
-{
-    public:
-        ~event_statistic();
+class event_statistic {
+public:
+    ~event_statistic();
 
-        cata_variant value( stats_tracker & ) const;
-        std::unique_ptr<stats_tracker_state> watch( stats_tracker & ) const;
+    cata_variant value(stats_tracker&) const;
+    std::unique_ptr<stats_tracker_state> watch(stats_tracker&) const;
 
-        void load( const JsonObject &, const std::string & );
-        void check() const;
-        static void load_statistic( const JsonObject &, const std::string & );
-        static void check_consistency();
-        static void reset();
+    void load(const JsonObject&, const std::string&);
+    void check() const;
+    static void load_statistic(const JsonObject&, const std::string&);
+    static void check_consistency();
+    static void reset();
 
-        string_id<event_statistic> id;
-        bool was_loaded = false;
+    string_id<event_statistic> id;
+    bool was_loaded = false;
 
-        const translation &description() const {
-            return description_;
-        }
+    const translation& description() const { return description_; }
 
-        cata_variant_type type() const;
-        monotonically monotonicity() const;
+    cata_variant_type type() const;
+    monotonically monotonicity() const;
 
-        class impl;
-    private:
-        translation description_;
-        cata::clone_ptr<impl> impl_;
+    class impl;
+
+private:
+    translation description_;
+    cata::clone_ptr<impl> impl_;
 };
 
-class score
-{
-    public:
-        score() = default;
-        // Returns translated description including value
-        std::string description( stats_tracker & ) const;
-        cata_variant value( stats_tracker & ) const;
+class score {
+public:
+    score() = default;
+    // Returns translated description including value
+    std::string description(stats_tracker&) const;
+    cata_variant value(stats_tracker&) const;
 
-        void load( const JsonObject &, const std::string & );
-        void check() const;
-        static void load_score( const JsonObject &, const std::string & );
-        static void check_consistency();
-        static const std::vector<score> &get_all();
-        static void reset();
+    void load(const JsonObject&, const std::string&);
+    void check() const;
+    static void load_score(const JsonObject&, const std::string&);
+    static void check_consistency();
+    static const std::vector<score>& get_all();
+    static void reset();
 
-        string_id<score> id;
-        bool was_loaded = false;
-    private:
-        translation description_;
-        string_id<event_statistic> stat_;
+    string_id<score> id;
+    bool was_loaded = false;
+
+private:
+    translation description_;
+    string_id<event_statistic> stat_;
 };
-
-

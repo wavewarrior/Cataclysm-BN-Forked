@@ -39,10 +39,10 @@ public:
     }
     test_surface(const test_surface&) = delete;
     test_surface(test_surface&&) = delete;
-    auto operator=(const test_surface&) -> test_surface& = delete; // *NOPAD*
-    auto operator=(test_surface&&) -> test_surface& = delete;      // *NOPAD*
+    auto operator=(const test_surface&) -> test_surface& = delete;
+    auto operator=(test_surface&&) -> test_surface& = delete;
 
-    auto get() const -> SDL_Surface* { return s_; } // *NOPAD*
+    auto get() const -> SDL_Surface* { return s_; }
     auto width() const -> int { return s_->w; }
     auto height() const -> int { return s_->h; }
 
@@ -70,7 +70,7 @@ public:
     }
 
 private:
-    auto byte_at(int x, int y) const -> std::uint8_t* { // *NOPAD*
+    auto byte_at(int x, int y) const -> std::uint8_t* {
         return static_cast<std::uint8_t*>(s_->pixels) + static_cast<std::ptrdiff_t>(y) * s_->pitch
              + static_cast<std::ptrdiff_t>(x) * 4;
     }

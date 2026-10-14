@@ -1,15 +1,14 @@
 #pragma once
 
 #include "catalua_type_operators.h"
+#include "translations.h"
+#include "type_id.h"
 
 #include <map>
 #include <set>
 #include <string>
 #include <tuple>
 #include <vector>
-
-#include "translations.h"
-#include "type_id.h"
 
 class JsonArray;
 class JsonIn;
@@ -22,8 +21,8 @@ class nc_color;
 class Character;
 
 enum class available_status : int {
-    a_true = +1, // yes, it's available
-    a_false = -1, // no, it's not available
+    a_true = +1,       // yes, it's available
+    a_false = -1,      // no, it's not available
     a_insufficent = 0, // nearly, but not enough for tool+component
 };
 
@@ -53,12 +52,12 @@ struct quality {
     std::set<material_id> salvagable_materials;
     std::vector<std::pair<int, std::string>> usages;
 
-    void load( const JsonObject &jo, const std::string &src );
+    void load(const JsonObject& jo, const std::string& src);
 
     static void reset();
-    static void load_static( const JsonObject &jo, const std::string &src );
+    static void load_static(const JsonObject& jo, const std::string& src);
 
-    LUA_TYPE_OPS( quality, id );
+    LUA_TYPE_OPS(quality, id);
 };
 
 struct component {
@@ -73,72 +72,71 @@ struct component {
 
     // needs explicit specification due to the mutable member. update this when you add new
     // members!
-    bool operator == ( const component &rhs ) const {
-        return std::forward_as_tuple( type, requirement, count, recoverable )
-        == std::forward_as_tuple( rhs.type, rhs.requirement, rhs.count, rhs.recoverable );
+    bool operator==(const component& rhs) const {
+        return std::forward_as_tuple(type, requirement, count, recoverable)
+            == std::forward_as_tuple(rhs.type, rhs.requirement, rhs.count, rhs.recoverable);
     }
-    bool operator != ( const component &rhs ) const {
-        return !operator == ( rhs );
-    }
+    bool operator!=(const component& rhs) const { return !operator==(rhs); }
     // lexicographic comparison
-    bool operator<( const component &rhs ) const {
-        //TODO change to use localized sorting
-        return std::forward_as_tuple( type, requirement, count, recoverable )
-        < std::forward_as_tuple( rhs.type, rhs.requirement, rhs.count, rhs.recoverable );
+    bool operator<(const component& rhs) const {
+        // TODO change to use localized sorting
+        return std::forward_as_tuple(type, requirement, count, recoverable)
+             < std::forward_as_tuple(rhs.type, rhs.requirement, rhs.count, rhs.recoverable);
     }
 
     component() = default;
-    component( const itype_id &TYPE, int COUNT ) : type( TYPE ), count( COUNT ) { }
-    component( const itype_id &TYPE, int COUNT, bool RECOVERABLE ) :
-        type( TYPE ), count( COUNT ), recoverable( RECOVERABLE ) { }
-    void check_consistency( const std::string &display_name ) const;
+    component(const itype_id& TYPE, int COUNT): type(TYPE), count(COUNT) {}
+    component(const itype_id& TYPE, int COUNT, bool RECOVERABLE)
+        : type(TYPE),
+          count(COUNT),
+          recoverable(RECOVERABLE) {}
+    void check_consistency(const std::string& display_name) const;
 };
 
-struct tool_comp : public component {
+struct tool_comp: public component {
     tool_comp() = default;
-    tool_comp( const itype_id &TYPE, int COUNT, bool subtype_expanded = false )
-        : component( TYPE, COUNT )
-        , subtype_expanded( subtype_expanded )
-    { }
+    tool_comp(const itype_id& TYPE, int COUNT, bool subtype_expanded = false)
+        : component(TYPE, COUNT),
+          subtype_expanded(subtype_expanded) {}
 
     // If true, do not expand subtypes
     // Prevents double-expanding of subtype,
     // for example hotplate->[hotplate, mess_kit]->[hotplate, mess_kit, mess_kit]
     bool subtype_expanded = false;
 
-    void load( const JsonValue &value );
-    void dump( JsonOut &jsout ) const;
-    bool has( const inventory &crafting_inv, const std::function<bool( const item & )> &filter,
-              int batch = 1, cost_adjustment = cost_adjustment::none,
-              std::function<void( int )> visitor = std::function<void( int )>() ) const;
-    std::string to_string( int batch = 1, int avail = 0 ) const;
-    nc_color get_color( bool has_one, const inventory & crafting_inv,
-                        const std::function<bool( const item & )> &filter, int batch = 1 ) const;
+    void load(const JsonValue& value);
+    void dump(JsonOut& jsout) const;
+    bool has(
+        const inventory& crafting_inv, const std::function<bool(const item&)>& filter,
+        int batch = 1, cost_adjustment = cost_adjustment::none,
+        std::function<void(int)> visitor = std::function<void(int)>()) const;
+    std::string to_string(int batch = 1, int avail = 0) const;
+    nc_color get_color(
+        bool has_one, const inventory& crafting_inv, const std::function<bool(const item&)>& filter,
+        int batch = 1) const;
     bool by_charges() const;
-    component_type get_component_type() const {
-        return component_type::TOOL;
-    }
+    component_type get_component_type() const { return component_type::TOOL; }
 };
 
-struct item_comp : public component {
+struct item_comp: public component {
     item_comp() = default;
-    item_comp( const itype_id & TYPE, int COUNT ) : component( TYPE, COUNT ) { }
+    item_comp(const itype_id& TYPE, int COUNT): component(TYPE, COUNT) {}
 
-    void load( const JsonValue & value );
-    void dump( JsonOut & jsout ) const;
-    bool has( const inventory & crafting_inv, const std::function < bool( const item & ) > &filter,
-              int batch = 1, cost_adjustment = cost_adjustment::none,
-              const std::function < void( int ) > &visitor = std::function < void( int ) > () ) const;
-    std::string to_string( int batch = 1, int avail = 0 ) const;
-    nc_color get_color( bool has_one, const inventory & crafting_inv,
-                        const std::function < bool( const item & ) > &filter, int batch = 1 ) const;
-    component_type get_component_type() const {
-        return component_type::ITEM;
-    }
+    void load(const JsonValue& value);
+    void dump(JsonOut& jsout) const;
+    bool has(
+        const inventory& crafting_inv, const std::function<bool(const item&)>& filter,
+        int batch = 1, cost_adjustment = cost_adjustment::none,
+        const std::function<void(int)>& visitor = std::function<void(int)>()) const;
+    std::string to_string(int batch = 1, int avail = 0) const;
+    nc_color get_color(
+        bool has_one, const inventory& crafting_inv, const std::function<bool(const item&)>& filter,
+        int batch = 1) const;
+    component_type get_component_type() const { return component_type::ITEM; }
 };
 
 struct quality_requirement {
-    quality_id type = quality_id( "UNKNOWN" );
+    quality_id type = quality_id("UNKNOWN");
     int count = 1;
     int level = 1;
     mutable available_status available = available_status::a_false;
@@ -146,36 +144,36 @@ struct quality_requirement {
 
     // needs explicit specification due to the mutable member. update this when you add new
     // members!
-    bool operator==( const quality_requirement & rhs ) const {
-        return std::forward_as_tuple( type, requirement, count, level )
-        == std::forward_as_tuple( rhs.type, rhs.requirement, rhs.count, rhs.level );
+    bool operator==(const quality_requirement& rhs) const {
+        return std::forward_as_tuple(type, requirement, count, level)
+            == std::forward_as_tuple(rhs.type, rhs.requirement, rhs.count, rhs.level);
     }
-    bool operator!=( const quality_requirement & rhs ) const {
-        return !operator==( rhs );
-    }
+    bool operator!=(const quality_requirement& rhs) const { return !operator==(rhs); }
     // lexicographic comparison
-    bool operator<( const quality_requirement & rhs ) const {
-        return std::forward_as_tuple( type, requirement, count, level )
-        < std::forward_as_tuple( rhs.type, rhs.requirement, rhs.count, rhs.level );
+    bool operator<(const quality_requirement& rhs) const {
+        return std::forward_as_tuple(type, requirement, count, level)
+             < std::forward_as_tuple(rhs.type, rhs.requirement, rhs.count, rhs.level);
     }
 
     quality_requirement() = default;
-    quality_requirement( const quality_id & TYPE, int COUNT, int LEVEL ) : type( TYPE ), count( COUNT ),
-        level( LEVEL ) { }
+    quality_requirement(const quality_id& TYPE, int COUNT, int LEVEL)
+        : type(TYPE),
+          count(COUNT),
+          level(LEVEL) {}
 
-    void load( const JsonValue & value );
-    void dump( JsonOut & jsout ) const;
-    bool has( const inventory & crafting_inv, const std::function < bool( const item & ) > &filter,
-              int = 0, cost_adjustment = cost_adjustment::none,
-              const std::function < void( int ) > &visitor = std::function < void( int ) > () ) const;
-    std::string to_string( int batch = 1, int avail = 0 ) const;
+    void load(const JsonValue& value);
+    void dump(JsonOut& jsout) const;
+    bool has(
+        const inventory& crafting_inv, const std::function<bool(const item&)>& filter, int = 0,
+        cost_adjustment = cost_adjustment::none,
+        const std::function<void(int)>& visitor = std::function<void(int)>()) const;
+    std::string to_string(int batch = 1, int avail = 0) const;
     std::string to_colored_string() const;
-    void check_consistency( const std::string & display_name ) const;
-    nc_color get_color( bool has_one, const inventory & crafting_inv,
-                        const std::function < bool( const item & ) > &filter, int = 0 ) const;
-    component_type get_component_type() const {
-        return component_type::QUALITY;
-    }
+    void check_consistency(const std::string& display_name) const;
+    nc_color get_color(
+        bool has_one, const inventory& crafting_inv, const std::function<bool(const item&)>& filter,
+        int = 0) const;
+    component_type get_component_type() const { return component_type::QUALITY; }
 };
 
 enum class requirement_display_flags {
@@ -183,11 +181,10 @@ enum class requirement_display_flags {
     no_unavailable = 1,
 };
 
-constexpr requirement_display_flags operator&( requirement_display_flags l,
-        requirement_display_flags r )
-{
-    return static_cast < requirement_display_flags > (
-               static_cast < unsigned > ( l ) & static_cast < unsigned > ( r ) );
+constexpr requirement_display_flags operator&(
+    requirement_display_flags l, requirement_display_flags r) {
+    return static_cast<requirement_display_flags>(
+        static_cast<unsigned>(l) & static_cast<unsigned>(r));
 }
 
 /**
@@ -218,16 +215,16 @@ constexpr requirement_display_flags operator&( requirement_display_flags l,
  * Color to be used for displaying the requirement. has_one is true of the
  * player fulfills an alternative requirement:
  *   nc_color get_color(bool has_one, const inventory &crafting_inv) const;
-*/
+ */
 struct requirement_data {
     // temporarily break encapsulation pending migration of legacy parts
     // @see vpart_info::check
     // TODO: remove once all parts specify installation requirements directly
     friend class vpart_info;
 
-    using alter_tool_comp_vector = std::vector < std::vector < tool_comp> >;
-    using alter_quali_req_vector = std::vector < std::vector < quality_requirement> >;
-    using alter_item_comp_vector = std::vector < std::vector < item_comp> >;
+    using alter_tool_comp_vector = std::vector<std::vector<tool_comp>>;
+    using alter_quali_req_vector = std::vector<std::vector<quality_requirement>>;
+    using alter_item_comp_vector = std::vector<std::vector<item_comp>>;
 
 private:
     alter_tool_comp_vector tools;
@@ -235,35 +232,29 @@ private:
     alter_item_comp_vector components;
 
 public:
-
     requirement_data() = default;
-    requirement_data( const alter_tool_comp_vector & tools, const alter_quali_req_vector & qualities,
-                      const alter_item_comp_vector & components ) : tools( tools ), qualities( qualities ),
-        components( components ) {}
+    requirement_data(
+        const alter_tool_comp_vector& tools, const alter_quali_req_vector& qualities,
+        const alter_item_comp_vector& components)
+        : tools(tools),
+          qualities(qualities),
+          components(components) {}
 
-    const requirement_id & id() const {
-        return id_;
-    }
+    const requirement_id& id() const { return id_; }
 
     /** null requirements are always empty (were never initialized) */
-    bool is_null() const {
-        return id_.is_null();
-    }
+    bool is_null() const { return id_.is_null(); }
 
     /** empty requirements are not necessary null */
-    bool is_empty() const {
-        return tools.empty() && components.empty() && qualities.empty();
-    }
+    bool is_empty() const { return tools.empty() && components.empty() && qualities.empty(); }
 
-    bool is_blacklisted() const {
-        return blacklisted;
-    }
+    bool is_blacklisted() const { return blacklisted; }
 
     /** Scales tool and component requirements leaving qualities unaffected */
-    requirement_data operator*( unsigned scalar ) const;
+    requirement_data operator*(unsigned scalar) const;
 
     /** Combines two sets of requirements */
-    requirement_data operator+( const requirement_data & rhs ) const;
+    requirement_data operator+(const requirement_data& rhs) const;
 
     /**
      * Load @ref tools, @ref qualities and @ref components from
@@ -271,23 +262,23 @@ public:
      * @param jsobj Object to load data from
      * @param id provide (or override) unique id for this instance
      */
-    static void load_requirement( const JsonObject & jsobj,
-                                  const requirement_id &id = requirement_id::NULL_ID() );
+    static void load_requirement(
+        const JsonObject& jsobj, const requirement_id& id = requirement_id::NULL_ID());
 
     /**
      * Store requirement data for future lookup
      * @param req Data to save
      * @param id provide (or override) unique id for this instance
      */
-    static void save_requirement( const requirement_data & req,
-                                  const requirement_id &id = requirement_id::NULL_ID() );
+    static void save_requirement(
+        const requirement_data& req, const requirement_id& id = requirement_id::NULL_ID());
     /**
      * Serialize custom created requirement objects for fetch activities
      */
-    void serialize( JsonOut & json ) const;
-    void deserialize( JsonIn & jsin );
+    void serialize(JsonOut& json) const;
+    void deserialize(JsonIn& jsin);
     /** Get all currently loaded requirements */
-    static const std::map < requirement_id, requirement_data > &all();
+    static const std::map<requirement_id, requirement_data>& all();
 
     /** Finalizes requirements, must be called AFTER finalizing items, but before recipes! */
     static void finalize();
@@ -315,34 +306,35 @@ public:
      * @note if the last available component of a grouping is removed the recipe
      * will be marked as @ref blacklisted
      */
-    void blacklist_item( const itype_id & id );
+    void blacklist_item(const itype_id& id);
     /**
      * Replace tools or components of the given type.
      */
-    void replace_item( const itype_id & id, const itype_id & replacement );
+    void replace_item(const itype_id& id, const itype_id& replacement);
 
-    const alter_tool_comp_vector & get_tools() const;
-    const alter_quali_req_vector & get_qualities() const;
-    const alter_item_comp_vector & get_components() const;
-    alter_item_comp_vector & get_components();
+    const alter_tool_comp_vector& get_tools() const;
+    const alter_quali_req_vector& get_qualities() const;
+    const alter_item_comp_vector& get_components() const;
+    alter_item_comp_vector& get_components();
 
     /**
      * Returns true if the requirements are fufilled by the filtered inventory
      * @param filter should be recipe::get_component_filter() if used with a recipe
      * or is_crafting_component otherwise.
      */
-    bool can_make_with_inventory( const inventory & crafting_inv,
-                                  const std::function < bool( const item & ) > &filter, int batch = 1,
-                                  cost_adjustment = cost_adjustment::none ) const;
+    bool can_make_with_inventory(
+        const inventory& crafting_inv, const std::function<bool(const item&)>& filter,
+        int batch = 1, cost_adjustment = cost_adjustment::none) const;
 
     /** @param filter see @ref can_make_with_inventory */
-    std::vector < std::string > get_folded_components_list( int width, nc_color col,
-            const inventory & crafting_inv, const std::function < bool( const item & ) > &filter,
-            int batch = 1, const std::string &hilite = "",
-            requirement_display_flags = requirement_display_flags::none ) const;
+    std::vector<std::string> get_folded_components_list(
+        int width, nc_color col, const inventory& crafting_inv,
+        const std::function<bool(const item&)>& filter, int batch = 1,
+        const std::string& hilite = "",
+        requirement_display_flags = requirement_display_flags::none) const;
 
-    std::vector < std::string > get_folded_tools_list( int width, nc_color col,
-            const inventory & crafting_inv, int batch = 1 ) const;
+    std::vector<std::string> get_folded_tools_list(
+        int width, nc_color col, const inventory& crafting_inv, int batch = 1) const;
 
     /**
      * Gets a variant of this recipe with crafting-only tools replaced by their
@@ -354,8 +346,8 @@ public:
      * Returns the item requirements to continue an in progress craft with the passed components.
      * Returned requirement_data is for *all* batches at once.
      */
-    static requirement_data continue_requirements( const std::vector < item_comp > &required_comps,
-            const std::vector < item * > &remaining_comps );
+    static requirement_data continue_requirements(
+        const std::vector<item_comp>& required_comps, const std::vector<item*>& remaining_comps);
 
     /**
      * Merge similar quality/tool/component lists.
@@ -367,53 +359,52 @@ public:
      * Compares if two requiremen_data are the same, but does not compare the requirement ids.
      * The order inside requirement vectors does not matter.
      */
-    bool has_same_requirements_as( const requirement_data & that ) const;
+    bool has_same_requirements_as(const requirement_data& that) const;
 
     /**
      * Dump to json in inline requirements format
      */
-    void dump( JsonOut & jsout ) const;
+    void dump(JsonOut& jsout) const;
 
 private:
     requirement_id id_ = requirement_id::NULL_ID();
 
     bool blacklisted = false;
 
-    bool check_enough_materials( const inventory & crafting_inv,
-                                 const std::function < bool( const item & ) > &filter, int batch = 1 ) const;
-    bool check_enough_materials( const item_comp & comp, const inventory & crafting_inv,
-                                 const std::function < bool( const item & ) > &filter, int batch = 1 ) const;
+    bool check_enough_materials(
+        const inventory& crafting_inv, const std::function<bool(const item&)>& filter,
+        int batch = 1) const;
+    bool check_enough_materials(
+        const item_comp& comp, const inventory& crafting_inv,
+        const std::function<bool(const item&)>& filter, int batch = 1) const;
 
-    template < typename T >
-    static void check_consistency( const std::vector < std::vector < T> > &vec,
-                                   const std::string & display_name );
-    template < typename T >
-    static void finalize( std::vector < std::vector < T> > &vec );
-    template < typename T >
-    static std::string print_all_objs( const std::string & header,
-                                       const std::vector < std::vector < T> > &objs );
-    template < typename T >
-    static std::string print_missing_objs( const std::string & header,
-                                           const std::vector < std::vector < T> > &objs );
-    template < typename T >
+    template <typename T>
+    static void check_consistency(
+        const std::vector<std::vector<T>>& vec, const std::string& display_name);
+    template <typename T> static void finalize(std::vector<std::vector<T>>& vec);
+    template <typename T>
+    static std::string print_all_objs(
+        const std::string& header, const std::vector<std::vector<T>>& objs);
+    template <typename T>
+    static std::string print_missing_objs(
+        const std::string& header, const std::vector<std::vector<T>>& objs);
+    template <typename T>
     static bool has_comps(
-        const inventory & crafting_inv, const std::vector < std::vector < T> > &vec,
-        const std::function < bool( const item & ) > &filter, int batch = 1,
-        cost_adjustment = cost_adjustment::none );
+        const inventory& crafting_inv, const std::vector<std::vector<T>>& vec,
+        const std::function<bool(const item&)>& filter, int batch = 1,
+        cost_adjustment = cost_adjustment::none);
 
-    template < typename T >
-    std::vector < std::string > get_folded_list( int width, const inventory & crafting_inv,
-            const std::function < bool( const item & ) > &filter,
-            const std::vector < std::vector < T> > &objs, int batch = 1,
-            const std::string &hilite = "",
-            requirement_display_flags = requirement_display_flags::none ) const;
+    template <typename T>
+    std::vector<std::string> get_folded_list(
+        int width, const inventory& crafting_inv, const std::function<bool(const item&)>& filter,
+        const std::vector<std::vector<T>>& objs, int batch = 1, const std::string& hilite = "",
+        requirement_display_flags = requirement_display_flags::none) const;
 
-    template < typename T >
-    static bool any_marked_available( const std::vector < T > &comps );
-    template < typename T >
-    static void load_obj_list( const JsonArray & jsarr, std::vector < std::vector < T> > &objs );
-    template < typename T, typename ID >
-    static const T * find_by_type( const std::vector < std::vector < T> > &vec, const ID & type );
+    template <typename T> static bool any_marked_available(const std::vector<T>& comps);
+    template <typename T>
+    static void load_obj_list(const JsonArray& jsarr, std::vector<std::vector<T>>& objs);
+    template <typename T, typename ID>
+    static const T* find_by_type(const std::vector<std::vector<T>>& vec, const ID& type);
 };
 
 // Sometimes the requirement_data is problematic, because it has overlapping
@@ -440,36 +431,33 @@ private:
 // problematic recipes this allows us to calculate crafting requirements more
 // accurately.
 class deduped_requirement_data {
-    public:
-        using alter_item_comp_vector = requirement_data::alter_item_comp_vector;
+public:
+    using alter_item_comp_vector = requirement_data::alter_item_comp_vector;
 
-        deduped_requirement_data() = default;
-        deduped_requirement_data( const requirement_data &, const recipe_id & context );
+    deduped_requirement_data() = default;
+    deduped_requirement_data(const requirement_data&, const recipe_id& context);
 
-        std::vector < requirement_data > const & alternatives() const {
-            return alternatives_;
-        }
+    std::vector<requirement_data> const& alternatives() const { return alternatives_; }
 
-        std::vector < const requirement_data * > feasible_alternatives(
-            const inventory & crafting_inv, const std::function < bool( const item & ) > &filter,
-            int batch = 1, cost_adjustment = static_cast < cost_adjustment > ( 0 ) ) const;
+    std::vector<const requirement_data*> feasible_alternatives(
+        const inventory& crafting_inv, const std::function<bool(const item&)>& filter,
+        int batch = 1, cost_adjustment = static_cast<cost_adjustment>(0)) const;
 
-        const requirement_data * select_alternative(
-            Character &, const std::function < bool( const item & ) > &filter, int batch = 1,
-            cost_adjustment = static_cast < cost_adjustment > ( 0 ) ) const;
+    const requirement_data* select_alternative(
+        Character&, const std::function<bool(const item&)>& filter, int batch = 1,
+        cost_adjustment = static_cast<cost_adjustment>(0)) const;
 
-        const requirement_data * select_alternative(
-            Character &, const inventory &, const std::function < bool( const item & ) > &filter,
-            int batch = 1, cost_adjustment = static_cast < cost_adjustment > ( 0 ) ) const;
+    const requirement_data* select_alternative(
+        Character&, const inventory&, const std::function<bool(const item&)>& filter, int batch = 1,
+        cost_adjustment = static_cast<cost_adjustment>(0)) const;
 
-        bool can_make_with_inventory(
-            const inventory & crafting_inv, const std::function < bool( const item & ) > &filter,
-            int batch = 1, cost_adjustment = static_cast < cost_adjustment > ( 0 ) ) const;
+    bool can_make_with_inventory(
+        const inventory& crafting_inv, const std::function<bool(const item&)>& filter,
+        int batch = 1, cost_adjustment = static_cast<cost_adjustment>(0)) const;
 
-        bool is_too_complex() const {
-            return is_too_complex_;
-        }
-    private:
-        bool is_too_complex_ = false;
-        std::vector < requirement_data > alternatives_;
+    bool is_too_complex() const { return is_too_complex_; }
+
+private:
+    bool is_too_complex_ = false;
+    std::vector<requirement_data> alternatives_;
 };

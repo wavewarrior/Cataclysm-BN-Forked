@@ -1,3 +1,48 @@
+#include "sdl_render_frame.h"
+
+#include "avatar.h"
+#include "cached_options.h"
+#include "calendar.h"
+#include "cata_tiles.h"
+#include "debug.h"
+#include "dynamic_atlas.h"
+#include "frame_camera.h"
+#include "frame_executor.h"
+#include "frame_history.h"
+#include "frame_plan.h"
+#include "frame_report.h"
+#include "game.h"
+#include "game_constants.h"
+#include "hud_shake.h"
+#include "level_cache_freshness.h"
+#include "lighting/dev_test_lights.h"
+#include "lighting/dust_mote_effect.h"
+#include "lighting/frame_build.h"
+#include "lighting/godray_shaft_pass.h"
+#include "lighting/gpu_emitter.h"
+#include "lighting/lighting_settings.h"
+#include "lighting/overmap_view_flag.h"
+#include "lighting/render_state.h"
+#include "lighting/rmlui_layer.h"
+#include "lighting/sdf_pass.h"
+#include "lightmap.h"
+#include "map.h"
+#include "output.h"
+#include "panels.h"
+#include "point.h"
+#include "profile.h"
+#include "sdl_display.h"
+#include "sdl_font.h"
+#include "sdl_fonts.h"
+#include "sdl_geometry.h"
+#include "sdl_lighting_devui.h"
+#include "sdl_wrappers.h"
+#include "splatmap_stamps.h" // splatmap::active
+#include "tile_light_mode.h"
+#include "weather.h"
+#include "weather_type.h"
+#include "worldfactory.h"
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -9,51 +54,7 @@
 #include <string>
 #include <utility>
 
-#include "avatar.h"
-#include "calendar.h"
-#include "cached_options.h"
-#include "cata_tiles.h"
-#include "dynamic_atlas.h"
-#include "frame_camera.h"
-#include "frame_executor.h"
-#include "frame_history.h"
-#include "frame_plan.h"
-#include "frame_report.h"
-#include "game_constants.h"
-#include "level_cache_freshness.h"
-#include "map.h"
-#include "debug.h"
-#include "panels.h"
-#include "game.h"
-#include "profile.h"
-#include "output.h"
-#include "point.h"
-#include "sdl_display.h"
-#include "sdl_font.h"
-#include "sdl_fonts.h"
-#include "sdl_geometry.h"
-#include "sdl_lighting_devui.h"
-#include "lighting/lighting_settings.h"
-#include "sdl_render_frame.h"
-#include "hud_shake.h"
-#include "sdl_wrappers.h"
-#include "splatmap_stamps.h" // splatmap::active
-#include "tile_light_mode.h"
-#include "lighting/dev_test_lights.h"
-#include "lighting/gpu_emitter.h"
-#include "lighting/godray_shaft_pass.h"
-#include "lighting/dust_mote_effect.h"
-#include "lighting/frame_build.h"
-#include "lighting/overmap_view_flag.h"
-#include "lighting/rmlui_layer.h"
-#include "lighting/render_state.h"
-#include "lighting/sdf_pass.h"
-#include "lightmap.h"
-#include "weather.h"
-#include "weather_type.h"
-#include "worldfactory.h"
-
-#define dbg(x) DebugLogFL((x),DC::Main)
+#define dbg(x) DebugLogFL((x), DC::Main)
 
 using namespace std::literals;
 
@@ -67,24 +68,23 @@ bool g_show_fps = false;
 // Per-phase render-body timing is owned by the frame plan: `frame_executor` times each
 // step into a `frame_report`, and the 120-frame window in `refresh_display` aggregates
 // the report under the ten legacy phase names (`frame_lap_names`).
-namespace
-{
+namespace {
 /// Sums and maxes of the ten legacy phases over the current 120-frame window. A
 /// frame's contribution to a lap is that lap's per-frame total (`frame_report::lap_ms`),
 /// so a multi-step lap (`flush_gather`, `ui_a`) is sampled as one number, as before.
 struct perf_window {
     std::array<double, 10> sum{};
     std::array<double, 10> max{};
-    void accumulate( const frame_report &report ) {
-        for( std::size_t i = 0; i < sum.size(); ++i ) {
-            const double ms = report.lap_ms( i );
+    void accumulate(const frame_report& report) {
+        for (std::size_t i = 0; i < sum.size(); ++i) {
+            const double ms = report.lap_ms(i);
             sum[i] += ms;
-            max[i] = std::max( max[i], ms );
+            max[i] = std::max(max[i], ms);
         }
     }
     void reset() {
-        sum.fill( 0.0 );
-        max.fill( 0.0 );
+        sum.fill(0.0);
+        max.fill(0.0);
     }
 };
 perf_window s_perf_window;
@@ -112,11 +112,10 @@ perf_window s_perf_window;
 //     scene radiance.
 //   - maybe_push_menu_background: overrides light_mode to gpu_lit on its own copy so the
 //     main-menu backdrop takes part in the standard lighting composite (see below).
-static lighting::sprite_instance fullscreen_quad( float w, float h )
-{
+static lighting::sprite_instance fullscreen_quad(float w, float h) {
     lighting::sprite_instance q{};
-    q.dst_w  = w;
-    q.dst_h  = h;
+    q.dst_w = w;
+    q.dst_h = h;
     q.src_uw = 1.f;
     q.src_vh = 1.f;
     q.tint_r = 1.f;
@@ -124,37 +123,36 @@ static lighting::sprite_instance fullscreen_quad( float w, float h )
     q.tint_b = 1.f;
     q.tint_a = 1.f;
     // Identity blit: no radiance term, albedo x tint only.
-    q.light_mode = static_cast<float>( sprite_light_mode::unlit );
+    q.light_mode = static_cast<float>(sprite_light_mode::unlit);
     return q;
 }
 
 // Frame phase helpers — file-local, orchestrated by refresh_display (end of file).
 // Forward-declared (static) so calls resolve regardless of definition order and
 // the definitions below take internal linkage.
-static auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_context>;
-static auto build_lighting( lighting::render_state &rs,
-                            lighting::lighting_settings &cfg ) -> bool;
-static auto flush_and_gather_rc( lighting::render_state &rs, lighting::frame_context &ctx,
-                                 bool rc_rebuild, frame_executor &exec,
-                                 lighting::lighting_settings &cfg ) -> void;
-static auto assemble_light_inputs( lighting::render_state &rs,
-                                   const lighting::lighting_settings &cfg ) -> void;
-static auto maybe_push_menu_background( lighting::render_state &rs,
-                                        lighting::frame_context &ctx ) -> void;
-static auto draw_lighting_overlays( lighting::render_state &rs ) -> void;
-static auto composite_ui_pass_a( lighting::render_state &rs, lighting::frame_context &ctx,
-                                 int proj_w, int proj_h ) -> void;
-static auto composite_avatar_pass( lighting::render_state &rs,
-                                   lighting::frame_context &ctx ) -> void;
-static auto composite_vehicle_pass( lighting::render_state &rs,
-                                    lighting::frame_context &ctx ) -> void;
-static auto render_world_pass_w( lighting::render_state &rs, lighting::frame_context &ctx,
-                                 int proj_w, int proj_h,
-                                 const lighting::lighting_settings &cfg ) -> void;
-static auto tonemap_pass_t( lighting::render_state &rs, lighting::frame_context &ctx,
-                            const lighting::lighting_settings &cfg ) -> void;
-static auto composite_swapchain_pass_b( lighting::render_state &rs, lighting::frame_context &ctx,
-                                        int proj_w, int proj_h ) -> void;
+static auto begin_frame(lighting::render_state& rs) -> std::optional<lighting::frame_context>;
+static auto build_lighting(lighting::render_state& rs, lighting::lighting_settings& cfg) -> bool;
+static auto flush_and_gather_rc(
+    lighting::render_state& rs, lighting::frame_context& ctx, bool rc_rebuild, frame_executor& exec,
+    lighting::lighting_settings& cfg) -> void;
+static auto assemble_light_inputs(
+    lighting::render_state& rs, const lighting::lighting_settings& cfg) -> void;
+static auto maybe_push_menu_background(lighting::render_state& rs, lighting::frame_context& ctx)
+    -> void;
+static auto draw_lighting_overlays(lighting::render_state& rs) -> void;
+static auto composite_ui_pass_a(
+    lighting::render_state& rs, lighting::frame_context& ctx, int proj_w, int proj_h) -> void;
+static auto composite_avatar_pass(lighting::render_state& rs, lighting::frame_context& ctx) -> void;
+static auto composite_vehicle_pass(lighting::render_state& rs, lighting::frame_context& ctx)
+    -> void;
+static auto render_world_pass_w(
+    lighting::render_state& rs, lighting::frame_context& ctx, int proj_w, int proj_h,
+    const lighting::lighting_settings& cfg) -> void;
+static auto tonemap_pass_t(
+    lighting::render_state& rs, lighting::frame_context& ctx,
+    const lighting::lighting_settings& cfg) -> void;
+static auto composite_swapchain_pass_b(
+    lighting::render_state& rs, lighting::frame_context& ctx, int proj_w, int proj_h) -> void;
 
 // The frame's camera (T3, #108): derived ONCE per frame by `run_frame_plan` and read by
 // every consumer in this TU, replacing the six sites that re-derived it and could
@@ -167,11 +165,10 @@ static frame_camera s_frame_camera;
 /// The day's raw facts, read where the two derivations read them, fed to the pure
 /// `derive_frame_camera`. The tile-context origin is stale between redraws BY DESIGN
 /// (`cata_tiles::draw` owns it); the clip rect is recomputed from the player instead.
-static auto derive_live_frame_camera( const lighting::frame_context &ctx ) -> frame_camera
-{
+static auto derive_live_frame_camera(const lighting::frame_context& ctx) -> frame_camera {
     frame_camera_source src;
-    src.have_game = static_cast<bool>( g );
-    if( g ) {
+    src.have_game = static_cast<bool>(g);
+    if (g) {
         src.player_x = g->u.bub_pos().x();
         src.player_y = g->u.bub_pos().y();
         src.player_z = g->u.bub_pos().z();
@@ -180,8 +177,8 @@ static auto derive_live_frame_camera( const lighting::frame_context &ctx ) -> fr
     }
     src.pos_x = POSX;
     src.pos_y = POSY;
-    src.have_tile_context = static_cast<bool>( tilecontext );
-    if( tilecontext ) {
+    src.have_tile_context = static_cast<bool>(tilecontext);
+    if (tilecontext) {
         src.tile_w = tilecontext->get_tile_width();
         src.tile_h = tilecontext->get_tile_height();
         src.screentile_w = tilecontext->get_screentile_width();
@@ -193,23 +190,16 @@ static auto derive_live_frame_camera( const lighting::frame_context &ctx ) -> fr
         src.draw_off_px_x = op.x;
         src.draw_off_px_y = op.y;
     }
-    src.screen_w = static_cast<int>( ctx.swapchain_w );
-    src.screen_h = static_cast<int>( ctx.swapchain_h );
-    return derive_frame_camera( src );
+    src.screen_w = static_cast<int>(ctx.swapchain_w);
+    src.screen_h = static_cast<int>(ctx.swapchain_h);
+    return derive_frame_camera(src);
 }
 
-auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_context>
-{
-    if( test_mode ) {
-        return std::nullopt;
-    }
-    if( !rs.ready() ) {
-        return std::nullopt;
-    }
+auto begin_frame(lighting::render_state& rs) -> std::optional<lighting::frame_context> {
+    if (test_mode) { return std::nullopt; }
+    if (!rs.ready()) { return std::nullopt; }
     // RmlUi: lazy init; init() self-guards so this only truly attempts once.
-    if( !rmlui_layer::ready() ) {
-        rmlui_layer::init( rs.device() );
-    }
+    if (!rmlui_layer::ready()) { rmlui_layer::init(rs.device()); }
 
     // F4 opens the RmlUi dev panel (devui_visible()), rendered via the normal RmlUi
     // composite pass.
@@ -220,31 +210,28 @@ auto begin_frame( lighting::render_state &rs ) -> std::optional<lighting::frame_
     rs.fonts().begin_frame();
 
     lighting::frame_context ctx = rs.device().begin_frame();
-    if( !ctx.valid() ) {
-        return std::nullopt;
-    }
-    if( !ctx.swapchain_tex ) {
+    if (!ctx.valid()) { return std::nullopt; }
+    if (!ctx.swapchain_tex) {
         // Acquire succeeded but the drawable is transiently unavailable (window
         // occluded/minimised, or a timing gap during the rapid loading-screen
         // frames). Presenting a nil drawable aborts on Metal
         // (presentDrawable: "drawable must not be nil"), so CANCEL the command
         // buffer — submit_frame would present and crash.
-        rs.device().cancel_frame( ctx );
+        rs.device().cancel_frame(ctx);
         return std::nullopt;
     }
     return ctx;
 }
 
 // Structure rebuilds since the last [render][perf] window (reported as rebuilds=k/n).
-namespace { int s_rebuild_in_window = 0; } // namespace
+namespace {
+int s_rebuild_in_window = 0;
+} // namespace
 
-auto build_lighting( lighting::render_state &rs, lighting::lighting_settings &cfg ) -> bool
-{
-    ZoneScopedN( "render_build_lighting" );
+auto build_lighting(lighting::render_state& rs, lighting::lighting_settings& cfg) -> bool {
+    ZoneScopedN("render_build_lighting");
     bool rc_rebuild = false;
-    if( !rs.collector() ) {
-        return rc_rebuild;
-    }
+    if (!rs.collector()) { return rc_rebuild; }
 
     // P3: gate SDF rebuild on transparency_generation change, not turn.
     // Creatures moving don't change the SDF (they're emitters only, not occluders).
@@ -274,19 +261,19 @@ auto build_lighting( lighting::render_state &rs, lighting::lighting_settings &cf
     lighting::lighting_rebuild_flags rebuild{};
     int px = 0, py = 0;
     std::uint64_t gen = 0;
-    if( g && world_generator && world_generator->active_world ) {
+    if (g && world_generator && world_generator->active_world) {
         // ADR-0002: derive the plan at the consumption point. The skip policy is the
         // gate's honest demand: it needs pose and occluder stamps only, and must not
         // escalate a lightmap bit a frame rebuild cannot clear.
         const int z = g->u.bub_pos().z();
-        const auto plan = level_cache_freshness::plan_for( g->m,
-                          level_cache_freshness::pose_of_viewer( g->u, z ),
-                          level_cache_freshness::lightmap_policy::skip );
+        const auto plan = level_cache_freshness::plan_for(
+            g->m, level_cache_freshness::pose_of_viewer(g->u, z),
+            level_cache_freshness::lightmap_policy::skip);
         // Occluder-set stamp for the viewed level: the module folds transparency and
         // outside advances (sky_vis is built on a different schedule; without that term
         // a snapshot taken before the map populated outside_cache stayed zero forever,
         // killing the sun term). Compared opaquely, never interpreted.
-        gen = plan.occluder[static_cast<size_t>( z + OVERMAP_DEPTH )];
+        gen = plan.occluder[static_cast<size_t>(z + OVERMAP_DEPTH)];
         px = plan.pose.viewer.x();
         py = plan.pose.viewer.y();
 
@@ -296,33 +283,32 @@ auto build_lighting( lighting::render_state &rs, lighting::lighting_settings &cf
         // far enough that newly-scrolled-in occluders would still be carrying their
         // coarse tile-square fallback seed. Camera pan itself does not force it: the
         // SDF is bubble-indexed, panning one tile per step does not change its content.
-        auto &pulses = cfg.pulses;
-        const rebuild_gate_knobs knobs {
+        auto& pulses = cfg.pulses;
+        const rebuild_gate_knobs knobs{
             sdl_lighting_devui::devui_visible(),
             pulses.force_rebuild == lighting::force_rebuild_mode::every_frame,
-            pulses.force_rebuild == lighting::force_rebuild_mode::once
-        };
+            pulses.force_rebuild == lighting::force_rebuild_mode::once};
         // Decide, then commit right after the decision and before anything is
         // rebuilt: the commit takes the force-once pulse, bumps the window's rebuild
         // counter and advances the stamps, in the order the file-statics were written
         // at :258-294 before this cutover.
         const rebuild_decision d = gate_and_commit_frame_history(
-        { rs.history(), plan, knobs, pulses, s_rebuild_in_window } );
+            {rs.history(), plan, knobs, pulses, s_rebuild_in_window});
         rebuild.structure = d.structure;
         rebuild.vis = d.vis;
     }
 
-    if( cursor_light_emitter::enabled && g && s_frame_camera.have_tile_context
-        && world_generator && world_generator->active_world ) {
+    if (cursor_light_emitter::enabled && g && s_frame_camera.have_tile_context && world_generator
+        && world_generator->active_world) {
         float msx = 0.0f, msy = 0.0f;
-        SDL_GetMouseState( &msx, &msy );
+        SDL_GetMouseState(&msx, &msy);
         // The inverse of the drawing transform, from the frame's camera (T3):
         // the stale tile-context origin and the raw pixel offset, clamped tile
         // size — the expression this site hand-wrote.
-        const std::pair<float, float> w = s_frame_camera.world_tile_at( msx, msy );
+        const std::pair<float, float> w = s_frame_camera.world_tile_at(msx, msy);
         cursor_light_emitter::wx = w.first;
         cursor_light_emitter::wy = w.second;
-        cursor_light_emitter::wz = static_cast<float>( s_frame_camera.player_z );
+        cursor_light_emitter::wz = static_cast<float>(s_frame_camera.player_z);
     }
 
     // Dev test lights/sounds: keep the hovered world-tile fresh regardless of
@@ -330,17 +316,16 @@ auto build_lighting( lighting::render_state &rs, lighting::lighting_settings &cf
     // (see place_test_light()/place_test_sound()), so closing the panel for
     // an unobstructed view no longer breaks click-to-place. Placed lights are
     // no longer auto-cleared on close; use the panel's "clear placed" button.
-    if( g && s_frame_camera.have_tile_context && world_generator
-        && world_generator->active_world ) {
+    if (g && s_frame_camera.have_tile_context && world_generator && world_generator->active_world) {
         float msx = 0.0f, msy = 0.0f;
-        SDL_GetMouseState( &msx, &msy );
-        const std::pair<float, float> w = s_frame_camera.world_tile_at( msx, msy );
+        SDL_GetMouseState(&msx, &msy);
+        const std::pair<float, float> w = s_frame_camera.world_tile_at(msx, msy);
         dev_test_lights::hover_wx = w.first;
         dev_test_lights::hover_wy = w.second;
-        dev_test_lights::hover_wz = static_cast<float>( s_frame_camera.player_z );
+        dev_test_lights::hover_wz = static_cast<float>(s_frame_camera.player_z);
     }
 
-    dbg( DL::Debug ) << "[render] build_and_submit_lighting START";
+    dbg(DL::Debug) << "[render] build_and_submit_lighting START";
     // B1: bound the SDF rebuild to the on-screen tile rect. Origin + extent come
     // from the frame's camera (T3): bubble-local tile coords (the same space as
     // the SDF grid), recomputed from the PLAYER rather than read from
@@ -349,29 +334,25 @@ auto build_lighting( lighting::render_state &rs, lighting::lighting_settings &cf
     // fires without a preceding redraw (e.g. pump_events at end of turn).
     // Whole-bubble (no tile context, e.g. the main menu) keeps the -1/-1/0/0
     // sentinel the consumer's `cam_w > 0` fallback expects.
-    const frame_camera &fcam = s_frame_camera;
-    lighting::frame_lighting_result fr =
-        lighting::build_and_submit_lighting( rs, rebuild, /*want_hud_snapshot=*/true,
-            g_skylight_bleed, fcam.cam_x0, fcam.cam_y0, fcam.cam_w, fcam.cam_h );
+    const frame_camera& fcam = s_frame_camera;
+    lighting::frame_lighting_result fr = lighting::build_and_submit_lighting(
+        rs, rebuild, /*want_hud_snapshot=*/true, g_skylight_bleed, fcam.cam_x0, fcam.cam_y0,
+        fcam.cam_w, fcam.cam_h);
     rc_rebuild = fr.built_pertile;
-    DebugLogFL( DL::Info, DC::Main )
-            << "[flash][gpu] rebuild: struct=" << rebuild.structure
-            << " vis=" << rebuild.vis
-            << " rc=" << rc_rebuild
-            << " origin=" << ( g ? g->m.get_abs_sub().raw().to_string() : "?" )
-            << " px=" << px << " py=" << py
-            << " gen=" << ( g ? std::to_string( gen ) : "?" )
-            << " cam_xy0=" << fcam.cam_x0 << "," << fcam.cam_y0
-            << " cam_wh=" << fcam.cam_w << "x" << fcam.cam_h;
-    if( fr.built_pertile ) {
-        s_emo.trans_at_player    = fr.trans_at_player;
-        s_emo.sdf_W_at_submit    = fr.sdf_W;
+    DebugLogFL(DL::Info, DC::Main)
+        << "[flash][gpu] rebuild: struct=" << rebuild.structure << " vis=" << rebuild.vis
+        << " rc=" << rc_rebuild << " origin=" << (g ? g->m.get_abs_sub().raw().to_string() : "?")
+        << " px=" << px << " py=" << py << " gen=" << (g ? std::to_string(gen) : "?") << " cam_xy0="
+        << fcam.cam_x0 << "," << fcam.cam_y0 << " cam_wh=" << fcam.cam_w << "x" << fcam.cam_h;
+    if (fr.built_pertile) {
+        s_emo.trans_at_player = fr.trans_at_player;
+        s_emo.sdf_W_at_submit = fr.sdf_W;
         s_emo.sdf_size_at_submit = fr.sdf_size;
     }
     // s_emo.snap is now consumed every frame by the emitter_glow_pass (decorative
     // light-glow overlay), not just the g_dbg_lighting debug crosshair overlay
     // further below — so this must stay unconditional.
-    s_emo.snap = std::move( fr.snapshot_copy );
+    s_emo.snap = std::move(fr.snapshot_copy);
     return rc_rebuild;
 }
 
@@ -379,23 +360,20 @@ auto build_lighting( lighting::render_state &rs, lighting::lighting_settings &cf
 // night. The compute sky/sun march (direction + elevation) and the fragment
 // Cloud dimming valid at any hour (unlike the daytime sunlight()-ratio mult):
 // clear weather (light_modifier≈0) → 1.0; heavy overcast (≈-60..-100) → ~0.3.
-static float weather_cloud_mult()
-{
-    if( !g ) { return 1.0f; }
+static float weather_cloud_mult() {
+    if (!g) { return 1.0f; }
     const weather_type_id wid = get_weather().weather_id;
-    if( !wid.is_valid() ) { return 1.0f; }
-    return std::clamp( 1.0f + static_cast<float>( wid->light_modifier ) / 100.0f,
-                       0.3f, 1.0f );
+    if (!wid.is_valid()) { return 1.0f; }
+    return std::clamp(1.0f + static_cast<float>(wid->light_modifier) / 100.0f, 0.3f, 1.0f);
 }
 
 // Weather-driven rain intensity (GPU rain). Returns 0 when no rain or no game
 // session; dev slider g_rain_intensity serves as fallback for menu testing.
-static auto weather_rain_intensity() -> float
-{
-    if( g ) {
+static auto weather_rain_intensity() -> float {
+    if (g) {
         const weather_type_id wid = get_weather().weather_id;
-        if( wid.is_valid() && wid->rains ) {
-            switch( wid->precip ) {
+        if (wid.is_valid() && wid->rains) {
+            switch (wid->precip) {
                 case precip_class::very_light:
                     return 0.1f;
                 case precip_class::light:
@@ -411,7 +389,7 @@ static auto weather_rain_intensity() -> float
             return 0.0f;
         }
     }
-    return std::clamp( g_rain_intensity, 0.f, 1.f );
+    return std::clamp(g_rain_intensity, 0.f, 1.f);
 }
 
 // shading (colour + intensity) both want ONE light, so we fold the moon into the
@@ -422,26 +400,23 @@ static auto weather_rain_intensity() -> float
 // way (the sky-dome glow is not the moon). No shader/struct change: the moon is
 // just the sun term with swapped direction/colour/intensity, occluded by the
 // same SkyBuf.a coverage march.
-static lighting::sun_params make_celestial_params( const time_point &when, float hour )
-{
-    lighting::sun_params sp = lighting::make_sun_params( hour );
+static lighting::sun_params make_celestial_params(const time_point& when, float hour) {
+    lighting::sun_params sp = lighting::make_sun_params(hour);
     float moon_hour = hour + 12.0f;
-    if( moon_hour >= 24.0f ) {
-        moon_hour -= 24.0f;
-    }
-    const lighting::sun_params mp = lighting::make_sun_params( moon_hour );
+    if (moon_hour >= 24.0f) { moon_hour -= 24.0f; }
+    const lighting::sun_params mp = lighting::make_sun_params(moon_hour);
     // Phase illumination: NEW(0)→0 … FULL(4)→1 … WANING→0 (enum 0..7).
-    float phase_d = 4.0f - static_cast<float>( get_moon_phase( when ) );
+    float phase_d = 4.0f - static_cast<float>(get_moon_phase(when));
     phase_d = phase_d < 0.0f ? -phase_d : phase_d;
-    const float illum = std::clamp( 1.0f - phase_d / 4.0f, 0.0f, 1.0f );
-    constexpr float MOON_MAX = 0.18f;   // peak full-moon directional intensity
+    const float illum = std::clamp(1.0f - phase_d / 4.0f, 0.0f, 1.0f);
+    constexpr float MOON_MAX = 0.18f; // peak full-moon directional intensity
     const float moon_int = illum * MOON_MAX;
-    if( moon_int > sp.sun_intensity ) {
-        sp.sun_dir_x     = mp.sun_dir_x;
-        sp.sun_dir_y     = mp.sun_dir_y;
-        sp.sun_sin_elev  = mp.sun_sin_elev;
+    if (moon_int > sp.sun_intensity) {
+        sp.sun_dir_x = mp.sun_dir_x;
+        sp.sun_dir_y = mp.sun_dir_y;
+        sp.sun_sin_elev = mp.sun_sin_elev;
         sp.sun_intensity = moon_int * weather_cloud_mult(); // P6a: clouds dim the moon
-        sp.sun_r = 0.55f;   // cold blue-white moonlight
+        sp.sun_r = 0.55f;                                   // cold blue-white moonlight
         sp.sun_g = 0.65f;
         sp.sun_b = 0.95f;
     }
@@ -466,31 +441,25 @@ static lighting::sun_params make_celestial_params( const time_point &when, float
 /// that pass. Driving the in-game clock through the debug menu is the other option and it
 /// is flaky — a dropped keypress leaves a night frame that looks entirely plausible in a
 /// screenshot folder, which is exactly the failure this hook removes.
-static auto forced_celestial_hour() -> const std::optional<float> &// *NOPAD*
-{
+static auto forced_celestial_hour() -> const std::optional<float>& {
     static const std::optional<float> forced = []() -> std::optional<float> {
-        const char *const raw = std::getenv( "CBN_FORCE_SUN_HOUR" );
-        if( !raw ) {
+        const char* const raw = std::getenv("CBN_FORCE_SUN_HOUR");
+        if (!raw) { return std::nullopt; }
+        char* end = nullptr;
+        const float h = std::strtof(raw, &end);
+        if (end == raw || h < 0.0f || h > 24.0f) {
+            dbg(DL::Error) << "CBN_FORCE_SUN_HOUR: expected 0..24, got '" << raw << "', ignoring";
             return std::nullopt;
         }
-        char *end = nullptr;
-        const float h = std::strtof( raw, &end );
-        if( end == raw || h < 0.0f || h > 24.0f )
-        {
-            dbg( DL::Error ) << "CBN_FORCE_SUN_HOUR: expected 0..24, got '" << raw
-                             << "', ignoring";
-            return std::nullopt;
-        }
-        dbg( DL::Info ) << "CBN_FORCE_SUN_HOUR: celestial hour pinned to " << h;
+        dbg(DL::Info) << "CBN_FORCE_SUN_HOUR: celestial hour pinned to " << h;
         return h;
     }();
     return forced;
 }
 
-static auto celestial_hour() -> float
-{
-    const std::optional<float> &forced = forced_celestial_hour();
-    return forced ? *forced : ( g ? hour_of_day<float>( calendar::turn ) : 12.0f );
+static auto celestial_hour() -> float {
+    const std::optional<float>& forced = forced_celestial_hour();
+    return forced ? *forced : (g ? hour_of_day<float>(calendar::turn) : 12.0f);
 }
 
 // Step 4 (atmospheric-lighting-coherence plan): time-of-day base colour grade.
@@ -508,49 +477,53 @@ struct tod_grade {
     float contrast = 0.0f;
 };
 
-static auto time_of_day_grade( float hour ) -> tod_grade
-{
-    struct anchor { float h; tod_grade g; };
-    static constexpr tod_grade NIGHT{ -0.06f, 0.02f, 0.85f, 0.03f };
-    static constexpr tod_grade DAWN_DUSK{ 0.10f, -0.02f, 1.10f, 0.0f };
-    static constexpr tod_grade DAY{ 0.0f, 0.0f, 1.0f, 0.0f };
-    static const std::array<anchor, 7> anchors{ {
-            { 2.0f, NIGHT }, { 5.0f, NIGHT }, { 6.5f, DAWN_DUSK }, { 8.0f, DAY },
-            { 18.0f, DAY }, { 19.5f, DAWN_DUSK }, { 21.0f, NIGHT },
-        } };
+static auto time_of_day_grade(float hour) -> tod_grade {
+    struct anchor {
+        float h;
+        tod_grade g;
+    };
+    static constexpr tod_grade NIGHT{-0.06f, 0.02f, 0.85f, 0.03f};
+    static constexpr tod_grade DAWN_DUSK{0.10f, -0.02f, 1.10f, 0.0f};
+    static constexpr tod_grade DAY{0.0f, 0.0f, 1.0f, 0.0f};
+    static const std::array<anchor, 7> anchors{{
+        {2.0f, NIGHT},
+        {5.0f, NIGHT},
+        {6.5f, DAWN_DUSK},
+        {8.0f, DAY},
+        {18.0f, DAY},
+        {19.5f, DAWN_DUSK},
+        {21.0f, NIGHT},
+    }};
     // Wrap hour into [2, 26) so it always falls between two adjacent anchors,
     // including across the midnight seam (anchors[0] doubles as the h=26 wrap).
     float h = hour;
-    if( h < anchors.front().h ) { h += 24.0f; }
-    for( std::size_t i = 0; i + 1 < anchors.size(); ++i ) {
-        const anchor &a = anchors[i];
-        const anchor &b = anchors[i + 1];
-        if( h <= b.h ) {
-            const float t = ( b.h > a.h ) ? ( h - a.h ) / ( b.h - a.h ) : 0.0f;
+    if (h < anchors.front().h) { h += 24.0f; }
+    for (std::size_t i = 0; i + 1 < anchors.size(); ++i) {
+        const anchor& a = anchors[i];
+        const anchor& b = anchors[i + 1];
+        if (h <= b.h) {
+            const float t = (b.h > a.h) ? (h - a.h) / (b.h - a.h) : 0.0f;
             return tod_grade{
-                std::lerp( a.g.temperature, b.g.temperature, t ),
-                std::lerp( a.g.tint, b.g.tint, t ),
-                std::lerp( a.g.saturation_mul, b.g.saturation_mul, t ),
-                std::lerp( a.g.contrast, b.g.contrast, t ),
+                std::lerp(a.g.temperature, b.g.temperature, t),
+                std::lerp(a.g.tint, b.g.tint, t),
+                std::lerp(a.g.saturation_mul, b.g.saturation_mul, t),
+                std::lerp(a.g.contrast, b.g.contrast, t),
             };
         }
     }
     return NIGHT; // h in (21, 26]: interpolates NIGHT->NIGHT (the wrap), always flat
 }
 
-auto flush_and_gather_rc( lighting::render_state &rs,
-                          lighting::frame_context &ctx, bool rc_rebuild,
-                          frame_executor &exec, lighting::lighting_settings &cfg ) -> void
-{
-    ZoneScopedN( "render_flush_gather_rc" );
+auto flush_and_gather_rc(
+    lighting::render_state& rs, lighting::frame_context& ctx, bool rc_rebuild, frame_executor& exec,
+    lighting::lighting_settings& cfg) -> void {
+    ZoneScopedN("render_flush_gather_rc");
     // The fused lighting group: this body IS the plan's six lighting steps, in this
     // order. Each `split` closes the member before it and opens the next, so the
     // executor's timings and the plan's asserted order cannot drift apart.
-    if( rs.collector() ) {
-        rs.collector()->flush_to_render_cb( ctx.cmd_buffer );
-    }
+    if (rs.collector()) { rs.collector()->flush_to_render_cb(ctx.cmd_buffer); }
 
-    exec.split( frame_step_kind::gpu_sdf );
+    exec.split(frame_step_kind::gpu_sdf);
     // P3.3: GPU JFA SDF — the SOLE writer of sdf_storage_. Recorded INDEPENDENTLY
     // of GI/sky pipeline readiness: the CPU Euclidean DT it replaced never
     // depended on them, and a backend that fails to create the GI/sky compute
@@ -566,17 +539,15 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     // though sky/sun consumes no GI data. A pass may now be culled only by its
     // own readiness, never by an unrelated sibling's.
     const bool sdf_populated = rc_rebuild && rs.sdf().populated() && rs.sdf().sdf_buffer();
-    const std::uint32_t map_w =
-        sdf_populated ? static_cast<std::uint32_t>( rs.sdf().map_w() ) : 0u;
-    const std::uint32_t map_h =
-        sdf_populated ? static_cast<std::uint32_t>( rs.sdf().map_h() ) : 0u;
+    const std::uint32_t map_w = sdf_populated ? static_cast<std::uint32_t>(rs.sdf().map_w()) : 0u;
+    const std::uint32_t map_h = sdf_populated ? static_cast<std::uint32_t>(rs.sdf().map_h()) : 0u;
 
     bool sdf_ran = false;
     std::string sdf_reason = "rc_or_sdf_buf";
-    if( sdf_populated && rs.gpu_sdf().ready() && rs.sdf().trans_buffer() ) {
-        rs.gpu_sdf().record( ctx.cmd_buffer, rs.sdf().trans_buffer(),
-                             rs.sdf().sdf_buffer(), map_w, map_h,
-                             rs.occluders(), cfg.debug.occ_soft_gain );
+    if (sdf_populated && rs.gpu_sdf().ready() && rs.sdf().trans_buffer()) {
+        rs.gpu_sdf()
+            .record(ctx.cmd_buffer, rs.sdf().trans_buffer(), rs.sdf().sdf_buffer(), map_w, map_h,
+                    rs.occluders(), cfg.debug.occ_soft_gain);
         sdf_ran = true;
         // Step 2/3 diagnostic: the seed's new input. Fires only on an SDF rebuild,
         // not per frame, so it is safe at Info level. `partial` is the positive
@@ -584,29 +555,29 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         // nonzero count makes occ_soft_gain=0 an observable change (hard occluders
         // are unaffected by design).
         const auto& occ = rs.occluders();
-        const std::size_t captured =
-            static_cast<std::size_t>( std::ranges::count( occ.captured_mask(), std::uint8_t{1} ) );
-        const std::size_t hard = static_cast<std::size_t>( std::ranges::count_if(
-                                     occ.quads(),
-        []( const lighting::occluder_quad & q ) { return q.block >= 0.999f; } ) );
-        DebugLogFL( DL::Info, DC::Main )
-                << "[lighting][occ] quads=" << occ.quads().size() << " hard=" << hard
-                << " partial=" << ( occ.quads().size() - hard )
-                << " captured_tiles=" << captured
-                << " grid=" << occ.width() << "x" << occ.height()
-                << " soft_gain=" << cfg.debug.occ_soft_gain;
-    } else if( sdf_populated ) {
+        const std::size_t captured = static_cast<std::size_t>(
+            std::ranges::count(occ.captured_mask(), std::uint8_t{1}));
+        const std::size_t hard = static_cast<
+            std::size_t>(std::ranges::count_if(occ.quads(), [](const lighting::occluder_quad& q) {
+            return q.block >= 0.999f;
+        }));
+        DebugLogFL(DL::Info, DC::Main)
+            << "[lighting][occ] quads=" << occ.quads().size() << " hard=" << hard << " partial="
+            << (occ.quads().size() - hard) << " captured_tiles=" << captured << " grid="
+            << occ.width() << "x" << occ.height() << " soft_gain=" << cfg.debug.occ_soft_gain;
+    } else if (sdf_populated) {
         sdf_reason = !rs.gpu_sdf().ready() ? "gpu_sdf_ready" : "trans_buf";
     }
 
-    exec.split( frame_step_kind::sky_sun );
+    exec.split(frame_step_kind::sky_sun);
     // Celestial light params drive BOTH the sky/sun pass and the GI daylight
     // injection, so derive them once whenever either might run. Weather-
     // independent (intensity/colour applied fragment-side); cheap, so no wait
     // on assemble_light_inputs.
     const lighting::sun_params sp =
-        sdf_populated ? make_celestial_params( calendar::turn, celestial_hour() )
-        : lighting::sun_params{};
+        sdf_populated
+            ? make_celestial_params(calendar::turn, celestial_hour())
+            : lighting::sun_params{};
 
     // Stage 2a/2b: directional sky/sun pass. Marches the unified coverage
     // occluder field (OccBuf: height + roof) in 3D toward the celestial light →
@@ -617,29 +588,29 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     // even though the two blocks are now gated independently of each other.
     bool sky_ran = false;
     std::string sky_reason = "rc_or_sdf_buf";
-    if( g_sky_sun_enable && sdf_populated && rs.sky().ready() && rs.sdf().occ_buffer() ) {
+    if (g_sky_sun_enable && sdf_populated && rs.sky().ready() && rs.sdf().occ_buffer()) {
         lighting::sky_sun_params kp{};
-        kp.map_w        = map_w;
-        kp.map_h        = map_h;
-        kp.sun_dir_x    = sp.sun_dir_x;
-        kp.sun_dir_y    = sp.sun_dir_y;
+        kp.map_w = map_w;
+        kp.map_h = map_h;
+        kp.sun_dir_x = sp.sun_dir_x;
+        kp.sun_dir_y = sp.sun_dir_y;
         kp.sun_sin_elev = sp.sun_sin_elev;
         // Step 3: sky-portal scan knobs (roofed probes only).
         kp.portal_reach = cfg.debug.portal_reach;
-        kp.portal_dirs  = static_cast<std::uint32_t>( std::max( 1.0f, cfg.debug.portal_dirs ) );
+        kp.portal_dirs = static_cast<std::uint32_t>(std::max(1.0f, cfg.debug.portal_dirs));
         // P5b: F4-tunable sky/sun quality knobs.
-        kp.sky_dirs     = static_cast<std::uint32_t>( std::max( 1.0f, cfg.debug.sky_dirs ) );
-        kp.sky_reach    = cfg.debug.sky_reach;
-        kp.sun_steps    = static_cast<std::uint32_t>( std::max( 1.0f, cfg.debug.sun_steps ) );
-        kp.sun_penumbra = static_cast<std::uint32_t>( std::max( 1.0f, cfg.debug.sun_penumbra ) );
-        kp.sdf_ss       = static_cast<std::uint32_t>( lighting::SDF_SUPERSAMPLE );
-        kp.sun_soft     = cfg.debug.sun_soft;
-        rs.sky().record( ctx.cmd_buffer, rs.sdf().occ_buffer(), rs.sdf().sdf_buffer(),
-                         map_w, map_h, kp );
+        kp.sky_dirs = static_cast<std::uint32_t>(std::max(1.0f, cfg.debug.sky_dirs));
+        kp.sky_reach = cfg.debug.sky_reach;
+        kp.sun_steps = static_cast<std::uint32_t>(std::max(1.0f, cfg.debug.sun_steps));
+        kp.sun_penumbra = static_cast<std::uint32_t>(std::max(1.0f, cfg.debug.sun_penumbra));
+        kp.sdf_ss = static_cast<std::uint32_t>(lighting::SDF_SUPERSAMPLE);
+        kp.sun_soft = cfg.debug.sun_soft;
+        rs.sky()
+            .record(ctx.cmd_buffer, rs.sdf().occ_buffer(), rs.sdf().sdf_buffer(), map_w, map_h, kp);
         sky_ran = true;
-    } else if( !g_sky_sun_enable ) {
+    } else if (!g_sky_sun_enable) {
         sky_reason = "disabled";
-    } else if( sdf_populated ) {
+    } else if (sdf_populated) {
         sky_reason = !rs.sky().ready() ? "sky_ready" : "occ_buf";
     }
 
@@ -659,38 +630,38 @@ auto flush_and_gather_rc( lighting::render_state &rs,
     // generic_factory<weather_type>::obj() on an invalid id, firing a
     // debugmsg popup at the main menu ("invalid weather_type id null") that
     // reads as "the game crashes" even though it is technically non-fatal.
-    if( g && world_generator && world_generator->active_world
-        && !forced_celestial_hour() && rs.sky().ready() ) {
+    if (g && world_generator && world_generator->active_world && !forced_celestial_hour()
+        && rs.sky().ready()) {
         static int gp_frames = 0;
         static bool reported = false;
-        if( !reported && ++gp_frames == 120 ) {
+        if (!reported && ++gp_frames == 120) {
             reported = true;
-            const float gameplay = g->natural_light_level( g->u.bub_pos().z() );
+            const float gameplay = g->natural_light_level(g->u.bub_pos().z());
             const auto m = rs.sky().readback_means(
-                               static_cast<std::uint32_t>( rs.sdf().map_w() ),
-                               static_cast<std::uint32_t>( rs.sdf().map_h() ) );
-            if( gameplay > LIGHT_AMBIENT_LIT && m.rgb_mean + m.a_mean < 0.01f ) {
-                DebugLogFL( DL::Error, DC::Main )
-                        << "[lighting][conformance] gameplay light " << gameplay
-                        << " > LIGHT_AMBIENT_LIT but SkyBuf mean (rgb=" << m.rgb_mean
-                        << " a=" << m.a_mean << ") is ~0 — daylight is not reaching the screen";
+                static_cast<std::uint32_t>(rs.sdf().map_w()),
+                static_cast<std::uint32_t>(rs.sdf().map_h()));
+            if (gameplay > LIGHT_AMBIENT_LIT && m.rgb_mean + m.a_mean < 0.01f) {
+                DebugLogFL(DL::Error, DC::Main)
+                    << "[lighting][conformance] gameplay light " << gameplay
+                    << " > LIGHT_AMBIENT_LIT but SkyBuf mean (rgb=" << m.rgb_mean
+                    << " a=" << m.a_mean << ") is ~0 — daylight is not reaching the screen";
             }
         }
     }
 
-    exec.split( frame_step_kind::gi );
+    exec.split(frame_step_kind::gi);
     // GI: gated independently of sky/sun readiness — a dead sky pass must not
     // disable indirect light, and vice versa (the bug this stage fixes).
     bool gi_ran = false;
     std::string gi_reason = "rc_or_sdf_buf";
-    if( g_gi_enable && sdf_populated && rs.gi().ready() && rs.collector() ) {
+    if (g_gi_enable && sdf_populated && rs.gi().ready() && rs.collector()) {
         lighting::gi_params rp{};
-        rp.emitter_count = static_cast<std::uint32_t>( std::max( 0, rs.collector()->last_count() ) );
-        rp.map_w         = map_w;
-        rp.map_h         = map_h;
-        rp.current_z     = g ? static_cast<float>( g->u.bub_pos().z() ) : 0.0f;
-        rp.shadow_k      = cfg.debug.shadow_k;
-        rp.shadow_steps  = cfg.debug.shadow_steps;
+        rp.emitter_count = static_cast<std::uint32_t>(std::max(0, rs.collector()->last_count()));
+        rp.map_w = map_w;
+        rp.map_h = map_h;
+        rp.current_z = g ? static_cast<float>(g->u.bub_pos().z()) : 0.0f;
+        rp.shadow_k = cfg.debug.shadow_k;
+        rp.shadow_steps = cfg.debug.shadow_steps;
         // P2: sun/sky surface-radiance injection. gi_field.comp adds
         // sky_color*SkyBuf.rgb + sun_color*SkyBuf.a to each tile's field so the
         // bounce pass propagates daylight into shadowed/indoor neighbours.
@@ -700,72 +671,74 @@ auto flush_and_gather_rc( lighting::render_state &rs,
         // edge cases that make lighting read inconsistent (a soft indoor fill
         // flickering with every weather transition); the bounce is a fill term,
         // exactness non-critical. Do not "fix" this by feeding in.sun here.
-        rp.sun_r         = sp.sun_r;
-        rp.sun_g         = sp.sun_g;
-        rp.sun_b         = sp.sun_b;
+        rp.sun_r = sp.sun_r;
+        rp.sun_g = sp.sun_g;
+        rp.sun_b = sp.sun_b;
         rp.sun_intensity = sp.sun_intensity;
-        rp.sky_r         = sp.sky_r;
-        rp.sky_g         = sp.sky_g;
-        rp.sky_b         = sp.sky_b;
+        rp.sky_r = sp.sky_r;
+        rp.sky_g = sp.sky_g;
+        rp.sky_b = sp.sky_b;
         rp.sky_intensity = sp.sky_intensity;
         // Stage 7 (gpu-daylight black-scene plan): gi_bounce2 (the old
         // EMA-bounce knob) retired with the bounce → Radiance Cascades swap,
         // which has no temporal filter to tune. gi_albedo (bleed) is
         // unaffected and stays. gi_temporal's old slot is repurposed as
         // gi_feedback: multi-bounce radiance feedback (see gi_field.comp.hlsl).
-        rp.gi_albedo   = g_gi_albedo;
+        rp.gi_albedo = g_gi_albedo;
         rp.gi_feedback = g_gi_feedback;
         // Radiance Cascades: field gather → cascade build → cascade merge →
         // cascade-0 resolve, on the render CB. SDL_GPU inserts the compute→
         // graphics barrier so the sprite pass reads the finished gi_out_buffer().
-        rs.gi().record( { .cmd = ctx.cmd_buffer,
-                          .bufs = { .emitter = rs.collector()->emitter_buffer(),
-                                    .sdf = rs.sdf().sdf_buffer(), .sky = rs.sky().sky_buffer(),
-                                    .albedo = rs.sdf().albedo_buffer()
-                                  },
-                          .w = map_w, .h = map_h, .params = rp } );
+        rs.gi().record(
+            {.cmd = ctx.cmd_buffer,
+             .bufs =
+                 {.emitter = rs.collector()->emitter_buffer(),
+                  .sdf = rs.sdf().sdf_buffer(),
+                  .sky = rs.sky().sky_buffer(),
+                  .albedo = rs.sdf().albedo_buffer()},
+             .w = map_w,
+             .h = map_h,
+             .params = rp});
         gi_ran = true;
-    } else if( !g_gi_enable ) {
+    } else if (!g_gi_enable) {
         gi_reason = "disabled";
-    } else if( sdf_populated ) {
+    } else if (sdf_populated) {
         gi_reason = !rs.gi().ready() ? "gi_ready" : "collector";
     }
-    exec.split( frame_step_kind::gi_feedback );
+    exec.split(frame_step_kind::gi_feedback);
     // Feedback iterations the last structure rebuild queued (gi_compute_pass::
     // record) run one per frame on the frames that follow it.
-    if( !gi_ran && g_gi_enable && rs.collector() && rs.sdf().populated() ) {
-        rs.gi().record_pending( ctx.cmd_buffer, {
-            .emitter = rs.collector()->emitter_buffer(),
-            .sdf = rs.sdf().sdf_buffer(), .sky = rs.sky().sky_buffer(),
-            .albedo = rs.sdf().albedo_buffer()
-        },
-        static_cast<std::uint32_t>( std::max( 0, rs.collector()->last_count() ) ) );
+    if (!gi_ran && g_gi_enable && rs.collector() && rs.sdf().populated()) {
+        rs.gi().record_pending(
+            ctx.cmd_buffer,
+            {.emitter = rs.collector()->emitter_buffer(),
+             .sdf = rs.sdf().sdf_buffer(),
+             .sky = rs.sky().sky_buffer(),
+             .albedo = rs.sdf().albedo_buffer()},
+            static_cast<std::uint32_t>(std::max(0, rs.collector()->last_count())));
     }
 
-    if( rc_rebuild ) {
-        DebugLogFL( DL::Info, DC::Main )
-                << "[lighting][passes] rc=1"
-                << " sdf=" << ( sdf_ran ? "ran" : ( "skip:" + sdf_reason ) )
-                << " sky=" << ( sky_ran ? "ran" : ( "skip:" + sky_reason ) )
-                << " gi=" << ( gi_ran ? "ran" : ( "skip:" + gi_reason ) )
-                << " map=" << map_w << "x" << map_h;
+    if (rc_rebuild) {
+        DebugLogFL(DL::Info, DC::Main)
+            << "[lighting][passes] rc=1"
+            << " sdf=" << (sdf_ran ? "ran" : ("skip:" + sdf_reason))
+            << " sky=" << (sky_ran ? "ran" : ("skip:" + sky_reason)) << " gi="
+            << (gi_ran ? "ran" : ("skip:" + gi_reason)) << " map=" << map_w << "x" << map_h;
     }
 
-    exec.split( frame_step_kind::rc_readback );
-    if( cfg.pulses.take_rc_readback() ) {
-        if( rs.gi().ready() && rs.sdf().populated() ) {
-            rs.gi().debug_log_stats( static_cast<std::uint32_t>( rs.sdf().map_w() ),
-                                     static_cast<std::uint32_t>( rs.sdf().map_h() ) );
+    exec.split(frame_step_kind::rc_readback);
+    if (cfg.pulses.take_rc_readback()) {
+        if (rs.gi().ready() && rs.sdf().populated()) {
+            rs.gi().debug_log_stats(
+                static_cast<std::uint32_t>(rs.sdf().map_w()),
+                static_cast<std::uint32_t>(rs.sdf().map_h()));
         }
     }
 }
 
-auto assemble_light_inputs( lighting::render_state &rs,
-                            const lighting::lighting_settings &cfg ) -> void
-{
-    if( !rs.collector() ) {
-        return;
-    }
+auto assemble_light_inputs(lighting::render_state& rs, const lighting::lighting_settings& cfg)
+    -> void {
+    if (!rs.collector()) { return; }
 
     lighting::render_state::frame_light_inputs in{};
     // T3 (#108): the stamp and z-level from the camera. The mirror's `tile_px`
@@ -773,8 +746,8 @@ auto assemble_light_inputs( lighting::render_state &rs,
     // tile width whenever a tile context exists, and 32 otherwise — exactly what
     // this site computed from `tilecontext` before.
     in.tile_pixel_size = s_frame_camera.tile_stamp_px;
-    in.z_level         = static_cast<float>( s_frame_camera.player_z );
-    in.ambient         = 0.05f;
+    in.z_level = static_cast<float>(s_frame_camera.player_z);
+    in.ambient = 0.05f;
 
     // T3 (#108): every value below comes from the frame's camera, derived once at
     // the head of `run_frame_plan`. The gate is `float_camera_valid` — the same
@@ -785,35 +758,35 @@ auto assemble_light_inputs( lighting::render_state &rs,
     // branch writes the zero-filled set with the RAW stamp as `tile_px`, and
     // otherwise the mirror keeps what it holds (reachable only on startup frames,
     // where it still holds these same defaults).
-    const frame_camera &fcam = s_frame_camera;
-    if( fcam.float_camera_valid ) {
+    const frame_camera& fcam = s_frame_camera;
+    if (fcam.float_camera_valid) {
         in.camera_off_x = fcam.cam_off_x;
         in.camera_off_y = fcam.cam_off_y;
         s_emo.cam_off_x = fcam.cam_off_x;
         s_emo.cam_off_y = fcam.cam_off_y;
-        s_emo.tile_px   = fcam.tile_px;
-        s_emo.op_x      = fcam.op_x;
-        s_emo.op_y      = fcam.op_y;
-        s_emo.player_x  = fcam.player_x;
-        s_emo.player_y  = fcam.player_y;
-        s_emo.player_z  = fcam.player_z;
-        s_emo.screen_w  = fcam.screen_w;
-        s_emo.screen_h  = fcam.screen_h;
+        s_emo.tile_px = fcam.tile_px;
+        s_emo.op_x = fcam.op_x;
+        s_emo.op_y = fcam.op_y;
+        s_emo.player_x = fcam.player_x;
+        s_emo.player_y = fcam.player_y;
+        s_emo.player_z = fcam.player_z;
+        s_emo.screen_w = fcam.screen_w;
+        s_emo.screen_h = fcam.screen_h;
         s_emo.map_origin_x = fcam.map_origin_x;
         s_emo.map_origin_y = fcam.map_origin_y;
         s_emo.draw_off_px_x = fcam.draw_off_px_x;
         s_emo.draw_off_px_y = fcam.draw_off_px_y;
-    } else if( g_dbg_lighting ) {
+    } else if (g_dbg_lighting) {
         s_emo.cam_off_x = 0.f;
         s_emo.cam_off_y = 0.f;
-        s_emo.tile_px   = in.tile_pixel_size;
-        s_emo.op_x      = 0.f;
-        s_emo.op_y      = 0.f;
-        s_emo.player_x  = 0;
-        s_emo.player_y  = 0;
-        s_emo.player_z  = 0;
-        s_emo.screen_w  = fcam.screen_w;
-        s_emo.screen_h  = fcam.screen_h;
+        s_emo.tile_px = in.tile_pixel_size;
+        s_emo.op_x = 0.f;
+        s_emo.op_y = 0.f;
+        s_emo.player_x = 0;
+        s_emo.player_y = 0;
+        s_emo.player_z = 0;
+        s_emo.screen_w = fcam.screen_w;
+        s_emo.screen_h = fcam.screen_h;
         s_emo.map_origin_x = 0;
         s_emo.map_origin_y = 0;
         s_emo.draw_off_px_x = 0;
@@ -821,7 +794,7 @@ auto assemble_light_inputs( lighting::render_state &rs,
     }
 
     const float sun_hour = celestial_hour();
-    in.sun = make_celestial_params( calendar::turn, sun_hour );
+    in.sun = make_celestial_params(calendar::turn, sun_hour);
     const float diag_sun_raw = in.sun.sun_intensity;
     float weather_mult = 1.0f;
     // Weather dimming is derived from the REAL calendar (`sunlight( calendar::turn )`),
@@ -830,52 +803,46 @@ auto assemble_light_inputs( lighting::render_state &rs,
     // sun straight back to ~0. That is exactly what was measured — the hook logged
     // "pinned to 12" while sun_intensity still dumped as ~0 and frame luma did not move.
     // When the hour is pinned this is a synthetic sun for measurement, so skip weather.
-    if( g && !forced_celestial_hour() ) {
-        const float base = sunlight( calendar::turn, false );
+    if (g && !forced_celestial_hour()) {
+        const float base = sunlight(calendar::turn, false);
         const weather_type_id wid = get_weather().weather_id;
-        if( base > 1.0f && wid.is_valid() ) {
+        if (base > 1.0f && wid.is_valid()) {
             const int mod = wid->light_modifier;
-            weather_mult = std::clamp( ( base + static_cast<float>( mod ) ) / base,
-                                       0.0f, 1.0f );
+            weather_mult = std::clamp((base + static_cast<float>(mod)) / base, 0.0f, 1.0f);
         }
         in.sun.sun_intensity *= weather_mult;
         in.sun.sky_intensity *= weather_mult;
         // P6a: at night the sunlight()-ratio mult above is a no-op (base <= 1.0),
         // so apply cloud dimming directly to avoid double-dimming daytime sun.
-        if( base <= 1.0f ) {
-            in.sun.sun_intensity *= weather_cloud_mult();
-        }
+        if (base <= 1.0f) { in.sun.sun_intensity *= weather_cloud_mult(); }
     }
     // DIAGNOSTIC (temporary): the exact float, before and after every modifier. Needed
     // because a pinned hour that still yields ~0 has three candidate causes (LUT lookup,
     // the sun-vs-moon swap, weather dimming) and reading it back as a pixel cannot
     // separate them. Paired with [segdiag] in sprite_batcher, which reports the value
     // that actually reaches the GPU after the per-segment is_lit zeroing.
-    if( std::getenv( "CBN_DIAG_SEG_LIGHTING" ) ) {
+    if (std::getenv("CBN_DIAG_SEG_LIGHTING")) {
         static int diag_frame = 0;
-        if( ++diag_frame % 120 == 1 ) {
-            dbg( DL::Info ) << "[sundiag] hour=" << sun_hour
-                            << " pinned=" << ( forced_celestial_hour() ? "yes" : "no" )
-                            << " raw_after_celestial=" << diag_sun_raw
-                            << " after_weather=" << in.sun.sun_intensity
-                            << " sky=" << in.sun.sky_intensity
-                            << " weather_mult=" << weather_mult
-                            << " cloud_mult=" << weather_cloud_mult()
-                            << " sin_elev=" << in.sun.sun_sin_elev;
+        if (++diag_frame % 120 == 1) {
+            dbg(DL::Info) << "[sundiag] hour=" << sun_hour << " pinned="
+                          << (forced_celestial_hour() ? "yes" : "no") << " raw_after_celestial="
+                          << diag_sun_raw << " after_weather=" << in.sun.sun_intensity
+                          << " sky=" << in.sun.sky_intensity << " weather_mult=" << weather_mult
+                          << " cloud_mult=" << weather_cloud_mult()
+                          << " sin_elev=" << in.sun.sun_sin_elev;
         }
     }
     in.sun.sp_pad = g_dbg_lighting_shader ? 1.0f : 0.0f;
 
     in.debug = cfg.debug;
-    in.debug.anim_time = std::fmod( static_cast<float>( SDL_GetTicks() ) / 1000.0f, 1000.0f );
+    in.debug.anim_time = std::fmod(static_cast<float>(SDL_GetTicks()) / 1000.0f, 1000.0f);
     // Stage 1 (gpu-daylight black-scene plan): published so a live gpu_lit tile
     // can be told apart from a dead sky/sun pass instead of both reading as
     // plain dark — see sprite.frag.hlsl's magenta tint and sky_sun_pass.h.
-    in.debug.sky_valid =
-        ( rs.sky().ready() && rs.sky().dispatches() > 0 ) ? 1.0f : 0.0f;
-    if( g ) {
-        in.debug.player_x = static_cast<float>( g->u.bub_pos().x() ) + 0.5f;
-        in.debug.player_y = static_cast<float>( g->u.bub_pos().y() ) + 0.5f;
+    in.debug.sky_valid = (rs.sky().ready() && rs.sky().dispatches() > 0) ? 1.0f : 0.0f;
+    if (g) {
+        in.debug.player_x = static_cast<float>(g->u.bub_pos().x()) + 0.5f;
+        in.debug.player_y = static_cast<float>(g->u.bub_pos().y()) + 0.5f;
     }
     // Step 7: the shader indexes RampBuf as `pal_row * ramp_steps + shade`, so
     // ramp_steps MUST be the stride of the buffer that is actually uploaded, not the
@@ -885,64 +852,57 @@ auto assemble_light_inputs( lighting::render_state &rs,
     // been loaded, where ramp_enable's lerp makes the value moot anyway.
     {
         static int last_ramp_steps = -1;
-        const int want = std::clamp( static_cast<int>( cfg.debug.ramp_steps ), 2, 16 );
-        if( want != last_ramp_steps ) {
+        const int want = std::clamp(static_cast<int>(cfg.debug.ramp_steps), 2, 16);
+        if (want != last_ramp_steps) {
             last_ramp_steps = want;
-            rs.build_palette_ramps( want );
+            rs.build_palette_ramps(want);
         }
         const int baked = rs.palette_steps();
-        in.debug.ramp_steps = baked > 0 ? static_cast<float>( baked )
-                              : cfg.debug.ramp_steps;
+        in.debug.ramp_steps = baked > 0 ? static_cast<float>(baked) : cfg.debug.ramp_steps;
     }
     // Native tileset tile width in ART texels (32 for MSX++). Distinct from
     // in.tile_pixel_size, which is the ZOOMED on-screen width. Step 1 quantises the
     // light sample onto this lattice so shading reads as the tileset's own pixels.
     in.debug.texels_per_tile =
-        ( tilecontext && tilecontext->current_tileset() )
-        ? static_cast<float>( tilecontext->current_tileset()->get_tile_width() )
-        : 32.0f;
+        (tilecontext && tilecontext->current_tileset())
+            ? static_cast<float>(tilecontext->current_tileset()->get_tile_width())
+            : 32.0f;
     // Procedural normal atlas (plans/procedural-normal-atlas.md): the normalised V
     // distance from a colour texel to its generated normal texel on the same page.
     // Sourced from the atlas rather than hardcoded to 0.5 so that a page which failed
     // to get a GPU mirror, or a build with the feature switched off, reports 0.0f --
     // which sprite.frag treats as an exact no-op and keeps using surface_normal().
     in.debug.nrm_atlas_v =
-        ( tilecontext && tilecontext->current_tileset() &&
-          tilecontext->current_tileset()->texture_atlas() )
-        ? tilecontext->current_tileset()->texture_atlas()->normal_v_offset()
-        : 0.0f;
+        (tilecontext && tilecontext->current_tileset()
+         && tilecontext->current_tileset()->texture_atlas())
+            ? tilecontext->current_tileset()->texture_atlas()->normal_v_offset()
+            : 0.0f;
     // Wet specular: fold the user knob with rain intensity so the sheen only shows
     // while raining (mirrors the A3 weather-mult CPU fold). 0 = exact no-op.
-    in.debug.spec_strength = g_rain_enable
-                             ? g_spec_strength * weather_rain_intensity()
-                             : 0.f;
+    in.debug.spec_strength = g_rain_enable ? g_spec_strength * weather_rain_intensity() : 0.f;
 
     static int emit_dbg_frame = 0;
-    if( ++emit_dbg_frame >= 120 ) {
+    if (++emit_dbg_frame >= 120) {
         emit_dbg_frame = 0;
-        dbg( DL::Debug ) << "lighting: n_emit=" << rs.collector()->last_count()
-                         << " emitter_buf=" << ( rs.collector()->emitter_buffer() ? "ok" : "NULL" )
-                         << " sdf_buf=" << ( rs.sdf().sdf_buffer() ? "ok" : "NULL" )
-                         << " sampler=" << ( rs.gpu_sampler() ? "ok" : "NULL" )
-                         << " cam_off=(" << in.camera_off_x << "," << in.camera_off_y << ")"
-                         << " sdf=" << rs.sdf().map_w() << "x" << rs.sdf().map_h()
-                         << " z=" << in.z_level
-                         << " ambient=" << in.ambient
-                         << " tile_px=" << in.tile_pixel_size;
+        dbg(DL::Debug) << "lighting: n_emit=" << rs.collector()->last_count()
+                       << " emitter_buf=" << (rs.collector()->emitter_buffer() ? "ok" : "NULL")
+                       << " sdf_buf=" << (rs.sdf().sdf_buffer() ? "ok" : "NULL")
+                       << " sampler=" << (rs.gpu_sampler() ? "ok" : "NULL") << " cam_off=("
+                       << in.camera_off_x << "," << in.camera_off_y << ")"
+                       << " sdf=" << rs.sdf().map_w() << "x" << rs.sdf().map_h()
+                       << " z=" << in.z_level << " ambient=" << in.ambient
+                       << " tile_px=" << in.tile_pixel_size;
     }
-    s_emo.last_n_emit_pushed = static_cast<Uint32>( rs.collector()->last_count() );
+    s_emo.last_n_emit_pushed = static_cast<Uint32>(rs.collector()->last_count());
 
-    rs.begin_lighting_frame( in );
+    rs.begin_lighting_frame(in);
 }
 
-auto maybe_push_menu_background( lighting::render_state &rs,
-                                 lighting::frame_context &ctx ) -> void
-{
+auto maybe_push_menu_background(lighting::render_state& rs, lighting::frame_context& ctx) -> void {
     const bool no_world = !g || !world_generator || !world_generator->active_world;
-    if( no_world && rs.tile_sprites_empty() && rs.geometry().white_texture() ) {
+    if (no_world && rs.tile_sprites_empty() && rs.geometry().white_texture()) {
         lighting::sprite_instance bg = fullscreen_quad(
-                                           static_cast<float>( ctx.swapchain_w ),
-                                           static_cast<float>( ctx.swapchain_h ) );
+            static_cast<float>(ctx.swapchain_w), static_cast<float>(ctx.swapchain_h));
         // Main-menu backdrop, on the standard lighting pipeline.
         //
         // Historically this quad was pushed with tint (0, 0, 0.3) and the composite was
@@ -965,53 +925,49 @@ auto maybe_push_menu_background( lighting::render_state &rs,
         // base and the glow survive. With blue_backdrop = false (F12) flash stays 0,
         // which is an exact no-op and yields the pure radiance.
         bg.flash_b = menu_emitter_tuning::blue_backdrop ? 0.3f : 0.0f;
-        bg.light_mode = static_cast<float>( sprite_light_mode::gpu_lit );
-        rs.queue_tile_sprite( rs.geometry().white_texture(), bg );
+        bg.light_mode = static_cast<float>(sprite_light_mode::gpu_lit);
+        rs.queue_tile_sprite(rs.geometry().white_texture(), bg);
     }
 }
 
-auto draw_lighting_overlays( lighting::render_state &rs ) -> void
-{
+auto draw_lighting_overlays(lighting::render_state& rs) -> void {
     struct transient_routing_guard {
-        lighting::render_state &rs;
-        ~transient_routing_guard() {
-            rs.set_transient_routing( false );
-        }
-    } _t_route{ rs };
-    rs.set_transient_routing( true );
+        lighting::render_state& rs;
+        ~transient_routing_guard() { rs.set_transient_routing(false); }
+    } _t_route{rs};
+    rs.set_transient_routing(true);
 
-    if( g_dbg_lighting ) {
+    if (g_dbg_lighting) {
         constexpr float OL_PI = 3.14159265358979323846f;
         // T3 (#108): the camera, not the mirror. `pub_*` is what the mirror
         // held after publication this frame; `s_emo.snap` stays the emitter
         // snapshot `build_lighting` wrote — that is not camera state.
-        const frame_camera &fcam = s_frame_camera;
-        const float tp  = fcam.pub_tile_px() > 0.f ? fcam.pub_tile_px() : 32.f;
-        const float sw  = static_cast<float>( fcam.screen_w );
-        const float sh  = static_cast<float>( fcam.screen_h );
+        const frame_camera& fcam = s_frame_camera;
+        const float tp = fcam.pub_tile_px() > 0.f ? fcam.pub_tile_px() : 32.f;
+        const float sw = static_cast<float>(fcam.screen_w);
+        const float sh = static_cast<float>(fcam.screen_h);
 
         // ── Tier 4: grid lines ─────────────────────────────────────────────
         {
-            const float anchor_x = std::fmod( fcam.pub_op_x(), tp );
-            const float anchor_y = std::fmod( fcam.pub_op_y(), tp );
-            for( float x = anchor_x; x < sw; x += tp ) {
-                rs.queue_ui_rect( x, 0.f, 1.f, sh, 0.25f, 0.25f, 0.30f, 0.35f );
+            const float anchor_x = std::fmod(fcam.pub_op_x(), tp);
+            const float anchor_y = std::fmod(fcam.pub_op_y(), tp);
+            for (float x = anchor_x; x < sw; x += tp) {
+                rs.queue_ui_rect(x, 0.f, 1.f, sh, 0.25f, 0.25f, 0.30f, 0.35f);
             }
-            for( float y = anchor_y; y < sh; y += tp ) {
-                rs.queue_ui_rect( 0.f, y, sw, 1.f, 0.25f, 0.25f, 0.30f, 0.35f );
+            for (float y = anchor_y; y < sh; y += tp) {
+                rs.queue_ui_rect(0.f, y, sw, 1.f, 0.25f, 0.25f, 0.30f, 0.35f);
             }
         }
 
         // ── Tier 2: emitter markers ────────────────────────────────────────
         static bool emo_cam_logged = false;
-        if( !emo_cam_logged ) {
+        if (!emo_cam_logged) {
             emo_cam_logged = true;
-            dbg( DL::Debug ) << "overlay: cam=(" << fcam.pub_cam_off_x() << ","
-                             << fcam.pub_cam_off_y() << ") tile_px=" << fcam.pub_tile_px()
-                             << " op=(" << fcam.pub_op_x() << "," << fcam.pub_op_y()
-                             << ") snap=" << s_emo.snap.size();
+            dbg(DL::Debug) << "overlay: cam=(" << fcam.pub_cam_off_x() << "," << fcam.pub_cam_off_y()
+                           << ") tile_px=" << fcam.pub_tile_px() << " op=(" << fcam.pub_op_x()
+                           << "," << fcam.pub_op_y() << ") snap=" << s_emo.snap.size();
         }
-        for( const auto &e : s_emo.snap ) {
+        for (const auto& e : s_emo.snap) {
             // cam_off = op/tile - map_origin already bakes in the pixel offset
             // (cata_tiles.h: "camera_off = op / tile_width - o"), so the screen
             // transform is a SINGLE (pos + cam_off) * tile_px — adding op again
@@ -1019,40 +975,38 @@ auto draw_lighting_overlays( lighting::render_state &rs ) -> void
             // (the HUD-bar/sidebar pixel offset) off its true tile. Confirmed
             // empirically: the player cross sat exactly op_y (128px) south of
             // the player's real screen position.
-            const std::pair<float, float> sp = fcam.screen_pos_of( e.pos_x, e.pos_y, tp );
+            const std::pair<float, float> sp = fcam.screen_pos_of(e.pos_x, e.pos_y, tp);
             const float sx = sp.first;
             const float sy = sp.second;
             const float rpx = e.radius * tp;
-            const float cr  = e.r > 0.01f ? e.r : 1.0f;
-            const float cg  = e.g > 0.01f ? e.g : 1.0f;
-            const float cb  = e.b > 0.01f ? e.b : 1.0f;
-            rs.queue_ui_rect( sx - 4.f, sy - 4.f, 8.f, 8.f, cr, cg, cb, 1.0f );
-            for( int i = 0; i < 48; ++i ) {
-                const float a = 2.0f * OL_PI * static_cast<float>( i ) / 48.0f;
-                rs.queue_ui_rect( sx + std::cos( a ) * rpx - 2.f,
-                                  sy + std::sin( a ) * rpx - 2.f,
-                                  4.f, 4.f, cr, cg, cb, 0.75f );
+            const float cr = e.r > 0.01f ? e.r : 1.0f;
+            const float cg = e.g > 0.01f ? e.g : 1.0f;
+            const float cb = e.b > 0.01f ? e.b : 1.0f;
+            rs.queue_ui_rect(sx - 4.f, sy - 4.f, 8.f, 8.f, cr, cg, cb, 1.0f);
+            for (int i = 0; i < 48; ++i) {
+                const float a = 2.0f * OL_PI * static_cast<float>(i) / 48.0f;
+                rs.queue_ui_rect(sx + std::cos(a) * rpx - 2.f, sy + std::sin(a) * rpx - 2.f, 4.f,
+                                 4.f, cr, cg, cb, 0.75f);
             }
         }
 
         // Player cross (bright green) at map-coord player pos.
         {
             const std::pair<float, float> sp = fcam.screen_pos_of(
-                                                   static_cast<float>( fcam.pub_player_x() ),
-                                                   static_cast<float>( fcam.pub_player_y() ), tp );
+                static_cast<float>(fcam.pub_player_x()), static_cast<float>(fcam.pub_player_y()),
+                tp);
             const float px = sp.first;
             const float py = sp.second;
-            rs.queue_ui_rect( px - 12.f, py - 1.f, 24.f, 2.f, 0.f, 1.f, 0.f, 1.f );
-            rs.queue_ui_rect( px - 1.f, py - 12.f, 2.f, 24.f, 0.f, 1.f, 0.f, 1.f );
+            rs.queue_ui_rect(px - 12.f, py - 1.f, 24.f, 2.f, 0.f, 1.f, 0.f, 1.f);
+            rs.queue_ui_rect(px - 1.f, py - 12.f, 2.f, 24.f, 0.f, 1.f, 0.f, 1.f);
         }
         // Screen-center cross (cyan).
         {
             const float cx = sw * 0.5f;
             const float cy = sh * 0.5f;
-            rs.queue_ui_rect( cx - 10.f, cy - 1.f, 20.f, 2.f, 0.f, 1.f, 1.f, 0.9f );
-            rs.queue_ui_rect( cx - 1.f, cy - 10.f, 2.f, 20.f, 0.f, 1.f, 1.f, 0.9f );
+            rs.queue_ui_rect(cx - 10.f, cy - 1.f, 20.f, 2.f, 0.f, 1.f, 1.f, 0.9f);
+            rs.queue_ui_rect(cx - 1.f, cy - 10.f, 2.f, 20.f, 0.f, 1.f, 1.f, 0.9f);
         }
-
     }
 
     // ── Animated sound pulses — lifecycle only (GPU render is in render_world_pass_w) ──
@@ -1060,38 +1014,34 @@ auto draw_lighting_overlays( lighting::render_state &rs ) -> void
     {
         const float speed = g_sound_wave_speed;
         const double now = dev_test_lights::pulse_now_s();
-        auto &pulses = dev_test_lights::sound_pulses;
-        std::erase_if( pulses, [now, speed]( const dev_test_lights::sound_pulse & p ) {
-            const float max_r = std::clamp( p.volume, std::min( g_sound_wave_min_radius,
-                                            g_sound_wave_max_radius ), g_sound_wave_max_radius );
-            return static_cast<float>( now - p.spawn_s ) * speed > max_r;
-        } );
-        if( !pulses.empty() ) {
+        auto& pulses = dev_test_lights::sound_pulses;
+        std::erase_if(pulses, [now, speed](const dev_test_lights::sound_pulse& p) {
+            const float max_r = std::clamp(
+                p.volume, std::min(g_sound_wave_min_radius, g_sound_wave_max_radius),
+                g_sound_wave_max_radius);
+            return static_cast<float>(now - p.spawn_s) * speed > max_r;
+        });
+        if (!pulses.empty()) {
             g_display.needupdate = true;
             // Ensure world_target is cleared next frame so the disc doesn't
             // accumulate on a stale background (belt-and-suspenders alongside needupdate).
-            if( auto *wt = rs.world_target() ) { wt->invalidate(); }
+            if (auto* wt = rs.world_target()) { wt->invalidate(); }
         }
     }
 }
 
-auto composite_ui_pass_a( lighting::render_state &rs,
-                          lighting::frame_context &ctx, int proj_w, int proj_h ) -> void
-{
-    constexpr float clear_transparent[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    lighting::ui_composite_target *uct = rs.ui_target();
-    if( uct && g_dbg_lighting ) {
-        uct->invalidate();
-    }
+auto composite_ui_pass_a(
+    lighting::render_state& rs, lighting::frame_context& ctx, int proj_w, int proj_h) -> void {
+    constexpr float clear_transparent[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    lighting::ui_composite_target* uct = rs.ui_target();
+    if (uct && g_dbg_lighting) { uct->invalidate(); }
 
     const bool any_ui = !rs.ui_rects_empty() || !rs.font_glyphs_empty();
-    if( uct && uct->texture() && any_ui && uct->consume_dirty() ) {
-        rs.tile_batcher().begin_pass( ctx.cmd_buffer, uct->texture(),
-                                      uct->width(), uct->height(),
-                                      clear_transparent,
-                                      static_cast<std::uint32_t>( proj_w ),
-                                      static_cast<std::uint32_t>( proj_h ) );
-        rs.flush_ui( rs.tile_batcher(), rs.gpu_sampler() );
+    if (uct && uct->texture() && any_ui && uct->consume_dirty()) {
+        rs.tile_batcher().begin_pass(
+            ctx.cmd_buffer, uct->texture(), uct->width(), uct->height(), clear_transparent,
+            static_cast<std::uint32_t>(proj_w), static_cast<std::uint32_t>(proj_h));
+        rs.flush_ui(rs.tile_batcher(), rs.gpu_sampler());
         rs.tile_batcher().end_pass();
     }
 }
@@ -1106,18 +1056,14 @@ auto composite_ui_pass_a( lighting::render_state &rs,
 //
 // Projection is the target's own extent, NOT the screen's: the portrait is drawn at
 // tile coordinates into a 512x512 texture and the element decides its final size.
-auto composite_avatar_pass( lighting::render_state &rs, lighting::frame_context &ctx ) -> void
-{
-    constexpr float clear_transparent[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    lighting::ui_composite_target *at = rs.avatar_target();
-    if( !at || !at->texture() || rs.avatar_sprites_empty() ) {
-        return;
-    }
-    rs.tile_batcher().begin_pass( ctx.cmd_buffer, at->texture(),
-                                  at->width(), at->height(),
-                                  clear_transparent,
-                                  at->width(), at->height() );
-    rs.flush_avatar_sprites( rs.tile_batcher(), rs.gpu_sampler() );
+auto composite_avatar_pass(lighting::render_state& rs, lighting::frame_context& ctx) -> void {
+    constexpr float clear_transparent[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    lighting::ui_composite_target* at = rs.avatar_target();
+    if (!at || !at->texture() || rs.avatar_sprites_empty()) { return; }
+    rs.tile_batcher().begin_pass(
+        ctx.cmd_buffer, at->texture(), at->width(), at->height(), clear_transparent, at->width(),
+        at->height());
+    rs.flush_avatar_sprites(rs.tile_batcher(), rs.gpu_sampler());
     rs.tile_batcher().end_pass();
 }
 
@@ -1127,61 +1073,53 @@ auto composite_avatar_pass( lighting::render_state &rs, lighting::frame_context 
 //
 // Like the avatar pass, the projection is the target's own extent, NOT the screen's: parts
 // are drawn at target-local pixel coordinates and the world quad decides the on-screen size.
-auto composite_vehicle_pass( lighting::render_state &rs, lighting::frame_context &ctx ) -> void
-{
-    constexpr float clear_transparent[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    for( std::size_t slot = 0; slot < lighting::render_state::vehicle_composite_slots; ++slot ) {
-        lighting::ui_composite_target *vt = rs.current_vehicle_target( slot );
-        if( !vt || !vt->texture() || rs.vehicle_sprites_empty( slot ) || !rs.gpu_sampler() ) {
+auto composite_vehicle_pass(lighting::render_state& rs, lighting::frame_context& ctx) -> void {
+    constexpr float clear_transparent[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    for (std::size_t slot = 0; slot < lighting::render_state::vehicle_composite_slots; ++slot) {
+        lighting::ui_composite_target* vt = rs.current_vehicle_target(slot);
+        if (!vt || !vt->texture() || rs.vehicle_sprites_empty(slot) || !rs.gpu_sampler()) {
             continue;
         }
-        rs.tile_batcher().begin_pass( ctx.cmd_buffer, vt->texture(),
-                                      vt->width(), vt->height(),
-                                      clear_transparent,
-                                      vt->width(), vt->height() );
+        rs.tile_batcher().begin_pass(
+            ctx.cmd_buffer, vt->texture(), vt->width(), vt->height(), clear_transparent,
+            vt->width(), vt->height());
         // The tile batcher keeps whatever scissor the last world frame left on it; the
         // composite covers its whole target.
-        rs.tile_batcher().set_scissor( nullptr );
-        rs.flush_vehicle_sprites( slot, rs.tile_batcher(), rs.gpu_sampler() );
+        rs.tile_batcher().set_scissor(nullptr);
+        rs.flush_vehicle_sprites(slot, rs.tile_batcher(), rs.gpu_sampler());
         rs.tile_batcher().end_pass();
     }
 }
 
-auto render_world_pass_w( lighting::render_state &rs,
-                          lighting::frame_context &ctx, int proj_w, int proj_h,
-                          const lighting::lighting_settings &cfg ) -> void
-{
+auto render_world_pass_w(
+    lighting::render_state& rs, lighting::frame_context& ctx, int proj_w, int proj_h,
+    const lighting::lighting_settings& cfg) -> void {
     // Void backdrop behind every transparent sprite pixel (grass gaps, tree/fence
     // cutouts, broken windows, sway animation edges, …). MUST stay a plain clear
     // color, not a sprite edit: sprites keep their real alpha untouched so blend/
     // sway effects are unaffected; only what shows THROUGH them changes. Qud
     // Viridian palette's documented background teal (#0f3b3a), not pure black, so
     // GPU lighting's multiply-by-texel-color has a non-zero base to work with.
-    constexpr float clear_void[4] = { 15.0f / 255.0f, 59.0f / 255.0f, 58.0f / 255.0f, 1.0f };
-    lighting::ui_composite_target *wt = rs.world_target();
-    if( !wt || !wt->texture() ) {
-        return;
-    }
+    constexpr float clear_void[4] = {15.0f / 255.0f, 59.0f / 255.0f, 58.0f / 255.0f, 1.0f};
+    lighting::ui_composite_target* wt = rs.world_target();
+    if (!wt || !wt->texture()) { return; }
 
-    const bool needs_clear      = wt->consume_dirty();
-    const bool have_tiles       = !rs.tile_sprites_empty() && rs.gpu_sampler();
-    const bool have_sound_pulses = rs.sound_waves().ready()
-                                   && !dev_test_lights::sound_pulses.empty()
-                                   && sdl_lighting_devui::sound_pulses_visible(
-                                       g != nullptr && g->u.movement_mode_is( CMM_STEALTH ) );
+    const bool needs_clear = wt->consume_dirty();
+    const bool have_tiles = !rs.tile_sprites_empty() && rs.gpu_sampler();
+    const bool have_sound_pulses =
+        rs.sound_waves().ready() && !dev_test_lights::sound_pulses.empty()
+        && sdl_lighting_devui::sound_pulses_visible(
+            g != nullptr && g->u.movement_mode_is(CMM_STEALTH));
     // Force a clear when sound pulses are active: the disc moves each frame, so
     // we need a fresh world-target background or the old disc position persists.
-    if( !needs_clear && !have_tiles && !have_sound_pulses ) {
-        return;
-    }
+    if (!needs_clear && !have_tiles && !have_sound_pulses) { return; }
 
-    rs.flush_shadow_casters( ctx.cmd_buffer,
-                             static_cast<std::uint32_t>( proj_w ),
-                             static_cast<std::uint32_t>( proj_h ) );
+    rs.flush_shadow_casters(
+        ctx.cmd_buffer, static_cast<std::uint32_t>(proj_w), static_cast<std::uint32_t>(proj_h));
 
     // Stamp any queued decals into their per-submap splatmap textures. MUST be
     // before Pass W opens — a render pass cannot nest.
-    rs.splatmap().flush_stamps( ctx.cmd_buffer );
+    rs.splatmap().flush_stamps(ctx.cmd_buffer);
 
     // Pass W splits at the terrain/entity boundary that cata_tiles::draw()
     // recorded, so the splatmap composite lands over the terrain and under every
@@ -1196,29 +1134,23 @@ auto render_world_pass_w( lighting::render_state &rs,
     // are gated separately.
     const std::size_t queued = rs.tile_sprite_count();
     const std::size_t cut = rs.splat_cut();
-    const bool composite = have_tiles && cut != static_cast<std::size_t>( -1 )
-                           && cut <= queued && splatmap::active()
-                           && !rs.splat_quads().empty();
+    const bool composite =
+        have_tiles && cut != static_cast<std::size_t>(-1) && cut <= queued && splatmap::active()
+        && !rs.splat_quads().empty();
 
-    rs.tile_batcher().begin_pass( ctx.cmd_buffer, wt->texture(),
-                                  wt->width(), wt->height(),
-                                  clear_void,
-                                  static_cast<std::uint32_t>( proj_w ),
-                                  static_cast<std::uint32_t>( proj_h ),
-                                  wt->format() );
-    if( have_tiles ) {
-        rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler(),
-                               0, composite ? cut : queued );
+    rs.tile_batcher().begin_pass(
+        ctx.cmd_buffer, wt->texture(), wt->width(), wt->height(), clear_void,
+        static_cast<std::uint32_t>(proj_w), static_cast<std::uint32_t>(proj_h), wt->format());
+    if (have_tiles) {
+        rs.flush_tile_sprites(rs.tile_batcher(), rs.gpu_sampler(), 0, composite ? cut : queued);
     }
     rs.tile_batcher().end_pass();
 
-    if( composite ) {
-        rs.splatmap().composite( ctx.cmd_buffer, wt->texture(),
-                                 static_cast<std::uint32_t>( proj_w ),
-                                 static_cast<std::uint32_t>( proj_h ),
-                                 rs.splat_quads(),
-        lighting::splat_colors{
-            .blood_strength = g_splat_blood_strength } );
+    if (composite) {
+        rs.splatmap().composite(
+            ctx.cmd_buffer, wt->texture(), static_cast<std::uint32_t>(proj_w),
+            static_cast<std::uint32_t>(proj_h), rs.splat_quads(),
+            lighting::splat_colors{.blood_strength = g_splat_blood_strength});
 
         // Render terrain decals over the splatmap composite, under entities.
         // Scissored to the map drawing area: a decal is a multi-tile sprite that
@@ -1230,28 +1162,27 @@ auto render_world_pass_w( lighting::render_state &rs,
         // is in TARGET TEXTURE PIXELS. On a HiDPI display those differ by the
         // backing scale, so the rect must be converted or the scissor lands in the
         // wrong place — clipping the map and leaking decals over the sidebar.
-        const SDL_Rect &vp_pts = rs.splat_map_viewport();
-        if( rs.decals().ready() && rs.decals().atlas() && !rs.decal_draws().empty() &&
-            vp_pts.w > 0 && vp_pts.h > 0 && proj_w > 0 && proj_h > 0 ) {
-            const float sx = static_cast<float>( wt->width() ) / static_cast<float>( proj_w );
-            const float sy = static_cast<float>( wt->height() ) / static_cast<float>( proj_h );
+        const SDL_Rect& vp_pts = rs.splat_map_viewport();
+        if (rs.decals().ready() && rs.decals().atlas() && !rs.decal_draws().empty() && vp_pts.w > 0
+            && vp_pts.h > 0 && proj_w > 0 && proj_h > 0) {
+            const float sx = static_cast<float>(wt->width()) / static_cast<float>(proj_w);
+            const float sy = static_cast<float>(wt->height()) / static_cast<float>(proj_h);
             const SDL_Rect decal_vp{
-                static_cast<int>( std::floor( vp_pts.x * sx ) ),
-                static_cast<int>( std::floor( vp_pts.y * sy ) ),
-                static_cast<int>( std::ceil( vp_pts.w * sx ) ),
-                static_cast<int>( std::ceil( vp_pts.h * sy ) ) };
-            rs.tile_batcher().begin_pass( ctx.cmd_buffer, wt->texture(),
-                                          wt->width(), wt->height(),
-                                          /*clear=*/nullptr,
-                                          static_cast<std::uint32_t>( proj_w ),
-                                          static_cast<std::uint32_t>( proj_h ),
-                                          wt->format() );
-            rs.tile_batcher().set_scissor( &decal_vp );
-            rs.tile_batcher().set_texture( const_cast<SDL_GPUTexture *>( rs.decals().atlas() ),
-                                           rs.gpu_sampler(), /*is_lit=*/true );
-            for( const auto &d : rs.decal_draws() ) {
-                const auto &var = rs.decals().variants()[d.variant];
-                lighting::sprite_instance si {};
+                static_cast<int>(std::floor(vp_pts.x * sx)),
+                static_cast<int>(std::floor(vp_pts.y * sy)),
+                static_cast<int>(std::ceil(vp_pts.w * sx)),
+                static_cast<int>(std::ceil(vp_pts.h * sy))};
+            rs.tile_batcher().begin_pass(
+                ctx.cmd_buffer, wt->texture(), wt->width(), wt->height(),
+                /*clear=*/nullptr, static_cast<std::uint32_t>(proj_w),
+                static_cast<std::uint32_t>(proj_h), wt->format());
+            rs.tile_batcher().set_scissor(&decal_vp);
+            rs.tile_batcher().set_texture(
+                const_cast<SDL_GPUTexture*>(rs.decals().atlas()), rs.gpu_sampler(),
+                /*is_lit=*/true);
+            for (const auto& d : rs.decal_draws()) {
+                const auto& var = rs.decals().variants()[d.variant];
+                lighting::sprite_instance si{};
                 si.dst_x = d.dst_x;
                 si.dst_y = d.dst_y;
                 si.dst_w = d.dst_w;
@@ -1265,29 +1196,27 @@ auto render_world_pass_w( lighting::render_state &rs,
                 si.tint_g = 1.f;
                 si.tint_b = 1.f;
                 si.tint_a = 1.f;
-                rs.tile_batcher().draw( si );
+                rs.tile_batcher().draw(si);
             }
-            rs.tile_batcher().set_scissor( nullptr );
+            rs.tile_batcher().set_scissor(nullptr);
             rs.tile_batcher().end_pass();
         }
         // Pass W-b: the entity half, only when there IS one. A null clear colour
         // yields SDL_GPU_LOADOP_LOAD (sprite_batcher.cpp:599), preserving W-a
         // plus the composite.
-        if( cut < queued ) {
-            rs.tile_batcher().begin_pass( ctx.cmd_buffer, wt->texture(),
-                                          wt->width(), wt->height(),
-                                          /*clear=*/nullptr,
-                                          static_cast<std::uint32_t>( proj_w ),
-                                          static_cast<std::uint32_t>( proj_h ),
-                                          wt->format() );
-            rs.flush_tile_sprites( rs.tile_batcher(), rs.gpu_sampler(), cut, queued );
+        if (cut < queued) {
+            rs.tile_batcher().begin_pass(
+                ctx.cmd_buffer, wt->texture(), wt->width(), wt->height(),
+                /*clear=*/nullptr, static_cast<std::uint32_t>(proj_w),
+                static_cast<std::uint32_t>(proj_h), wt->format());
+            rs.flush_tile_sprites(rs.tile_batcher(), rs.gpu_sampler(), cut, queued);
             rs.tile_batcher().end_pass();
         }
     }
 
     // Box2D debug overlay — coloured wireframes over the world.  Lines were
     // populated earlier in cata_tiles::draw() → PhysicsWorld::draw_debug().
-    if( rs.debug_lines().count() > 0 && rs.debug_lines().ready() ) {
+    if (rs.debug_lines().count() > 0 && rs.debug_lines().ready()) {
         const float tp = s_frame_camera.pub_tile_px() > 0.f ? s_frame_camera.pub_tile_px() : 32.f;
         // cam = tile-space camera origin so that:
         //   pixel = (tile - cam) * tile_px
@@ -1302,11 +1231,17 @@ auto render_world_pass_w( lighting::render_state &rs,
         // because op_x is 0 in non-iso mode, which hid the same error there.
         const float cam_x = -s_frame_camera.pub_cam_off_x();
         const float cam_y = -s_frame_camera.pub_cam_off_y();
-        rs.debug_lines().record( { .cb = ctx.cmd_buffer, .target = wt->texture(),
-                                   .target_w = wt->width(), .target_h = wt->height(),
-                                   .proj_w = static_cast<std::uint32_t>( proj_w ),
-                                   .proj_h = static_cast<std::uint32_t>( proj_h ),
-                                   .cam_x = cam_x, .cam_y = cam_y, .tile_w = tp, .tile_h = tp } );
+        rs.debug_lines().record(
+            {.cb = ctx.cmd_buffer,
+             .target = wt->texture(),
+             .target_w = wt->width(),
+             .target_h = wt->height(),
+             .proj_w = static_cast<std::uint32_t>(proj_w),
+             .proj_h = static_cast<std::uint32_t>(proj_h),
+             .cam_x = cam_x,
+             .cam_y = cam_y,
+             .tile_w = tp,
+             .tile_h = tp});
     }
 
     // Decorative "smoke and mirrors" light glow (emitter_glow_pass) — draws a
@@ -1322,44 +1257,44 @@ auto render_world_pass_w( lighting::render_state &rs,
     // daylight even after excluding it from the ambient ceiling clamp, but a
     // fire/torch should still visually read as a light source. See
     // emitter_glow_pass.h.
-    if( g && g_glow_enable && !s_emo.snap.empty() && !lighting::overmap_view_open ) {
+    if (g && g_glow_enable && !s_emo.snap.empty() && !lighting::overmap_view_open) {
         const float tp = s_frame_camera.pub_tile_px() > 0.f ? s_frame_camera.pub_tile_px() : 32.f;
         // Cull to the player's z-level and a generous on-screen radius so the
         // instance list stays small regardless of how many emitters exist in
         // the loaded reality bubble.
         constexpr float CULL_RADIUS_TILES = 48.f;
         std::vector<lighting::emitter_glow_instance> glow_instances;
-        glow_instances.reserve( 64 );
+        glow_instances.reserve(64);
         // Gate on the SAME CPU visibility_cache that terrain/furniture drawing
         // uses (cata_tiles.cpp), so a torch/lamp behind a wall or outside the
         // player's current sight range cannot paint a glow blob straight
         // through it. Without this the decorative glow pass ignored fog of
         // war entirely (it only knew the emitter's world position, not
         // whether the player can currently see that tile).
-        map &glow_map = get_map();
-        const visibility_variables &glow_vis_cache = glow_map.get_visibility_variables_cache();
-        for( const auto &e : s_emo.snap ) {
+        map& glow_map = get_map();
+        const visibility_variables& glow_vis_cache = glow_map.get_visibility_variables_cache();
+        for (const auto& e : s_emo.snap) {
             // Only real, localized point lights get a glow sprite. CONE
             // (headlights, window-light portals) and DIRECTIONAL (sun proxy)
             // emitters can carry an enormous `radius` for the real lighting
             // math's reach — that is NOT a visible light bulb size, and a
             // glow sprite sized off it would wash the whole screen.
-            if( e.shape != static_cast<std::uint32_t>( lighting::emitter_shape::OMNI ) ) {
-                continue;
-            }
-            if( static_cast<int>( e.pos_z ) != s_frame_camera.pub_player_z() ) { continue; }
-            const float dx = e.pos_x - static_cast<float>( s_frame_camera.pub_player_x() );
-            const float dy = e.pos_y - static_cast<float>( s_frame_camera.pub_player_y() );
-            if( dx * dx + dy * dy > CULL_RADIUS_TILES * CULL_RADIUS_TILES ) { continue; }
-            if( e.radius <= 0.01f ) { continue; }
-            const int ex = static_cast<int>( e.pos_x );
-            const int ey = static_cast<int>( e.pos_y );
-            const level_cache &glow_lc = glow_map.access_cache( static_cast<int>( e.pos_z ) );
-            const point_bub_ms epos( ex, ey );
-            const lit_level ell = glow_lc.inbounds( epos ) ? glow_lc.visibility_cache[glow_lc.idx( ex, ey )]
-                                  : lit_level::BLANK;
-            if( glow_map.get_visibility( ell, glow_vis_cache ) != VIS_CLEAR ) { continue; }
-            const std::pair<float, float> sp = s_frame_camera.screen_pos_of( e.pos_x, e.pos_y, tp );
+            if (e.shape != static_cast<std::uint32_t>(lighting::emitter_shape::OMNI)) { continue; }
+            if (static_cast<int>(e.pos_z) != s_frame_camera.pub_player_z()) { continue; }
+            const float dx = e.pos_x - static_cast<float>(s_frame_camera.pub_player_x());
+            const float dy = e.pos_y - static_cast<float>(s_frame_camera.pub_player_y());
+            if (dx * dx + dy * dy > CULL_RADIUS_TILES * CULL_RADIUS_TILES) { continue; }
+            if (e.radius <= 0.01f) { continue; }
+            const int ex = static_cast<int>(e.pos_x);
+            const int ey = static_cast<int>(e.pos_y);
+            const level_cache& glow_lc = glow_map.access_cache(static_cast<int>(e.pos_z));
+            const point_bub_ms epos(ex, ey);
+            const lit_level ell =
+                glow_lc.inbounds(epos)
+                    ? glow_lc.visibility_cache[glow_lc.idx(ex, ey)]
+                    : lit_level::BLANK;
+            if (glow_map.get_visibility(ell, glow_vis_cache) != VIS_CLEAR) { continue; }
+            const std::pair<float, float> sp = s_frame_camera.screen_pos_of(e.pos_x, e.pos_y, tp);
             const float sx = sp.first;
             const float sy = sp.second;
             // 0,0,0 encodes "uncolored white" (gpu_emitter.h convention).
@@ -1370,38 +1305,43 @@ auto render_world_pass_w( lighting::render_state &rs,
             // 1 together), which is what makes a warm torch read as a white
             // ball. glow_saturation pushes the tint away from its own luma
             // before the additive multiply so the warmth survives the blow-up.
-            if( g_glow_saturation != 1.0f ) {
+            if (g_glow_saturation != 1.0f) {
                 const float lum = 0.2126f * cr + 0.7152f * cg + 0.0722f * cb;
-                cr = std::clamp( lum + ( cr - lum ) * g_glow_saturation, 0.f, 1.f );
-                cg = std::clamp( lum + ( cg - lum ) * g_glow_saturation, 0.f, 1.f );
-                cb = std::clamp( lum + ( cb - lum ) * g_glow_saturation, 0.f, 1.f );
+                cr = std::clamp(lum + (cr - lum) * g_glow_saturation, 0.f, 1.f);
+                cg = std::clamp(lum + (cg - lum) * g_glow_saturation, 0.f, 1.f);
+                cb = std::clamp(lum + (cb - lum) * g_glow_saturation, 0.f, 1.f);
             }
             // The gradient spans the emitter's OWN light radius, so the glow
             // reads as that light's footprint, not an unrelated fixed-size
             // blob (earlier versions drew a 0.6-2 tile core decoupled from
             // `e.radius`, which looked detached from the light it marked).
             // glow_radius scales that footprint for taste (1.0 = physical).
-            const float radius_tiles = std::clamp( e.radius, 1.0f, 10.0f ) * g_glow_radius;
+            const float radius_tiles = std::clamp(e.radius, 1.0f, 10.0f) * g_glow_radius;
             // Held just above bloom's 1.0 extract threshold so bloom still
             // catches a hint of it, but far below the old 1.5-6.0 overdrive
             // that blew out every tile near a lamp/fire. Larger lights get a
             // slightly stronger core; small ones stay a gentle mark.
             // glow_intensity scales the whole core (0 = invisible overlay).
-            const float peak = std::clamp( 0.9f + radius_tiles * 0.05f, 0.9f, 1.4f )
-                               * g_glow_intensity;
-            glow_instances.push_back( { .x = sx, .y = sy,
-                                        .radius_px = radius_tiles * tp,
-                                        .r = cr, .g = cg, .b = cb,
-                                        .strength = peak, .pad0 = 0.f } );
+            const float peak =
+                std::clamp(0.9f + radius_tiles * 0.05f, 0.9f, 1.4f) * g_glow_intensity;
+            glow_instances.push_back(
+                {.x = sx,
+                 .y = sy,
+                 .radius_px = radius_tiles * tp,
+                 .r = cr,
+                 .g = cg,
+                 .b = cb,
+                 .strength = peak,
+                 .pad0 = 0.f});
         }
-        if( !glow_instances.empty() ) {
-            rs.emitter_glow().record( {
+        if (!glow_instances.empty()) {
+            rs.emitter_glow().record({
                 .cb = ctx.cmd_buffer,
                 .target = wt->texture(),
-                .proj_w = static_cast<std::uint32_t>( proj_w ),
-                .proj_h = static_cast<std::uint32_t>( proj_h ),
+                .proj_w = static_cast<std::uint32_t>(proj_w),
+                .proj_h = static_cast<std::uint32_t>(proj_h),
                 .instances = &glow_instances,
-            } );
+            });
         }
     }
 
@@ -1414,8 +1354,8 @@ auto render_world_pass_w( lighting::render_state &rs,
     // make_cone calls) — no new detection pass. Same VIS_CLEAR visibility gate
     // as the emitter-glow builder above, so a shaft/mote can only appear where
     // the player already sees the window (the emitter-glow-pass FoW lesson).
-    if( g && ( g_shaft_enable || g_dust_enable ) && !s_emo.snap.empty() &&
-        !cfg.diagnostic_view_active() && !lighting::overmap_view_open ) {
+    if (g && (g_shaft_enable || g_dust_enable) && !s_emo.snap.empty()
+        && !cfg.diagnostic_view_active() && !lighting::overmap_view_open) {
         const float tp = s_frame_camera.pub_tile_px() > 0.f ? s_frame_camera.pub_tile_px() : 32.f;
         constexpr float CULL_RADIUS_TILES = 48.f;
         // Minimum direct-sun term (snapshot.cpp: 225 * cos(facing) * sun_intensity)
@@ -1426,34 +1366,37 @@ auto render_world_pass_w( lighting::render_state &rs,
         // makes for a longer, more raking beam, same cot(elev) idiom as
         // sprite_batcher.cpp's shadow shear (:281-282), floored the same way
         // so a near-horizon/absent sun cannot make an unbounded beam.
-        const float se = std::clamp( rs.current_sun().sun_sin_elev, 0.15f, 1.0f );
-        const float cot_elev = std::sqrt( std::max( 0.f, 1.0f - se * se ) ) / se;
+        const float se = std::clamp(rs.current_sun().sun_sin_elev, 0.15f, 1.0f);
+        const float cot_elev = std::sqrt(std::max(0.f, 1.0f - se * se)) / se;
         std::vector<lighting::godray_shaft_instance> shaft_instances;
         std::vector<lighting::dust_mote_shaft_source> dust_sources;
-        shaft_instances.reserve( 32 );
-        dust_sources.reserve( 32 );
-        map &shaft_map = get_map();
-        const visibility_variables &shaft_vis_cache = shaft_map.get_visibility_variables_cache();
-        for( const auto &e : s_emo.snap ) {
-            if( e.shape != static_cast<std::uint32_t>( lighting::emitter_shape::CONE ) ) { continue; }
-            if( static_cast<int>( e.pos_z ) != s_frame_camera.pub_player_z() ) { continue; }
-            const float dx = e.pos_x - static_cast<float>( s_frame_camera.pub_player_x() );
-            const float dy = e.pos_y - static_cast<float>( s_frame_camera.pub_player_y() );
-            if( dx * dx + dy * dy > CULL_RADIUS_TILES * CULL_RADIUS_TILES ) { continue; }
-            if( e.radius <= 0.01f ) { continue; }
-            const int ex = static_cast<int>( e.pos_x );
-            const int ey = static_cast<int>( e.pos_y );
-            const level_cache &shaft_lc = shaft_map.access_cache( static_cast<int>( e.pos_z ) );
-            const point_bub_ms epos( ex, ey );
-            const lit_level ell = shaft_lc.inbounds( epos ) ? shaft_lc.visibility_cache[shaft_lc.idx( ex, ey )]
-                                  : lit_level::BLANK;
-            if( shaft_map.get_visibility( ell, shaft_vis_cache ) != VIS_CLEAR ) { continue; }
+        shaft_instances.reserve(32);
+        dust_sources.reserve(32);
+        map& shaft_map = get_map();
+        const visibility_variables& shaft_vis_cache = shaft_map.get_visibility_variables_cache();
+        for (const auto& e : s_emo.snap) {
+            if (e.shape != static_cast<std::uint32_t>(lighting::emitter_shape::CONE)) { continue; }
+            if (static_cast<int>(e.pos_z) != s_frame_camera.pub_player_z()) { continue; }
+            const float dx = e.pos_x - static_cast<float>(s_frame_camera.pub_player_x());
+            const float dy = e.pos_y - static_cast<float>(s_frame_camera.pub_player_y());
+            if (dx * dx + dy * dy > CULL_RADIUS_TILES * CULL_RADIUS_TILES) { continue; }
+            if (e.radius <= 0.01f) { continue; }
+            const int ex = static_cast<int>(e.pos_x);
+            const int ey = static_cast<int>(e.pos_y);
+            const level_cache& shaft_lc = shaft_map.access_cache(static_cast<int>(e.pos_z));
+            const point_bub_ms epos(ex, ey);
+            const lit_level ell =
+                shaft_lc.inbounds(epos)
+                    ? shaft_lc.visibility_cache[shaft_lc.idx(ex, ey)]
+                    : lit_level::BLANK;
+            if (shaft_map.get_visibility(ell, shaft_vis_cache) != VIS_CLEAR) { continue; }
             // Window cones only draw a shaft when the window sits in a wall run
             // (cone_dir is then the wall's inward normal) and the sun actually
             // shines through the glass. Flashlight/headlight cones carry
             // window_portal == 0 and pass untouched.
-            if( e.window_portal > 0.f
-                && ( e.window_portal < lighting::WINDOW_PORTAL_WALL || e.window_direct < k_min_direct ) ) {
+            if (e.window_portal > 0.f
+                && (e.window_portal < lighting::WINDOW_PORTAL_WALL
+                    || e.window_direct < k_min_direct)) {
                 continue;
             }
 
@@ -1470,52 +1413,63 @@ auto render_world_pass_w( lighting::render_state &rs,
             const float cr = e.r > 0.01f ? e.r : 1.0f;
             const float cg = e.g > 0.01f ? e.g : 1.0f;
             const float cb = e.b > 0.01f ? e.b : 1.0f;
-            const float base_len_tiles = std::clamp( g_shaft_length_scale * 1.5f * cot_elev, 1.0f, 12.0f );
-            const float strength = std::clamp( e.radius / 6.0f, 0.1f, 2.0f ) * g_shaft_intensity;
+            const float base_len_tiles =
+                std::clamp(g_shaft_length_scale * 1.5f * cot_elev, 1.0f, 12.0f);
+            const float strength = std::clamp(e.radius / 6.0f, 0.1f, 2.0f) * g_shaft_intensity;
 
-            if( g_shaft_enable && strength > 0.01f ) {
+            if (g_shaft_enable && strength > 0.01f) {
                 const std::pair<float, float> sp =
-                    s_frame_camera.screen_pos_of( e.pos_x, e.pos_y, tp );
-                shaft_instances.push_back( { .cx = sp.first, .cy = sp.second,
-                                             .dir_x = dir_x, .dir_y = dir_y,
-                                             .length_px = base_len_tiles * tp,
-                                             .half_width_px = std::max( 1.0f, g_shaft_width * tp ),
-                                             .r = cr, .g = cg, .b = cb,
-                                             .strength = strength } );
+                    s_frame_camera.screen_pos_of(e.pos_x, e.pos_y, tp);
+                shaft_instances.push_back(
+                    {.cx = sp.first,
+                     .cy = sp.second,
+                     .dir_x = dir_x,
+                     .dir_y = dir_y,
+                     .length_px = base_len_tiles * tp,
+                     .half_width_px = std::max(1.0f, g_shaft_width * tp),
+                     .r = cr,
+                     .g = cg,
+                     .b = cb,
+                     .strength = strength});
             }
-            if( g_dust_enable && strength > 0.01f ) {
-                dust_sources.push_back( { .world_x = e.pos_x, .world_y = e.pos_y,
-                                          .dir_x = dir_x, .dir_y = dir_y,
-                                          .length_tiles = base_len_tiles,
-                                          .r = cr, .g = cg, .b = cb,
-                                          .strength = strength } );
+            if (g_dust_enable && strength > 0.01f) {
+                dust_sources.push_back(
+                    {.world_x = e.pos_x,
+                     .world_y = e.pos_y,
+                     .dir_x = dir_x,
+                     .dir_y = dir_y,
+                     .length_tiles = base_len_tiles,
+                     .r = cr,
+                     .g = cg,
+                     .b = cb,
+                     .strength = strength});
             }
         }
-        if( g_shaft_enable && rs.godray_shafts().ready() && !shaft_instances.empty() ) {
-            rs.godray_shafts().record( {
+        if (g_shaft_enable && rs.godray_shafts().ready() && !shaft_instances.empty()) {
+            rs.godray_shafts().record({
                 .cb = ctx.cmd_buffer,
                 .target = wt->texture(),
-                .proj_w = static_cast<std::uint32_t>( proj_w ),
-                .proj_h = static_cast<std::uint32_t>( proj_h ),
-                .anim_time = std::fmod( static_cast<float>( SDL_GetTicks() ) / 1000.0f, 1000.0f ),
+                .proj_w = static_cast<std::uint32_t>(proj_w),
+                .proj_h = static_cast<std::uint32_t>(proj_h),
+                .anim_time = std::fmod(static_cast<float>(SDL_GetTicks()) / 1000.0f, 1000.0f),
                 .instances = &shaft_instances,
-            } );
+            });
         }
-        if( g_dust_enable && rs.dust_motes().ready() ) {
+        if (g_dust_enable && rs.dust_motes().ready()) {
             // Real-dt spawn accumulator (mirrors hud_particle_effect.cpp:424-455):
             // motes age/drift in real seconds, not sim ticks, so their motion
             // stays framerate-independent.
             static float s_dust_last_s = -1.0f;
-            const float now_s = static_cast<float>( SDL_GetTicks() ) / 1000.0f;
-            const float dust_dt = s_dust_last_s >= 0.0f
-                                  ? std::clamp( now_s - s_dust_last_s, 0.0f, 0.25f ) : 0.0f;
+            const float now_s = static_cast<float>(SDL_GetTicks()) / 1000.0f;
+            const float dust_dt =
+                s_dust_last_s >= 0.0f ? std::clamp(now_s - s_dust_last_s, 0.0f, 0.25f) : 0.0f;
             s_dust_last_s = now_s;
             const lighting::dust_mote_params dp{
                 .camera_off_x = s_frame_camera.pub_cam_off_x(),
                 .camera_off_y = s_frame_camera.pub_cam_off_y(),
                 .tile_pixel_size = tp,
-                .proj_w = static_cast<float>( proj_w ),
-                .proj_h = static_cast<float>( proj_h ),
+                .proj_w = static_cast<float>(proj_w),
+                .proj_h = static_cast<float>(proj_h),
                 .dt = dust_dt,
                 .density = g_dust_density,
                 .size = g_dust_size,
@@ -1523,153 +1477,154 @@ auto render_world_pass_w( lighting::render_state &rs,
                 .sun_dir_x = rs.current_sun().sun_dir_x,
                 .sun_dir_y = rs.current_sun().sun_dir_y,
             };
-            rs.dust_motes().record( ctx.cmd_buffer, wt->texture(), wt->width(), wt->height(), dp,
-                                    &dust_sources );
+            rs.dust_motes().record(
+                ctx.cmd_buffer, wt->texture(), wt->width(), wt->height(), dp, &dust_sources);
         }
     }
 
-    if( g_bloom_enable && rs.bloom().ready() && !cfg.diagnostic_view_active() ) {
-        rs.bloom().record( ctx.cmd_buffer, wt->texture(),
-                           wt->width(), wt->height(),
-                           g_bloom_threshold, g_bloom_intensity );
+    if (g_bloom_enable && rs.bloom().ready() && !cfg.diagnostic_view_active()) {
+        rs.bloom()
+            .record(ctx.cmd_buffer, wt->texture(), wt->width(), wt->height(), g_bloom_threshold,
+                    g_bloom_intensity);
     }
 
     // Rain: world-targeted falling drops → splash rings + dark impact decals.
     // Needs the map + camera for the sky-gated tile spawn loop.
     const bool want_rain = g_rain_enable && rs.rain().ready();
-    if( want_rain ) {
+    if (want_rain) {
         lighting::rain_params rp{};
-        rp.active          = true;
-        rp.intensity       = weather_rain_intensity();
-        rp.wind_angle      = 270.f; // wind from west (left-to-right on screen)
+        rp.active = true;
+        rp.intensity = weather_rain_intensity();
+        rp.wind_angle = 270.f; // wind from west (left-to-right on screen)
         // T3 (#108): the frame's camera, published values — the same numbers
         // `s_emo` carried into this struct every frame (Step 6a repointed the
         // removed g_vol_params to the mirror; the camera is its source now).
-        rp.camera_off_x    = s_frame_camera.pub_cam_off_x();
-        rp.camera_off_y    = s_frame_camera.pub_cam_off_y();
+        rp.camera_off_x = s_frame_camera.pub_cam_off_x();
+        rp.camera_off_y = s_frame_camera.pub_cam_off_y();
         rp.tile_pixel_size = s_frame_camera.pub_tile_px();
-        rp.proj_w          = static_cast<float>( proj_w );
-        rp.proj_h          = static_cast<float>( proj_h );
+        rp.proj_w = static_cast<float>(proj_w);
+        rp.proj_h = static_cast<float>(proj_h);
 
-        if( g && s_frame_camera.have_tile_context && world_generator
-            && world_generator->active_world && rp.tile_pixel_size > 0.f ) {
-            map &m = get_map();
+        if (g && s_frame_camera.have_tile_context && world_generator
+            && world_generator->active_world && rp.tile_pixel_size > 0.f) {
+            map& m = get_map();
             const int z = g->u.bub_pos().z();
-            const level_cache &mc = m.access_cache( z );
+            const level_cache& mc = m.access_cache(z);
             const int mapsize = m.getmapsize();
             const int map_w = mapsize * SEEX;
             const int map_h = mapsize * SEEY;
             // The spawn origin is the stale tile-context origin, carried by
             // the camera (T3) — the same value this site read from tilecontext.
-            const point o( s_frame_camera.map_origin_x, s_frame_camera.map_origin_y );
-            const int cache_n = static_cast<int>( mc.outside_cache.size() );
+            const point o(s_frame_camera.map_origin_x, s_frame_camera.map_origin_y);
+            const int cache_n = static_cast<int>(mc.outside_cache.size());
 
-            const int tiles_x = static_cast<int>( wt->width()  / rp.tile_pixel_size ) + 2;
-            const int tiles_y = static_cast<int>( wt->height() / rp.tile_pixel_size ) + 2;
+            const int tiles_x = static_cast<int>(wt->width() / rp.tile_pixel_size) + 2;
+            const int tiles_y = static_cast<int>(wt->height() / rp.tile_pixel_size) + 2;
 
             // File-local RNG so spawn jitter never perturbs the game RNG stream.
-            static std::mt19937 rain_rng{ 0x5A1Du };
-            std::uniform_int_distribution<int> dx( 0, std::max( 0, tiles_x ) );
-            std::uniform_int_distribution<int> dy( 0, std::max( 0, tiles_y ) );
-            std::uniform_real_distribution<float> dj( 0.f, 0.35f );
+            static std::mt19937 rain_rng{0x5A1Du};
+            std::uniform_int_distribution<int> dx(0, std::max(0, tiles_x));
+            std::uniform_int_distribution<int> dy(0, std::max(0, tiles_y));
+            std::uniform_real_distribution<float> dj(0.f, 0.35f);
 
-            const int spawn = static_cast<int>( rp.intensity * 22.f );
-            for( int i = 0; i < spawn; ++i ) {
-                const int tx = o.x + dx( rain_rng );
-                const int ty = o.y + dy( rain_rng );
-                if( tx < 0 || ty < 0 || tx >= map_w || ty >= map_h ) {
-                    continue;
-                }
-                const int idx = tx * map_h + ty; // x-major (matches frame_build)
-                if( idx < cache_n && mc.outside_cache[idx] ) { // sky-exposed only
+            const int spawn = static_cast<int>(rp.intensity * 22.f);
+            for (int i = 0; i < spawn; ++i) {
+                const int tx = o.x + dx(rain_rng);
+                const int ty = o.y + dy(rain_rng);
+                if (tx < 0 || ty < 0 || tx >= map_w || ty >= map_h) { continue; }
+                const int idx = tx * map_h + ty;              // x-major (matches frame_build)
+                if (idx < cache_n && mc.outside_cache[idx]) { // sky-exposed only
                     // Sub-tile landing position (not grid-locked). The drop dies
                     // here and spawns its splash + dark impact decal at this tile.
-                    const float fx = static_cast<float>( tx ) + dj( rain_rng ) + 0.15f;
-                    const float fy = static_cast<float>( ty ) + dj( rain_rng ) + 0.15f;
-                    rs.rain().add_drop( fx, fy, 0.45f + dj( rain_rng ) );
+                    const float fx = static_cast<float>(tx) + dj(rain_rng) + 0.15f;
+                    const float fy = static_cast<float>(ty) + dj(rain_rng) + 0.15f;
+                    rs.rain().add_drop(fx, fy, 0.45f + dj(rain_rng));
                 }
             }
         }
 
-        rs.rain().record( ctx.cmd_buffer, wt->texture(),
-                          wt->width(), wt->height(), rp );
+        rs.rain().record(ctx.cmd_buffer, wt->texture(), wt->width(), wt->height(), rp);
     }
     // Animated sound pulses — rendered AFTER tiles so the disc draws on top.
     // Must be here (not in draw_lighting_overlays) because render_world_pass_w
     // clears world_target before drawing tiles; anything written earlier is erased.
-    if( have_sound_pulses ) {
+    if (have_sound_pulses) {
         const float speed = g_sound_wave_speed;
         const double now = dev_test_lights::pulse_now_s();
         const float tp = s_frame_camera.pub_tile_px() > 0.f ? s_frame_camera.pub_tile_px() : 32.f;
         std::vector<lighting::sound_wave_instance> instances;
-        instances.reserve( 32 );
-        for( const auto &p : dev_test_lights::sound_pulses ) {
-            if( p.z != s_frame_camera.pub_player_z() ) { continue; }
-            const float max_r = std::clamp( p.volume, std::min( g_sound_wave_min_radius,
-                                            g_sound_wave_max_radius ), g_sound_wave_max_radius );
-            const float radius = static_cast<float>( now - p.spawn_s ) * speed;
-            const float life = std::clamp( 1.f - radius / max_r, 0.f, 1.f );
-            if( life <= 0.f ) { continue; }
+        instances.reserve(32);
+        for (const auto& p : dev_test_lights::sound_pulses) {
+            if (p.z != s_frame_camera.pub_player_z()) { continue; }
+            const float max_r = std::clamp(
+                p.volume, std::min(g_sound_wave_min_radius, g_sound_wave_max_radius),
+                g_sound_wave_max_radius);
+            const float radius = static_cast<float>(now - p.spawn_s) * speed;
+            const float life = std::clamp(1.f - radius / max_r, 0.f, 1.f);
+            if (life <= 0.f) { continue; }
             // T3 (#108): the named double-add (issue #127), preserved verbatim.
             const std::pair<float, float> pp = s_frame_camera.sound_pulse_pos_of(
-                                                   static_cast<float>( p.source.x() ) + 0.5f,
-                                                   static_cast<float>( p.source.y() ) + 0.5f, tp );
-            instances.push_back( { .source_x = pp.first, .source_y = pp.second,
-                                   .radius_px = radius * tp, .life = life } );
+                static_cast<float>(p.source.x()) + 0.5f, static_cast<float>(p.source.y()) + 0.5f,
+                tp);
+            instances.push_back(
+                {.source_x = pp.first,
+                 .source_y = pp.second,
+                 .radius_px = radius * tp,
+                 .life = life});
         }
-        if( !instances.empty() ) {
-            const float pixel_ratio = ( proj_w > 0 && wt->width() > 0 )
-                                      ? static_cast<float>( wt->width() ) / static_cast<float>( proj_w )
-                                      : 1.f;
-            const lighting::snd_frag_params fp {
+        if (!instances.empty()) {
+            const float pixel_ratio =
+                (proj_w > 0 && wt->width() > 0)
+                    ? static_cast<float>(wt->width()) / static_cast<float>(proj_w)
+                    : 1.f;
+            const lighting::snd_frag_params fp{
                 .camera_off_x = s_frame_camera.pub_cam_off_x(),
                 .camera_off_y = s_frame_camera.pub_cam_off_y(),
                 .op_x = s_frame_camera.pub_op_x(),
                 .op_y = s_frame_camera.pub_op_y(),
                 .tile_px_inv = tp > 0.f ? 1.f / tp : 0.f,
                 .pixel_ratio = pixel_ratio,
-                .sdf_map_w = static_cast<std::uint32_t>( rs.sdf().map_w() ),
-                .sdf_map_h = static_cast<std::uint32_t>( rs.sdf().map_h() ),
+                .sdf_map_w = static_cast<std::uint32_t>(rs.sdf().map_w()),
+                .sdf_map_h = static_cast<std::uint32_t>(rs.sdf().map_h()),
             };
-            rs.sound_waves().record( {
+            rs.sound_waves().record({
                 .cb = ctx.cmd_buffer,
                 .target = wt->texture(),
-                .proj_w = static_cast<std::uint32_t>( proj_w ),
-                .proj_h = static_cast<std::uint32_t>( proj_h ),
+                .proj_w = static_cast<std::uint32_t>(proj_w),
+                .proj_h = static_cast<std::uint32_t>(proj_h),
                 .instances = &instances,
                 .sdf_buffer = rs.sdf().sdf_buffer(),
                 .snd_frag_params = fp,
-            } );
+            });
         }
     }
 }
 
-auto tonemap_pass_t( lighting::render_state &rs,
-                     lighting::frame_context &ctx,
-                     const lighting::lighting_settings &cfg ) -> void
-{
-    lighting::ui_composite_target *wt   = rs.world_target();
-    lighting::ui_composite_target *wldr = rs.world_ldr_target();
-    if( wt && wt->texture() && wldr && wldr->texture() && rs.gpu_sampler()
-        && rs.tonemap().ready() ) {
+auto tonemap_pass_t(
+    lighting::render_state& rs, lighting::frame_context& ctx,
+    const lighting::lighting_settings& cfg) -> void {
+    lighting::ui_composite_target* wt = rs.world_target();
+    lighting::ui_composite_target* wldr = rs.world_ldr_target();
+    if (wt && wt->texture() && wldr && wldr->texture() && rs.gpu_sampler()
+        && rs.tonemap().ready()) {
         // Fill grade_params from the F4 devui globals each frame.
         lighting::grade_params grade;
-        grade.cdl_slope_r  = g_grade_cdl_slope_r;
-        grade.cdl_slope_g  = g_grade_cdl_slope_g;
-        grade.cdl_slope_b  = g_grade_cdl_slope_b;
+        grade.cdl_slope_r = g_grade_cdl_slope_r;
+        grade.cdl_slope_g = g_grade_cdl_slope_g;
+        grade.cdl_slope_b = g_grade_cdl_slope_b;
         grade.cdl_offset_r = g_grade_cdl_offset_r;
         grade.cdl_offset_g = g_grade_cdl_offset_g;
         grade.cdl_offset_b = g_grade_cdl_offset_b;
-        grade.cdl_power_r  = g_grade_cdl_power_r;
-        grade.cdl_power_g  = g_grade_cdl_power_g;
-        grade.cdl_power_b  = g_grade_cdl_power_b;
-        const tod_grade tod = time_of_day_grade( celestial_hour() );
-        grade.temperature      = tod.temperature + g_grade_temperature;
-        grade.tint              = tod.tint + g_grade_tint;
-        grade.saturation       = tod.saturation_mul * g_grade_saturation;
-        grade.contrast          = tod.contrast + g_grade_contrast;
-        grade.vignette_amount  = g_grade_vignette;
-        grade.grain_amount     = g_grade_grain;
+        grade.cdl_power_r = g_grade_cdl_power_r;
+        grade.cdl_power_g = g_grade_cdl_power_g;
+        grade.cdl_power_b = g_grade_cdl_power_b;
+        const tod_grade tod = time_of_day_grade(celestial_hour());
+        grade.temperature = tod.temperature + g_grade_temperature;
+        grade.tint = tod.tint + g_grade_tint;
+        grade.saturation = tod.saturation_mul * g_grade_saturation;
+        grade.contrast = tod.contrast + g_grade_contrast;
+        grade.vignette_amount = g_grade_vignette;
+        grade.grain_amount = g_grade_grain;
         // Chromatic aberration: the static grade value plus the damage punch.
         //
         // The damage-driven term used to live in `ui_post_pass`, a fullscreen pass
@@ -1680,7 +1635,7 @@ auto tonemap_pass_t( lighting::render_state &rs,
         // lands around 0.0075 of UV offset — clearly felt against the ~0.0015
         // "subtle" static default, without tearing the tiles apart.
         constexpr float damage_ca_scale = 0.006f;
-        grade.ca_amount        = g_grade_ca + hud_shake::intensity() * damage_ca_scale;
+        grade.ca_amount = g_grade_ca + hud_shake::intensity() * damage_ca_scale;
         // Step 7: single knob reusing the RmlUi HUD CRT's own scanline_alpha
         // slider — crt_world is a checkbox, not a separate intensity control.
         grade.crt_world_amount =
@@ -1694,16 +1649,16 @@ auto tonemap_pass_t( lighting::render_state &rs,
         // at green tile edges. Zeroing the spatial post effects removes the fringe
         // rather than forcing every consumer to tolerate it. The tonal transform is
         // already handled: `ramp_enable` lerps AgX out for the same reason.
-        if( cfg.diagnostic_view_active() ) {
+        if (cfg.diagnostic_view_active()) {
             grade.ca_amount = 0.0f;
             grade.grain_amount = 0.0f;
             grade.vignette_amount = 0.0f;
             grade.crt_world_amount = 0.0f;
         }
-        rs.tonemap().record( ctx.cmd_buffer, wt->texture(), rs.gpu_sampler(),
-                             wldr->texture(), wldr->width(), wldr->height(),
-                             g_tonemap_exposure, g_tonemap_min_ev, g_tonemap_max_ev,
-                             cfg.debug.ramp_enable, grade );
+        rs.tonemap().record(
+            ctx.cmd_buffer, wt->texture(), rs.gpu_sampler(), wldr->texture(), wldr->width(),
+            wldr->height(), g_tonemap_exposure, g_tonemap_min_ev, g_tonemap_max_ev,
+            cfg.debug.ramp_enable, grade);
     }
 }
 
@@ -1718,9 +1673,8 @@ constexpr float HUD_PART_BASE_ALPHA = 0.5f;
 // Spawn density IS type-specific — snowfall is busy, pollen is sparse — and the
 // weather picker below and the dev panel's forced emitter must agree on it, so
 // the numbers live here once.
-auto hud_emitter_base_rate( lighting::hud_emitter_type t ) -> float
-{
-    switch( t ) {
+auto hud_emitter_base_rate(lighting::hud_emitter_type t) -> float {
+    switch (t) {
         case lighting::hud_emitter_type::ember:
             return 2.5f;
         case lighting::hud_emitter_type::dust:
@@ -1735,9 +1689,8 @@ auto hud_emitter_base_rate( lighting::hud_emitter_type t ) -> float
     return 3.0f;
 }
 
-auto hud_emitter_enabled( lighting::hud_emitter_type t ) -> bool
-{
-    switch( t ) {
+auto hud_emitter_enabled(lighting::hud_emitter_type t) -> bool {
+    switch (t) {
         case lighting::hud_emitter_type::ember:
             return g_hud_part_ember_enable;
         case lighting::hud_emitter_type::dust:
@@ -1752,10 +1705,9 @@ auto hud_emitter_enabled( lighting::hud_emitter_type t ) -> bool
     return true;
 }
 
-auto composite_swapchain_pass_b( lighting::render_state &rs,
-                                 lighting::frame_context &ctx, int proj_w, int proj_h ) -> void
-{
-    constexpr float clear_black[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+auto composite_swapchain_pass_b(
+    lighting::render_state& rs, lighting::frame_context& ctx, int proj_w, int proj_h) -> void {
+    constexpr float clear_black[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 
     // World text (§7, e.g. SCT) renders through the RmlUi layer even with no menu
     // open, so the overlay pass must run when either a document OR world text is
@@ -1767,23 +1719,24 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     // on its own → the overlay pass below runs even on an otherwise-empty frame.
     // body_ms is render-body CPU wall-clock (steady_clock), NOT GPU time — labelled
     // accordingly. The label is cached and rebuilt only when the averages change.
-    if( g_show_fps ) {
+    if (g_show_fps) {
         static std::string fps_label;
         static float shown_fps = -1.0f;
         static float shown_body = -1.0f;
-        if( g_fps_avg != shown_fps || g_body_ms_avg != shown_body ) {
-            fps_label = string_format( "FPS: %.0f  body: %.1f ms", g_fps_avg, g_body_ms_avg );
+        if (g_fps_avg != shown_fps || g_body_ms_avg != shown_body) {
+            fps_label = string_format("FPS: %.0f  body: %.1f ms", g_fps_avg, g_body_ms_avg);
             shown_fps = g_fps_avg;
             shown_body = g_body_ms_avg;
         }
-        rmlui_layer::set_hud_text( 8.0f, 8.0f, fps_label, 0xCCFFFFFFu );
+        rmlui_layer::set_hud_text(8.0f, 8.0f, fps_label, 0xCCFFFFFFu);
     } else {
-        rmlui_layer::set_hud_text( 0.0f, 0.0f, std::string(), 0u );
+        rmlui_layer::set_hud_text(0.0f, 0.0f, std::string(), 0u);
     }
 
-    const bool rmlui_active = rmlui_layer::active() || rmlui_layer::world_text_active()
-                              || rmlui_layer::combat_text_active();
-    if( rmlui_active ) {
+    const bool rmlui_active =
+        rmlui_layer::active() || rmlui_layer::world_text_active()
+        || rmlui_layer::combat_text_active();
+    if (rmlui_active) {
         // Advance HUD animation tweens BEFORE new_frame() so that CSS property
         // changes (SetProperty on opacity/top) are processed by RmlUi's Update()
         // in the same frame's layout/render pass.
@@ -1792,15 +1745,15 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
         // Advance floating combat text (Phase 5).
         static std::uint32_t ct_last_ms = 0;
         const std::uint32_t ct_now = SDL_GetTicks();
-        if( ct_last_ms > 0 ) {
-            const float dt = std::max( 0.0f, static_cast<float>( ct_now - ct_last_ms ) );
-            rmlui_layer::combat_text_tick( dt );
+        if (ct_last_ms > 0) {
+            const float dt = std::max(0.0f, static_cast<float>(ct_now - ct_last_ms));
+            rmlui_layer::combat_text_tick(dt);
         }
         ct_last_ms = ct_now;
         // new_frame()=Update() + prepare()=geometry upload, both BEFORE begin_pass
         // (D3D12: uploads must not land inside the open render pass).
         rmlui_layer::new_frame();
-        rmlui_layer::prepare( ctx.cmd_buffer );
+        rmlui_layer::prepare(ctx.cmd_buffer);
     }
 
     // Composite straight into the swapchain. There used to be an intermediate
@@ -1817,7 +1770,7 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     // not was the damage-driven CA punch, and that now rides on the tonemap's
     // `ca_amount` (see tonemap_pass_t). The removal also saves a fullscreen pass and
     // a full-size intermediate render target every frame.
-    SDL_GPUTexture *render_target = ctx.swapchain_tex;
+    SDL_GPUTexture* render_target = ctx.swapchain_tex;
 
     // Atmospheric HUD particles (Phase 8): environment-driven ambient particles.
     // Screen-space (not world-locked) — they drift independently of camera movement.
@@ -1833,7 +1786,7 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     const std::uint32_t target_w = ctx.swapchain_w;
     const std::uint32_t target_h = ctx.swapchain_h;
     std::uint32_t particle_count = 0;
-    if( !g_hud_part_enable ) {
+    if (!g_hud_part_enable) {
         // Off means gone, not "stops spawning": without this the last poolful
         // hangs on screen until every particle ages out.
         rs.hud_particles().clear();
@@ -1843,36 +1796,35 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
         // Same for every emitter — see HUD_PART_BASE_ALPHA.
         const auto palpha = HUD_PART_BASE_ALPHA;
 
-        if( g && world_generator && world_generator->active_world ) {
+        if (g && world_generator && world_generator->active_world) {
             const float hour = celestial_hour();
             const bool is_night = hour < 5.5f || hour > 20.5f;
             const int z = g->u.bub_pos().z();
             const bool underground = z < 0;
-            const auto season = season_of_year( calendar::turn );
+            const auto season = season_of_year(calendar::turn);
             const weather_type_id wid = get_weather().weather_id;
-            const bool snowing = wid.is_valid() && wid->precip != precip_class::none
-                                 && !wid->rains;
+            const bool snowing = wid.is_valid() && wid->precip != precip_class::none && !wid->rains;
             const bool raining = wid.is_valid() && wid->rains;
 
-            if( underground ) {
+            if (underground) {
                 // Caves: slow drifting dust motes
                 ptype = lighting::hud_emitter_type::dust;
                 prate = 3.0f;
-            } else if( snowing ) {
+            } else if (snowing) {
                 // Snow weather: dense falling snow
                 ptype = lighting::hud_emitter_type::snow;
                 prate = 8.0f;
-            } else if( raining ) {
+            } else if (raining) {
                 // Rain: the world-space rain_effect already fills the screen, so the
                 // ambient layer only adds mush — unless the dev panel asks for it,
                 // in which case dust doubles as wind-blown spray.
                 ptype = lighting::hud_emitter_type::dust;
                 prate = g_hud_part_in_rain ? 4.0f : 0.0f;
-            } else if( season == AUTUMN ) {
+            } else if (season == AUTUMN) {
                 // Autumn: tumbling leaves
                 ptype = lighting::hud_emitter_type::leaf;
                 prate = 3.0f;
-            } else if( is_night ) {
+            } else if (is_night) {
                 // Night outdoor: slow floating embers / firefly-like motes
                 ptype = lighting::hud_emitter_type::ember;
                 prate = 2.5f;
@@ -1884,26 +1836,27 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
         }
 
         // Dev panel (F4 → Effects → HUD particles).
-        if( g_hud_part_force ) {
+        if (g_hud_part_force) {
             // Explicit request — the per-emitter kill-switches below do not apply,
             // otherwise forcing an emitter you had silenced would do nothing and
             // look like a broken control.
-            ptype = static_cast<lighting::hud_emitter_type>(
-                        std::clamp( g_hud_part_type, 0, 4 ) );
-            prate = hud_emitter_base_rate( ptype );
-        } else if( !hud_emitter_enabled( ptype ) ) {
+            ptype = static_cast<lighting::hud_emitter_type>(std::clamp(g_hud_part_type, 0, 4));
+            prate = hud_emitter_base_rate(ptype);
+        } else if (!hud_emitter_enabled(ptype)) {
             prate = 0.0f;
         }
 
-        particle_count = rs.hud_particles().prepare( ctx.cmd_buffer, {
-            .type = ptype,
-            .spawn_rate = std::max( 0.f, prate * g_hud_part_rate_scale ),
-            .intensity = std::max( 0.f, palpha * g_hud_part_alpha_scale ),
-            .screen_w = target_w,
-            .screen_h = target_h,
-            .size_scale = g_hud_part_size_scale,
-            .speed_scale = g_hud_part_speed_scale,
-        } );
+        particle_count = rs.hud_particles().prepare(
+            ctx.cmd_buffer,
+            {
+                .type = ptype,
+                .spawn_rate = std::max(0.f, prate * g_hud_part_rate_scale),
+                .intensity = std::max(0.f, palpha * g_hud_part_alpha_scale),
+                .screen_w = target_w,
+                .screen_h = target_h,
+                .size_scale = g_hud_part_size_scale,
+                .speed_scale = g_hud_part_speed_scale,
+            });
     }
 
     // Gameplay cutout for the particle draw. The map viewport comes from
@@ -1911,52 +1864,49 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     // uses), while the particle pass runs at the PHYSICAL swapchain size, so it
     // has to be scaled — on a HiDPI/scaled display the two differ and an
     // unscaled rect would mask the wrong region.
-    lighting::hud_particle_draw part_draw {
+    lighting::hud_particle_draw part_draw{
         .count = particle_count,
         .target_w = target_w,
         .target_h = target_h,
     };
-    if( g_hud_part_mask_play && s_frame_camera.have_tile_context && g
-        && world_generator && world_generator->active_world ) {
+    if (g_hud_part_mask_play && s_frame_camera.have_tile_context && g && world_generator
+        && world_generator->active_world) {
         // T3 (#108): the raw tile-context facts, carried by the camera — the
         // play-area rect multiplies the RAW tile heights, so it reads the raw
         // fields, not the square `tile_px`.
-        const point off( s_frame_camera.draw_off_px_x, s_frame_camera.draw_off_px_y );
-        const float map_w = static_cast<float>( s_frame_camera.screentile_w *
-                                                s_frame_camera.tile_w );
-        const float map_h = static_cast<float>( s_frame_camera.screentile_h *
-                                                s_frame_camera.tile_h );
-        const float sx = proj_w > 0 ? static_cast<float>( target_w ) / static_cast<float>( proj_w ) : 1.f;
-        const float sy = proj_h > 0 ? static_cast<float>( target_h ) / static_cast<float>( proj_h ) : 1.f;
-        part_draw.play_x0 = static_cast<float>( off.x ) * sx;
-        part_draw.play_y0 = static_cast<float>( off.y ) * sy;
-        part_draw.play_x1 = ( static_cast<float>( off.x ) + map_w ) * sx;
-        part_draw.play_y1 = ( static_cast<float>( off.y ) + map_h ) * sy;
+        const point off(s_frame_camera.draw_off_px_x, s_frame_camera.draw_off_px_y);
+        const float map_w = static_cast<float>(s_frame_camera.screentile_w * s_frame_camera.tile_w);
+        const float map_h = static_cast<float>(s_frame_camera.screentile_h * s_frame_camera.tile_h);
+        const float sx =
+            proj_w > 0 ? static_cast<float>(target_w) / static_cast<float>(proj_w) : 1.f;
+        const float sy =
+            proj_h > 0 ? static_cast<float>(target_h) / static_cast<float>(proj_h) : 1.f;
+        part_draw.play_x0 = static_cast<float>(off.x) * sx;
+        part_draw.play_y0 = static_cast<float>(off.y) * sy;
+        part_draw.play_x1 = (static_cast<float>(off.x) + map_w) * sx;
+        part_draw.play_y1 = (static_cast<float>(off.y) + map_h) * sy;
         part_draw.mask_play_area = true;
     }
 
-    rs.tile_batcher().begin_pass( ctx.cmd_buffer, render_target,
-                                  ctx.swapchain_w, ctx.swapchain_h,
-                                  clear_black,
-                                  static_cast<std::uint32_t>( proj_w ),
-                                  static_cast<std::uint32_t>( proj_h ) );
+    rs.tile_batcher().begin_pass(
+        ctx.cmd_buffer, render_target, ctx.swapchain_w, ctx.swapchain_h, clear_black,
+        static_cast<std::uint32_t>(proj_w), static_cast<std::uint32_t>(proj_h));
 
-    auto blit_layer = [&]( lighting::ui_composite_target * layer ) {
-        if( !layer || !layer->texture() || !rs.gpu_sampler() ) {
-            return;
-        }
-        const lighting::sprite_instance quad = fullscreen_quad(
-                static_cast<float>( proj_w ), static_cast<float>( proj_h ) );
-        rs.tile_batcher().set_texture( layer->texture(), rs.gpu_sampler(),
-                                       /*is_lit=*/false );
-        rs.tile_batcher().draw( quad );
+    auto blit_layer = [&](lighting::ui_composite_target* layer) {
+        if (!layer || !layer->texture() || !rs.gpu_sampler()) { return; }
+        const lighting::sprite_instance quad =
+            fullscreen_quad(static_cast<float>(proj_w), static_cast<float>(proj_h));
+        rs.tile_batcher().set_texture(
+            layer->texture(), rs.gpu_sampler(),
+            /*is_lit=*/false);
+        rs.tile_batcher().draw(quad);
     };
-    if( g_shadow_debug && rs.shadow_mask() && rs.shadow_mask()->texture() ) {
-        blit_layer( rs.shadow_mask() );
+    if (g_shadow_debug && rs.shadow_mask() && rs.shadow_mask()->texture()) {
+        blit_layer(rs.shadow_mask());
     } else {
-        blit_layer( rs.world_ldr_target() );
+        blit_layer(rs.world_ldr_target());
     }
-    blit_layer( rs.ui_target() );
+    blit_layer(rs.ui_target());
     // RmlUi (player menus + dev panel + world text) draws into the single swapchain
     // pass (D3D12 single-pass rule) — and the HUD particles ride along in the same
     // pass, for the same reason.
@@ -1968,23 +1918,20 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
     // landing on top of translucent HUD panels and reading as grain over the
     // interface. Ambient atmosphere belongs to the world; the HUD is not weather.
     rs.tile_batcher().end_pass(
-          ( rmlui_active || particle_count > 0 )
-          ? lighting::sprite_batcher::pass_overlay_fn(
-              [&rs, rmlui_active, part_draw](
-    SDL_GPURenderPass * rp, SDL_GPUCommandBuffer * cb ) {
-        lighting::hud_particle_draw d = part_draw;
-        d.rp = rp;
-        d.cb = cb;
-        rs.hud_particles().draw_in_pass( d );
-        if( rmlui_active ) {
-            rmlui_layer::render_in_pass( rp, cb );
-        }
-    } )
-    : lighting::sprite_batcher::pass_overlay_fn{} );
-    rs.device().submit_frame( ctx );
+        (rmlui_active || particle_count > 0)
+            ? lighting::sprite_batcher::pass_overlay_fn(
+                  [&rs, rmlui_active, part_draw](SDL_GPURenderPass* rp, SDL_GPUCommandBuffer* cb) {
+                      lighting::hud_particle_draw d = part_draw;
+                      d.rp = rp;
+                      d.cb = cb;
+                      rs.hud_particles().draw_in_pass(d);
+                      if (rmlui_active) { rmlui_layer::render_in_pass(rp, cb); }
+                  })
+            : lighting::sprite_batcher::pass_overlay_fn{});
+    rs.device().submit_frame(ctx);
     // Pair with CATA_FRAME_DUMP: submit_frame incremented the frame counter,
     // so this sees the same count the BMP dump compared against.
-    sdl_lighting_devui::maybe_dump_map( rs.device().frame_count(), rs.device().last_dump_frame() );
+    sdl_lighting_devui::maybe_dump_map(rs.device().frame_count(), rs.device().last_dump_frame());
 }
 
 /// The plan dispatch: pulls the next runnable step from `exec` and runs its body. The
@@ -1992,29 +1939,29 @@ auto composite_swapchain_pass_b( lighting::render_state &rs,
 /// order the bodies run; the fused lighting group consumes its own members with
 /// `exec.split` inside `flush_and_gather_rc`. Declared in `sdl_render_frame.h` so the
 /// GPU-lane render test can drive the same dispatch with its own plan and report.
-auto run_frame_plan( lighting::render_state &rs, lighting::frame_context &ctx,
-                     frame_executor &exec, lighting::lighting_settings &cfg ) -> void
-{
+auto run_frame_plan(
+    lighting::render_state& rs, lighting::frame_context& ctx, frame_executor& exec,
+    lighting::lighting_settings& cfg) -> void {
     // T3 (#108): the frame's camera, derived ONCE here — before the first
     // step runs — and read by every consumer in this TU. The whole frame
     // agrees on it; the six re-derivations it replaces could disagree.
-    s_frame_camera = derive_live_frame_camera( ctx );
+    s_frame_camera = derive_live_frame_camera(ctx);
     bool rc_rebuild = false;
     int proj_w = 0;
     int proj_h = 0;
-    while( const std::optional<frame_step> step = exec.next_step() ) {
-        switch( step->kind ) {
+    while (const std::optional<frame_step> step = exec.next_step()) {
+        switch (step->kind) {
             case frame_step_kind::build_lighting:
-                dbg( DL::Debug ) << "[render] build_lighting";
-                rc_rebuild = build_lighting( rs, cfg );
+                dbg(DL::Debug) << "[render] build_lighting";
+                rc_rebuild = build_lighting(rs, cfg);
                 break;
             // The fused lighting group: the loop dispatches the group head only. The
             // body consumes the remaining members with its own `split` calls, which
             // advance the plan cursor, so those cases are inert here — dispatching one
             // would run the group twice.
             case frame_step_kind::collector_flush:
-                dbg( DL::Debug ) << "[render] flush_and_gather_rc";
-                flush_and_gather_rc( rs, ctx, rc_rebuild, exec, cfg );
+                dbg(DL::Debug) << "[render] flush_and_gather_rc";
+                flush_and_gather_rc(rs, ctx, rc_rebuild, exec, cfg);
                 break;
             case frame_step_kind::gpu_sdf:
             case frame_step_kind::sky_sun:
@@ -2023,54 +1970,53 @@ auto run_frame_plan( lighting::render_state &rs, lighting::frame_context &ctx,
             case frame_step_kind::rc_readback:
                 break;
             case frame_step_kind::assemble:
-                dbg( DL::Debug ) << "[render] assemble_light_inputs";
-                assemble_light_inputs( rs, cfg );
+                dbg(DL::Debug) << "[render] assemble_light_inputs";
+                assemble_light_inputs(rs, cfg);
                 break;
             case frame_step_kind::menu_background:
-                dbg( DL::Debug ) << "[render] maybe_push_menu_background";
-                maybe_push_menu_background( rs, ctx );
+                dbg(DL::Debug) << "[render] maybe_push_menu_background";
+                maybe_push_menu_background(rs, ctx);
                 break;
             case frame_step_kind::overlays:
                 // The projection size is queried where it always was: between the menu
                 // background and the overlays, i.e. inside the `overlays` lap.
-                SDL_GetWindowSize( g_display.window.get(), &proj_w, &proj_h );
-                if( proj_w <= 0 || proj_h <= 0 ) {
-                    proj_w = static_cast<int>( ctx.swapchain_w );
-                    proj_h = static_cast<int>( ctx.swapchain_h );
+                SDL_GetWindowSize(g_display.window.get(), &proj_w, &proj_h);
+                if (proj_w <= 0 || proj_h <= 0) {
+                    proj_w = static_cast<int>(ctx.swapchain_w);
+                    proj_h = static_cast<int>(ctx.swapchain_h);
                 }
-                dbg( DL::Debug ) << "[render] draw_lighting_overlays";
-                draw_lighting_overlays( rs );
+                dbg(DL::Debug) << "[render] draw_lighting_overlays";
+                draw_lighting_overlays(rs);
                 break;
             case frame_step_kind::ui_composite:
-                dbg( DL::Debug ) << "[render] composite_ui_pass_a";
-                composite_ui_pass_a( rs, ctx, proj_w, proj_h );
+                dbg(DL::Debug) << "[render] composite_ui_pass_a";
+                composite_ui_pass_a(rs, ctx, proj_w, proj_h);
                 break;
             case frame_step_kind::avatar_composite:
-                dbg( DL::Debug ) << "[render] composite_avatar_pass";
-                composite_avatar_pass( rs, ctx );
+                dbg(DL::Debug) << "[render] composite_avatar_pass";
+                composite_avatar_pass(rs, ctx);
                 break;
             case frame_step_kind::vehicle_composite:
-                dbg( DL::Debug ) << "[render] composite_vehicle_pass";
-                composite_vehicle_pass( rs, ctx );
+                dbg(DL::Debug) << "[render] composite_vehicle_pass";
+                composite_vehicle_pass(rs, ctx);
                 break;
             case frame_step_kind::world_pass:
-                dbg( DL::Debug ) << "[render] render_world_pass_w";
-                render_world_pass_w( rs, ctx, proj_w, proj_h, cfg );
+                dbg(DL::Debug) << "[render] render_world_pass_w";
+                render_world_pass_w(rs, ctx, proj_w, proj_h, cfg);
                 break;
             case frame_step_kind::tonemap:
-                dbg( DL::Debug ) << "[render] tonemap_pass_t";
-                tonemap_pass_t( rs, ctx, cfg );
+                dbg(DL::Debug) << "[render] tonemap_pass_t";
+                tonemap_pass_t(rs, ctx, cfg);
                 break;
             case frame_step_kind::swapchain_composite:
-                dbg( DL::Debug ) << "[render] composite_swapchain_pass_b";
-                composite_swapchain_pass_b( rs, ctx, proj_w, proj_h );
+                dbg(DL::Debug) << "[render] composite_swapchain_pass_b";
+                composite_swapchain_pass_b(rs, ctx, proj_w, proj_h);
                 break;
         }
     }
 }
 
-void refresh_display()
-{
+void refresh_display() {
     // Declared before the RAII logger so the report it points at outlives the
     // destructor (locals unwind in reverse order of declaration).
     frame_report report;
@@ -2081,50 +2027,49 @@ void refresh_display()
     // accumulated into the window below.
     struct frame_perf {
         std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
-        const frame_report *report = nullptr;
+        const frame_report* report = nullptr;
         ~frame_perf() {
             using clk = std::chrono::steady_clock;
             const clk::time_point now = clk::now();
-            const double body_ms = std::chrono::duration<double, std::milli>( now - t0 ).count();
+            const double body_ms = std::chrono::duration<double, std::milli>(now - t0).count();
             static clk::time_point last{};
             static double sum_body = 0.0, max_body = 0.0, sum_period = 0.0, max_period = 0.0;
             static int n = 0;
-            if( last.time_since_epoch().count() != 0 ) {
-                const double period_ms = std::chrono::duration<double, std::milli>( now - last ).count();
+            if (last.time_since_epoch().count() != 0) {
+                const double period_ms =
+                    std::chrono::duration<double, std::milli>(now - last).count();
                 sum_period += period_ms;
-                max_period = std::max( max_period, period_ms );
+                max_period = std::max(max_period, period_ms);
             }
             last = now;
             sum_body += body_ms;
-            max_body = std::max( max_body, body_ms );
+            max_body = std::max(max_body, body_ms);
             ++n;
             // Per-phase spike attribution: charge this frame's per-lap totals.
-            if( report ) {
-                s_perf_window.accumulate( *report );
-            }
+            if (report) { s_perf_window.accumulate(*report); }
             // Publish running averages EVERY frame (not just at the 120-frame
             // boundary) so the overlay isn't pinned at 0 during the first window
             // after launch/enable.
             {
                 const double ap = sum_period / n;
-                g_fps_avg = static_cast<float>( ap > 0.0 ? 1000.0 / ap : 0.0 );
-                g_body_ms_avg = static_cast<float>( sum_body / n );
+                g_fps_avg = static_cast<float>(ap > 0.0 ? 1000.0 / ap : 0.0);
+                g_body_ms_avg = static_cast<float>(sum_body / n);
             }
-            if( n >= 120 ) {
+            if (n >= 120) {
                 const double ap = sum_period / n;
-                DebugLogFL( DL::Info, DC::Main )
-                        << "[render][perf] " << n << " frames: render_body avg=" << ( sum_body / n )
-                        << "ms max=" << max_body << "ms | frame_period avg=" << ap << "ms (~"
-                        << ( ap > 0.0 ? 1000.0 / ap : 0.0 ) << " fps) max=" << max_period << "ms"
-                        << " rebuilds=" << s_rebuild_in_window << "/" << n;
+                DebugLogFL(DL::Info, DC::Main)
+                    << "[render][perf] " << n << " frames: render_body avg=" << (sum_body / n)
+                    << "ms max=" << max_body << "ms | frame_period avg=" << ap << "ms (~"
+                    << (ap > 0.0 ? 1000.0 / ap : 0.0) << " fps) max=" << max_period << "ms"
+                    << " rebuilds=" << s_rebuild_in_window << "/" << n;
                 // Per-phase breakdown (avg/max ms) — which stage owns the spike.
                 std::string ph;
-                for( std::size_t i = 0; i < s_perf_window.sum.size(); ++i ) {
-                    ph += string_format( " %s=%.2f/%.2f",
-                                         std::string( frame_lap_name( i ) ).c_str(),
-                                         s_perf_window.sum[i] / n, s_perf_window.max[i] );
+                for (std::size_t i = 0; i < s_perf_window.sum.size(); ++i) {
+                    ph += string_format(
+                        " %s=%.2f/%.2f", std::string(frame_lap_name(i)).c_str(),
+                        s_perf_window.sum[i] / n, s_perf_window.max[i]);
                 }
-                DebugLogFL( DL::Info, DC::Main ) << "[render][perf][phase avg/max ms]" << ph;
+                DebugLogFL(DL::Info, DC::Main) << "[render][perf][phase avg/max ms]" << ph;
                 sum_body = max_body = sum_period = max_period = 0.0;
                 n = 0;
                 s_rebuild_in_window = 0;
@@ -2133,31 +2078,28 @@ void refresh_display()
         }
     } _fp;
 
-    dbg( DL::Debug ) << "[render] refresh_display START";
+    dbg(DL::Debug) << "[render] refresh_display START";
     g_display.needupdate = false;
     g_display.lastupdate = SDL_GetTicks();
 
-    auto &rs = lighting::get_render_state();
+    auto& rs = lighting::get_render_state();
 
     // The frame runs as one executor loop over the plan: the loop's step boundaries
     // ARE the phase timings, so the order the tests assert is the order dispatched.
     // `begin_frame` is the precondition outside the plan and owns the `begin` lap.
     const frame_plan plan = default_frame_plan();
-    frame_executor exec( plan, report );
+    frame_executor exec(plan, report);
     _fp.report = &report;
 
-    dbg( DL::Debug ) << "[render] begin_frame";
+    dbg(DL::Debug) << "[render] begin_frame";
     exec.begin_precondition();
-    auto ctx = begin_frame( rs );
+    auto ctx = begin_frame(rs);
     exec.end_precondition();
-    if( !ctx ) {
-        return;
-    }
-    run_frame_plan( rs, *ctx, exec, lighting::live_settings() );
+    if (!ctx) { return; }
+    run_frame_plan(rs, *ctx, exec, lighting::live_settings());
     exec.finish();
-    if( report.order_violation() ) {
-        DebugLogFL( DL::Error, DC::Main )
-                << "[render][plan] lighting split out of plan order";
+    if (report.order_violation()) {
+        DebugLogFL(DL::Error, DC::Main) << "[render][plan] lighting split out of plan order";
     }
-    dbg( DL::Debug ) << "[render] refresh_display COMPLETE";
+    dbg(DL::Debug) << "[render] refresh_display COMPLETE";
 }

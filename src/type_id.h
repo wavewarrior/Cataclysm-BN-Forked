@@ -194,8 +194,7 @@ class ter_furn_transform;
 using ter_furn_transform_id = string_id<ter_furn_transform>;
 
 class Trait_group;
-namespace trait_group
-{
+namespace trait_group {
 using Trait_group_tag = string_id<Trait_group>;
 } // namespace trait_group
 
@@ -246,4 +245,3 @@ using flag_id = string_id<json_flag>;
 class json_trait_flag;
 using trait_flag_id = int_id<json_trait_flag>;
 using trait_flag_str_id = string_id<json_trait_flag>;
-

@@ -1,16 +1,15 @@
 #pragma once
 #ifndef CATA_SRC_HUD_RUNIC_STRIPS_H
-#define CATA_SRC_HUD_RUNIC_STRIPS_H
+#    define CATA_SRC_HUD_RUNIC_STRIPS_H
 
-#include <string>
-#include <vector>
+#    include "hud_runic.h"
 
-#include "hud_runic.h"
+#    include <string>
+#    include <vector>
 
 class avatar;
 
-namespace Messages
-{
+namespace Messages {
 struct rich_message;
 } // namespace Messages
 
@@ -42,27 +41,27 @@ struct rich_message;
 /// Status row 1: identity, world clock, place, weather, light and safe mode.
 /// The inner markup of one `.hud-meta` row — exactly three `.hud-meta-group`
 /// divs, left, middle and right.
-auto hud_status_row1( avatar &u, const hud_runic::layout &l ) -> std::string;
+auto hud_status_row1(avatar& u, const hud_runic::layout& l) -> std::string;
 
 /// Status row 2: stats, movement, load, needs and the hostile summary. Same
 /// three-group shape as row 1.
-auto hud_status_row2( avatar &u, const hud_runic::layout &l ) -> std::string;
+auto hud_status_row2(avatar& u, const hud_runic::layout& l) -> std::string;
 
 /// The message log: one `.hud-row.hud-log-entry` per message, oldest first. The
 /// luminance ramp down the rows is the recency curve; the glyph in each row's
 /// gutter is its severity. `msgs` is already trimmed to the region's row budget
 /// by the caller, which is also what feeds the entry animation, so the two
 /// cannot describe different sets.
-auto hud_log_rows( const std::vector<Messages::rich_message> &msgs,
-                   const hud_runic::layout &l ) -> std::string;
+auto hud_log_rows(const std::vector<Messages::rich_message>& msgs, const hud_runic::layout& l)
+    -> std::string;
 
 /// The function-key strip: the inner markup of its `.nc-legend` container, one
 /// `KEY :: ACTION` item per slot, each saying whether its action is bound and
 /// whether it is usable in the current state. Every slot is emitted; a narrow
 /// viewport is `.nc-legend`'s `flex-wrap` to handle.
-auto hud_keys( avatar &u, const hud_runic::layout &l ) -> std::string;
+auto hud_keys(avatar& u, const hud_runic::layout& l) -> std::string;
 
 /// The driving panel's body. Empty unless the avatar is controlling a vehicle.
-auto hud_veh_panel( avatar &u, const hud_runic::layout &l ) -> std::string;
+auto hud_veh_panel(avatar& u, const hud_runic::layout& l) -> std::string;
 
 #endif // CATA_SRC_HUD_RUNIC_STRIPS_H

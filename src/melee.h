@@ -26,12 +26,11 @@ struct melee_statistic_data {
     int damage_amount = 0;
 };
 
-namespace melee
-{
+namespace melee {
 
 constexpr double accuracy_roll_stddev = 5.0;
 
-float melee_hit_range( float accuracy );
+float melee_hit_range(float accuracy);
 melee_statistic_data get_stats();
 void clear_stats();
 extern melee_statistic_data melee_stats;
@@ -41,7 +40,7 @@ extern melee_statistic_data melee_stats;
  * @param acc Final to-hit of the attack minus attacker's dodge
  * See @ref melee_hit_range
  */
-float hit_chance( float acc );
+float hit_chance(float acc);
 auto is_technique_prompt_suppressed() -> bool;
 
 struct mutation_attack_prompt_entry {
@@ -52,45 +51,47 @@ struct mutation_attack_prompt_entry {
     bool available = false;
 };
 
-auto mutation_attack_prompt_entries( const Character &self, const Creature &target ) ->
-std::vector<mutation_attack_prompt_entry>;
+auto mutation_attack_prompt_entries(const Character& self, const Creature& target)
+    -> std::vector<mutation_attack_prompt_entry>;
 
-class technique_prompt_suppression_guard
-{
-    public:
-        technique_prompt_suppression_guard();
-        ~technique_prompt_suppression_guard();
+class technique_prompt_suppression_guard {
+public:
+    technique_prompt_suppression_guard();
+    ~technique_prompt_suppression_guard();
 
-        technique_prompt_suppression_guard( const technique_prompt_suppression_guard & ) = delete;
-        technique_prompt_suppression_guard &operator=( const technique_prompt_suppression_guard & ) =
-            delete;
+    technique_prompt_suppression_guard(const technique_prompt_suppression_guard&) = delete;
+    technique_prompt_suppression_guard& operator=(const technique_prompt_suppression_guard&) =
+        delete;
 };
 
 // If average == true, adds expected values of random rolls instead of rolling.
 /** Adds all 3 types of physical damage to instance */
-void roll_all_damage( const Character &c, bool crit, damage_instance &di, bool average,
-                      const item &weap, const attack_statblock &attack );
+void roll_all_damage(
+    const Character& c, bool crit, damage_instance& di, bool average, const item& weap,
+    const attack_statblock& attack);
 /** Adds player's total bash damage to the damage instance */
-void roll_bash_damage( const Character &c, bool crit, damage_instance &di, bool average,
-                       const item &weap, const attack_statblock &attack );
+void roll_bash_damage(
+    const Character& c, bool crit, damage_instance& di, bool average, const item& weap,
+    const attack_statblock& attack);
 /** Adds player's total cut damage to the damage instance */
-void roll_cut_damage( const Character &c, bool crit, damage_instance &di, bool average,
-                      const item &weap, const attack_statblock &attack );
+void roll_cut_damage(
+    const Character& c, bool crit, damage_instance& di, bool average, const item& weap,
+    const attack_statblock& attack);
 /** Adds player's total stab damage to the damage instance */
-void roll_stab_damage( const Character &c, bool crit, damage_instance &di, bool average,
-                       const item &weap, const attack_statblock &attack );
-void roll_non_physical_damage( const Character &c, bool crit, damage_instance &di, bool average,
-                               const item &weap, const attack_statblock &attack, damage_type dt );
+void roll_stab_damage(
+    const Character& c, bool crit, damage_instance& di, bool average, const item& weap,
+    const attack_statblock& attack);
+void roll_non_physical_damage(
+    const Character& c, bool crit, damage_instance& di, bool average, const item& weap,
+    const attack_statblock& attack, damage_type dt);
 
 // Temporary function that returns any attack from the weapon
 // TODO: Remove
-const attack_statblock &default_attack( const item &it );
+const attack_statblock& default_attack(const item& it);
 
-const attack_statblock &pick_attack( const Character &c, const item &weapon,
-                                     const Creature &target );
-const attack_statblock &pick_attack( const Character &c, const item &weapon,
-                                     const monster &target );
-const attack_statblock &pick_attack( const Character &c, const item &weapon,
-                                     const Character &target );
+const attack_statblock& pick_attack(const Character& c, const item& weapon, const Creature& target);
+const attack_statblock& pick_attack(const Character& c, const item& weapon, const monster& target);
+const attack_statblock& pick_attack(
+    const Character& c, const item& weapon, const Character& target);
 
 } // namespace melee

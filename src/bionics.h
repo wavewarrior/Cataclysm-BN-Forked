@@ -1,5 +1,16 @@
 #pragma once
 
+#include "bodypart.h"
+#include "calendar.h"
+#include "catalua_type_operators.h"
+#include "color.h"
+#include "enchantments/enchantment.h"
+#include "enums.h"
+#include "flat_set.h"
+#include "translations.h"
+#include "type_id.h"
+#include "units.h"
+
 #include <cstddef>
 #include <map>
 #include <memory>
@@ -8,17 +19,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#include "bodypart.h"
-#include "calendar.h"
-#include "catalua_type_operators.h"
-#include "enchantments/enchantment.h"
-#include "flat_set.h"
-#include "translations.h"
-#include "type_id.h"
-#include "units.h"
-#include "enums.h"
-#include "color.h"
 
 class JsonIn;
 class JsonObject;
@@ -56,8 +56,8 @@ struct bionic_data {
     /** Is true if a bionic is an active instead of a passive bionic */
     bool activated = false;
     /**
-    * If true, this bionic is included with another.
-    */
+     * If true, this bionic is included with another.
+     */
     bool included = false;
     /**Factor modifiying weight capacity*/
     float weight_capacity_modifier = 1.0f;
@@ -154,17 +154,17 @@ struct bionic_data {
     int points = 0;
 
     std::set<flag_id> flags;
-    bool has_flag( const flag_id &flag ) const;
+    bool has_flag(const flag_id& flag) const;
 
     itype_id itype() const;
 
-    bool is_included( const bionic_id &id ) const;
+    bool is_included(const bionic_id& id) const;
 
     /** Lua callback actor (non-owning, owned by catalua.cpp static maps).
      *  Mutable because it is wired post-construction through const factory references. */
-    mutable const lua_bionic_callback_actor *lua_callbacks = nullptr;
+    mutable const lua_bionic_callback_actor* lua_callbacks = nullptr;
 
-    static void load_bionic( const JsonObject &jo, const std::string &src );
+    static void load_bionic(const JsonObject& jo, const std::string& src);
     static void check_consistency();
     static void finalize_all();
     static std::vector<bionic_data> get_all();
@@ -172,98 +172,88 @@ struct bionic_data {
 
     /** Wire Lua callback pointers onto bionic_data objects. */
     static void resolve_lua_callbacks(
-        const std::map<std::string, std::unique_ptr<lua_bionic_callback_actor>> &actors );
+        const std::map<std::string, std::unique_ptr<lua_bionic_callback_actor>>& actors);
 
     bool was_loaded = false;
-    void load( const JsonObject &obj, const std::string & );
+    void load(const JsonObject& obj, const std::string&);
     void check() const;
     void finalize();
 
-    LUA_TYPE_OPS( bionic_data, id );
+    LUA_TYPE_OPS(bionic_data, id);
 };
 
 struct bionic {
     bionic_id id;
-    int         charge_timer  = 0;
-    char        invlet  = 'a';
-    bool        powered = false;
-    bool        show_sprite = true;
+    int charge_timer = 0;
+    char invlet = 'a';
+    bool powered = false;
+    bool show_sprite = true;
     /* Ammunition actually loaded in this bionic gun in deactivated state */
-    itype_id    ammo_loaded = itype_id::NULL_ID();
+    itype_id ammo_loaded = itype_id::NULL_ID();
     /* Ammount of ammo actually held inside by this bionic gun in deactivated state */
-    unsigned int         ammo_count = 0;
+    unsigned int ammo_count = 0;
     /* An amount of time during which this bionic has been rendered inoperative. */
-    time_duration        incapacitated_time;
+    time_duration incapacitated_time;
     /* The amount of energy the Bionic has stored for it's function. [Currently only used for ADS]*/
-    units::energy        energy_stored = 0_kJ;
-    bionic()
-        : id( "bio_batteries" ), incapacitated_time( 0_turns )
-    {
-    }
-    bionic( bionic_id pid, char pinvlet )
-        : id( pid ), invlet( pinvlet ), incapacitated_time( 0_turns ) { }
+    units::energy energy_stored = 0_kJ;
+    bionic(): id("bio_batteries"), incapacitated_time(0_turns) {}
+    bionic(bionic_id pid, char pinvlet): id(pid), invlet(pinvlet), incapacitated_time(0_turns) {}
 
-    const bionic_data &info() const {
-        return *id;
-    }
+    const bionic_data& info() const { return *id; }
 
-    void set_flag( const std::string &flag );
-    void remove_flag( const std::string &flag );
-    bool has_flag( const std::string &flag ) const;
+    void set_flag(const std::string& flag);
+    void remove_flag(const std::string& flag);
+    bool has_flag(const std::string& flag) const;
 
-    int get_quality( const quality_id &quality ) const;
+    int get_quality(const quality_id& quality) const;
 
-    bool is_this_fuel_powered( const itype_id &this_fuel ) const;
+    bool is_this_fuel_powered(const itype_id& this_fuel) const;
     void toggle_safe_fuel_mod();
     void toggle_auto_start_mod();
 
-    void set_auto_start_thresh( float val );
+    void set_auto_start_thresh(float val);
     float get_auto_start_thresh() const;
     bool is_auto_start_on() const;
     bool is_auto_start_keep_full() const;
 
-    void serialize( JsonOut &json ) const;
-    void deserialize( JsonIn &jsin );
+    void serialize(JsonOut& json) const;
+    void deserialize(JsonIn& jsin);
 
-    LUA_TYPE_OPS( bionic, id );
+    LUA_TYPE_OPS(bionic, id);
+
 private:
     // generic bionic specific flags
     cata::flat_set<std::string> bionic_tags;
     float auto_start_threshold = -1.0;
 };
 
-nc_color get_bionic_text_color( const bionic &bio, const bool isHighlightedBionic );
+nc_color get_bionic_text_color(const bionic& bio, const bool isHighlightedBionic);
 struct bionic_sort_less {
     bionic_ui_sort_mode mode = bionic_ui_sort_mode::NONE;
-    bool operator()( const bionic &lhs, const bionic &rhs ) const;
-    bool operator()( const bionic *lhs, const bionic *rhs ) const {
-        return lhs && rhs && operator()( *lhs, *rhs );
+    bool operator()(const bionic& lhs, const bionic& rhs) const;
+    bool operator()(const bionic* lhs, const bionic* rhs) const {
+        return lhs && rhs && operator()(*lhs, *rhs);
     }
 };
 
 // A simpler wrapper to allow forward declarations of it. std::vector can not
 // be forward declared without a *definition* of bionic, but this wrapper can.
-class bionic_collection : public std::vector<bionic>
-{
-};
+class bionic_collection: public std::vector<bionic> {};
 
 /**List of bodyparts occupied by a bionic*/
-std::vector<bodypart_id> get_occupied_bodyparts( const bionic_id &bid );
+std::vector<bodypart_id> get_occupied_bodyparts(const bionic_id& bid);
 
-char get_free_invlet( bionic_collection &bionics );
-std::string list_occupied_bps( const bionic_id &bio_id, const std::string &intro,
-                               bool each_bp_on_new_line = true );
+char get_free_invlet(bionic_collection& bionics);
+std::string list_occupied_bps(
+    const bionic_id& bio_id, const std::string& intro, bool each_bp_on_new_line = true);
 
 /// Checks if Character needs anesthesia at all
-bool cbm_needs_anesthesia( const Character &who );
+bool cbm_needs_anesthesia(const Character& who);
 
 /// Has enough anesthetic for surgery
-bool has_enough_anesthesia( const itype *cbm, Character &doc,
-                            const Character &patient );
+bool has_enough_anesthesia(const itype* cbm, Character& doc, const Character& patient);
 
-int bionic_manip_cos( float adjusted_skill, int bionic_difficulty );
+int bionic_manip_cos(float adjusted_skill, int bionic_difficulty);
 
-std::vector<bionic_id> bionics_cancelling_trait( const std::vector<bionic_id> &bios,
-        const trait_id &tid );
-
-
+std::vector<bionic_id> bionics_cancelling_trait(
+    const std::vector<bionic_id>& bios, const trait_id& tid);

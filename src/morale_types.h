@@ -1,40 +1,38 @@
 #pragma once
 
-#include <string>
-
 #include "catalua_type_operators.h"
 #include "translations.h"
 #include "type_id.h"
 
+#include <string>
+
 class JsonObject;
 struct itype;
 
-class morale_type_data
-{
-    private:
-        bool permanent = false;
-        // May contain '%s' format string
-        translation text;
-    public:
-        morale_type id;
-        bool was_loaded = false;
+class morale_type_data {
+private:
+    bool permanent = false;
+    // May contain '%s' format string
+    translation text;
 
-        /** Describes this morale type without replacing anything. */
-        std::string describe() const;
-        /** Describes this morale type, with some string to replace wildcard with. */
-        std::string describe( const std::string &s ) const;
-        bool is_permanent() const {
-            return permanent;
-        }
+public:
+    morale_type id;
+    bool was_loaded = false;
 
-        void load( const JsonObject &jo, const std::string &src );
-        void check() const;
+    /** Describes this morale type without replacing anything. */
+    std::string describe() const;
+    /** Describes this morale type, with some string to replace wildcard with. */
+    std::string describe(const std::string& s) const;
+    bool is_permanent() const { return permanent; }
 
-        static void load_type( const JsonObject &jo, const std::string &src );
-        static void check_all();
-        static void reset();
+    void load(const JsonObject& jo, const std::string& src);
+    void check() const;
 
-        LUA_TYPE_OPS( morale_type_data, id );
+    static void load_type(const JsonObject& jo, const std::string& src);
+    static void check_all();
+    static void reset();
+
+    LUA_TYPE_OPS(morale_type_data, id);
 };
 
 // Legacy crap - get rid of it when possible
@@ -113,5 +111,3 @@ extern const morale_type MORALE_FUNERAL;
 extern const morale_type MORALE_TREE_COMMUNION;
 extern const morale_type MORALE_ACCOMPLISHMENT;
 extern const morale_type MORALE_FAILURE;
-
-

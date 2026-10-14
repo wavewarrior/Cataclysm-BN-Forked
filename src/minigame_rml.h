@@ -1,6 +1,6 @@
 #pragma once
 #ifndef CATA_SRC_MINIGAME_RML_H
-#define CATA_SRC_MINIGAME_RML_H
+#    define CATA_SRC_MINIGAME_RML_H
 
 // Tier 9 — the shared char-grid RmlUi widget for the 5 grid minigames
 // (lightson / snake / sokoban / minesweeper / robot-finds-kitten). They are
@@ -15,17 +15,16 @@
 // drawing curses. Single active minigame at a time (file-static model state +
 // the rml_doc single-instance guard keyed on "minigame").
 
-#include <string>
-#include <vector>
+#    include <string>
+#    include <vector>
 
 class input_context;
 
-namespace minigame_rml
-{
+namespace minigame_rml {
 
 // Open the shared doc (no-op returning false unless `enabled` and RmlUi is ready).
 // `ctxt` is the game's input_context (used for the harness 16ms tick).
-bool open( bool enabled, input_context &ctxt );
+bool open(bool enabled, input_context& ctxt);
 
 // True while the shared doc is open (the game gates its curses draw on this).
 bool active();
@@ -36,11 +35,11 @@ void close();
 // This frame's content, as Cataclysm colour-tagged strings ("<color_x>…</color>").
 // set_grid: one entry per grid row (rendered monospace, white-space:pre). Call
 // set_* then sync() inside on_redraw.
-void set_title( const std::string &title );
-void set_footer( const std::string &footer );
-void set_grid( const std::vector<std::string> &rows );
+void set_title(const std::string& title);
+void set_footer(const std::string& footer);
+void set_grid(const std::vector<std::string>& rows);
 void sync();
 
-}  // namespace minigame_rml
+} // namespace minigame_rml
 
-#endif  // CATA_SRC_MINIGAME_RML_H
+#endif // CATA_SRC_MINIGAME_RML_H

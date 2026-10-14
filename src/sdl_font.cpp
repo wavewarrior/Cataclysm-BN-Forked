@@ -1,43 +1,38 @@
 #include "sdl_font.h"
+
+#include "hsv_color.h"
 #include "output.h"
 #include "platform_win.h"
-#include "string_utils.h"
-#include "hsv_color.h"
 #include "sdl_utils.h"
+#include "string_utils.h"
 
-#define dbg(x) DebugLogFL((x),DC::SDL)
+#define dbg(x) DebugLogFL((x), DC::SDL)
 
 // SDL3_ttf 3.x: TTF_OpenFontIndex removed; use TTF_OpenFontWithProperties with face index property
-static TTF_Font *open_font_index( const std::string &f, int size, int faceIndex )
-{
+static TTF_Font* open_font_index(const std::string& f, int size, int faceIndex) {
     SDL_PropertiesID props = SDL_CreateProperties();
-    SDL_SetStringProperty( props, TTF_PROP_FONT_CREATE_FILENAME_STRING, f.c_str() );
-    SDL_SetFloatProperty( props, TTF_PROP_FONT_CREATE_SIZE_FLOAT, static_cast<float>( size ) );
-    SDL_SetNumberProperty( props, TTF_PROP_FONT_CREATE_FACE_NUMBER, faceIndex );
-    TTF_Font *font = TTF_OpenFontWithProperties( props );
-    SDL_DestroyProperties( props );
+    SDL_SetStringProperty(props, TTF_PROP_FONT_CREATE_FILENAME_STRING, f.c_str());
+    SDL_SetFloatProperty(props, TTF_PROP_FONT_CREATE_SIZE_FLOAT, static_cast<float>(size));
+    SDL_SetNumberProperty(props, TTF_PROP_FONT_CREATE_FACE_NUMBER, faceIndex);
+    TTF_Font* font = TTF_OpenFontWithProperties(props);
+    SDL_DestroyProperties(props);
     return font;
 }
 
 // bitmap font size test
 // return face index that has this size or below
-static int test_face_size( const std::string &f, int size, int faceIndex )
-{
-    const TTF_Font_Ptr font( open_font_index( f, size, faceIndex ) );
-    if( font ) {
-        const char *font_style = TTF_GetFontStyleName( font.get() );
-        if( font_style != nullptr ) {
-            int num_faces = TTF_GetNumFontFaces( font.get() );
-            for( int face_i = num_faces - 1; face_i >= 0; face_i-- ) {
-                const TTF_Font_Ptr face( open_font_index( f, size, face_i ) );
-                if( !face ) {
-                    continue;
-                }
-                const char *face_style = TTF_GetFontStyleName( face.get() );
-                if( !face_style ) {
-                    continue;
-                }
-                if( lcequal( face_style, font_style ) && TTF_GetFontHeight( face.get() ) <= size ) {
+static int test_face_size(const std::string& f, int size, int faceIndex) {
+    const TTF_Font_Ptr font(open_font_index(f, size, faceIndex));
+    if (font) {
+        const char* font_style = TTF_GetFontStyleName(font.get());
+        if (font_style != nullptr) {
+            int num_faces = TTF_GetNumFontFaces(font.get());
+            for (int face_i = num_faces - 1; face_i >= 0; face_i--) {
+                const TTF_Font_Ptr face(open_font_index(f, size, face_i));
+                if (!face) { continue; }
+                const char* face_style = TTF_GetFontStyleName(face.get());
+                if (!face_style) { continue; }
+                if (lcequal(face_style, font_style) && TTF_GetFontHeight(face.get()) <= size) {
                     return face_i;
                 }
             }
@@ -47,31 +42,26 @@ static int test_face_size( const std::string &f, int size, int faceIndex )
     return faceIndex;
 }
 
-std::unique_ptr<Font> Font::load_font( SDL_Renderer_Ptr &renderer, SDL_PixelFormat format,
-                                       const std::string &typeface, int fontsize, int width,
-                                       int height,
-                                       const palette_array &palette,
-                                       const bool fontblending )
-{
-    if( typeface.ends_with( ".bmp" ) || typeface.ends_with( ".png" ) ) {
+std::unique_ptr<Font> Font::load_font(
+    SDL_Renderer_Ptr& renderer, SDL_PixelFormat format, const std::string& typeface, int fontsize,
+    int width, int height, const palette_array& palette, const bool fontblending) {
+    if (typeface.ends_with(".bmp") || typeface.ends_with(".png")) {
         // Seems to be an image file, not a font.
         // Try to load as bitmap font from user font dir, then from font dir.
         try {
-            return std::unique_ptr<Font>( std::make_unique<BitmapFont>( renderer, format, width, height,
-                                          palette,
-                                          typeface ) );
-        } catch( std::exception & ) {
+            return std::unique_ptr<Font>(
+                std::make_unique<BitmapFont>(renderer, format, width, height, palette, typeface));
+        } catch (std::exception&) {
             try {
-                return std::unique_ptr<Font>( std::make_unique<BitmapFont>( renderer, format, width, height,
-                                              palette,
-                                              PATH_INFO::user_fontdir() + typeface ) );
-            } catch( std::exception & ) {
+                return std::unique_ptr<Font>(std::make_unique<BitmapFont>(
+                    renderer, format, width, height, palette,
+                    PATH_INFO::user_fontdir() + typeface));
+            } catch (std::exception&) {
                 try {
-                    return std::unique_ptr<Font>( std::make_unique<BitmapFont>( renderer, format, width, height,
-                                                  palette,
-                                                  PATH_INFO::fontdir() + typeface ) );
-                } catch( std::exception &err ) {
-                    dbg( DL::Error ) << "Failed to load font " << typeface << ": " << err.what();
+                    return std::unique_ptr<Font>(std::make_unique<BitmapFont>(
+                        renderer, format, width, height, palette, PATH_INFO::fontdir() + typeface));
+                } catch (std::exception& err) {
+                    dbg(DL::Error) << "Failed to load font " << typeface << ": " << err.what();
                     // Continue to load as truetype font
                 }
             }
@@ -79,10 +69,10 @@ std::unique_ptr<Font> Font::load_font( SDL_Renderer_Ptr &renderer, SDL_PixelForm
     }
     // Not loaded as bitmap font (or it failed), try to load as truetype
     try {
-        return std::unique_ptr<Font>( std::make_unique<CachedTTFFont>( width, height,
-                                      palette, typeface, fontsize, fontblending ) );
-    } catch( std::exception &err ) {
-        dbg( DL::Error ) << "Failed to load font " << typeface << ": " << err.what();
+        return std::unique_ptr<Font>(std::make_unique<CachedTTFFont>(
+            width, height, palette, typeface, fontsize, fontblending));
+    } catch (std::exception& err) {
+        dbg(DL::Error) << "Failed to load font " << typeface << ": " << err.what();
     }
     return nullptr;
 }
@@ -90,139 +80,119 @@ std::unique_ptr<Font> Font::load_font( SDL_Renderer_Ptr &renderer, SDL_PixelForm
 
 // line_id is one of the LINE_*_C constants
 // FG is a curses color
-void Font::draw_ascii_lines( const SDL_Renderer_Ptr &renderer, const GeometryRenderer_Ptr &geometry,
-                             unsigned char line_id, point p, unsigned char color ) const
-{
+void Font::draw_ascii_lines(
+    const SDL_Renderer_Ptr& renderer, const GeometryRenderer_Ptr& geometry, unsigned char line_id,
+    point p, unsigned char color) const {
     SDL_Color sdl_color = palette[color];
-    switch( line_id ) {
+    switch (line_id) {
         // box bottom/top side (horizontal line)
         case LINE_OXOX_C:
-            geometry->horizontal_line( renderer, p + point( 0, ( height / 2 ) ), p.x + width, 1,
-                                       sdl_color );
+            geometry
+                ->horizontal_line(renderer, p + point(0, (height / 2)), p.x + width, 1, sdl_color);
             break;
         // box left/right side (vertical line)
         case LINE_XOXO_C:
-            geometry->vertical_line( renderer, p + point( ( width / 2 ), 0 ), p.y + height, 2,
-                                     sdl_color );
+            geometry
+                ->vertical_line(renderer, p + point((width / 2), 0), p.y + height, 2, sdl_color);
             break;
         // box top left
         case LINE_OXXO_C:
-            geometry->horizontal_line( renderer, p + point( ( width / 2 ), ( height / 2 ) ),
-                                       p.x + width,
-                                       1,
-                                       sdl_color );
-            geometry->vertical_line( renderer, p + point( ( width / 2 ), ( height / 2 ) ),
-                                     p.y + height,
-                                     2,
-                                     sdl_color );
+            geometry->horizontal_line(
+                renderer, p + point((width / 2), (height / 2)), p.x + width, 1, sdl_color);
+            geometry->vertical_line(
+                renderer, p + point((width / 2), (height / 2)), p.y + height, 2, sdl_color);
             break;
         // box top right
         case LINE_OOXX_C:
-            geometry->horizontal_line( renderer, p + point( 0, ( height / 2 ) ), p.x + ( width / 2 ), 1,
-                                       sdl_color );
-            geometry->vertical_line( renderer, p + point( ( width / 2 ), ( height / 2 ) ),
-                                     p.y + height,
-                                     2,
-                                     sdl_color );
+            geometry->horizontal_line(
+                renderer, p + point(0, (height / 2)), p.x + (width / 2), 1, sdl_color);
+            geometry->vertical_line(
+                renderer, p + point((width / 2), (height / 2)), p.y + height, 2, sdl_color);
             break;
         // box bottom right
         case LINE_XOOX_C:
-            geometry->horizontal_line( renderer, p + point( 0, ( height / 2 ) ), p.x + ( width / 2 ), 1,
-                                       sdl_color );
-            geometry->vertical_line( renderer, p + point( ( width / 2 ), 0 ), p.y + ( height / 2 ) + 1,
-                                     2, sdl_color );
+            geometry->horizontal_line(
+                renderer, p + point(0, (height / 2)), p.x + (width / 2), 1, sdl_color);
+            geometry->vertical_line(
+                renderer, p + point((width / 2), 0), p.y + (height / 2) + 1, 2, sdl_color);
             break;
         // box bottom left
         case LINE_XXOO_C:
-            geometry->horizontal_line( renderer, p + point( ( width / 2 ), ( height / 2 ) ),
-                                       p.x + width,
-                                       1,
-                                       sdl_color );
-            geometry->vertical_line( renderer, p + point( ( width / 2 ), 0 ), p.y + ( height / 2 ) + 1,
-                                     2, sdl_color );
+            geometry->horizontal_line(
+                renderer, p + point((width / 2), (height / 2)), p.x + width, 1, sdl_color);
+            geometry->vertical_line(
+                renderer, p + point((width / 2), 0), p.y + (height / 2) + 1, 2, sdl_color);
             break;
         // box bottom north T (left, right, up)
         case LINE_XXOX_C:
-            geometry->horizontal_line( renderer, p + point( 0, ( height / 2 ) ), p.x + width, 1,
-                                       sdl_color );
-            geometry->vertical_line( renderer, p + point( ( width / 2 ), 0 ), p.y + ( height / 2 ), 2,
-                                     sdl_color );
+            geometry
+                ->horizontal_line(renderer, p + point(0, (height / 2)), p.x + width, 1, sdl_color);
+            geometry->vertical_line(
+                renderer, p + point((width / 2), 0), p.y + (height / 2), 2, sdl_color);
             break;
         // box bottom east T (up, right, down)
         case LINE_XXXO_C:
-            geometry->vertical_line( renderer, p + point( ( width / 2 ), 0 ), p.y + height, 2,
-                                     sdl_color );
-            geometry->horizontal_line( renderer, p + point( ( width / 2 ), ( height / 2 ) ),
-                                       p.x + width,
-                                       1,
-                                       sdl_color );
+            geometry
+                ->vertical_line(renderer, p + point((width / 2), 0), p.y + height, 2, sdl_color);
+            geometry->horizontal_line(
+                renderer, p + point((width / 2), (height / 2)), p.x + width, 1, sdl_color);
             break;
         // box bottom south T (left, right, down)
         case LINE_OXXX_C:
-            geometry->horizontal_line( renderer, p + point( 0, ( height / 2 ) ), p.x + width, 1,
-                                       sdl_color );
-            geometry->vertical_line( renderer, p + point( ( width / 2 ), ( height / 2 ) ),
-                                     p.y + height,
-                                     2,
-                                     sdl_color );
+            geometry
+                ->horizontal_line(renderer, p + point(0, (height / 2)), p.x + width, 1, sdl_color);
+            geometry->vertical_line(
+                renderer, p + point((width / 2), (height / 2)), p.y + height, 2, sdl_color);
             break;
         // box X (left down up right)
         case LINE_XXXX_C:
-            geometry->horizontal_line( renderer, p + point( 0, ( height / 2 ) ), p.x + width, 1,
-                                       sdl_color );
-            geometry->vertical_line( renderer, p + point( ( width / 2 ), 0 ), p.y + height, 2,
-                                     sdl_color );
+            geometry
+                ->horizontal_line(renderer, p + point(0, (height / 2)), p.x + width, 1, sdl_color);
+            geometry
+                ->vertical_line(renderer, p + point((width / 2), 0), p.y + height, 2, sdl_color);
             break;
         // box bottom west T (left, down, up)
         case LINE_XOXX_C:
-            geometry->vertical_line( renderer, p + point( ( width / 2 ), 0 ), p.y + height, 2,
-                                     sdl_color );
-            geometry->horizontal_line( renderer, p + point( 0, ( height / 2 ) ), p.x + ( width / 2 ), 1,
-                                       sdl_color );
+            geometry
+                ->vertical_line(renderer, p + point((width / 2), 0), p.y + height, 2, sdl_color);
+            geometry->horizontal_line(
+                renderer, p + point(0, (height / 2)), p.x + (width / 2), 1, sdl_color);
             break;
         // right double and vertical single
         case LINE_XDXO_C:
-            geometry->vertical_line( renderer, p + point( ( width / 2 ), 0 ), p.y + height, 2,
-                                     sdl_color );
-            geometry->horizontal_line( renderer, p + point( ( width / 2 ), ( height / 3 ) ),
-                                       p.x + width,
-                                       1,
-                                       sdl_color );
-            geometry->horizontal_line( renderer, p + point( ( width / 2 ), ( height * 2 / 3 ) ),
-                                       p.x + width,
-                                       1,
-                                       sdl_color );
+            geometry
+                ->vertical_line(renderer, p + point((width / 2), 0), p.y + height, 2, sdl_color);
+            geometry->horizontal_line(
+                renderer, p + point((width / 2), (height / 3)), p.x + width, 1, sdl_color);
+            geometry->horizontal_line(
+                renderer, p + point((width / 2), (height * 2 / 3)), p.x + width, 1, sdl_color);
             break;
         // up double and horizontal single
         case LINE_DXOX_C:
-            geometry->horizontal_line( renderer, p + point( 0, ( height / 2 ) ), p.x + width, 1,
-                                       sdl_color );
-            geometry->vertical_line( renderer, p + point( ( width / 3 ), 0 ), p.y + ( height / 2 ), 2,
-                                     sdl_color );
-            geometry->vertical_line( renderer, p + point( ( width * 2 / 3 ), 0 ), p.y + ( height / 2 ), 2,
-                                     sdl_color );
+            geometry
+                ->horizontal_line(renderer, p + point(0, (height / 2)), p.x + width, 1, sdl_color);
+            geometry->vertical_line(
+                renderer, p + point((width / 3), 0), p.y + (height / 2), 2, sdl_color);
+            geometry->vertical_line(
+                renderer, p + point((width * 2 / 3), 0), p.y + (height / 2), 2, sdl_color);
             break;
         // left double and vertical single
         case LINE_XOXD_C:
-            geometry->vertical_line( renderer, p + point( ( width / 2 ), 0 ), p.y + height, 2,
-                                     sdl_color );
-            geometry->horizontal_line( renderer, p + point( 0, ( height / 3 ) ), p.x + ( width / 2 ), 1,
-                                       sdl_color );
-            geometry->horizontal_line( renderer, p + point( 0, ( height * 2 / 3 ) ), p.x + ( width / 2 ), 1,
-                                       sdl_color );
+            geometry
+                ->vertical_line(renderer, p + point((width / 2), 0), p.y + height, 2, sdl_color);
+            geometry->horizontal_line(
+                renderer, p + point(0, (height / 3)), p.x + (width / 2), 1, sdl_color);
+            geometry->horizontal_line(
+                renderer, p + point(0, (height * 2 / 3)), p.x + (width / 2), 1, sdl_color);
             break;
         // down double and horizontal single
         case LINE_OXDX_C:
-            geometry->horizontal_line( renderer, p + point( 0, ( height / 2 ) ), p.x + width, 1,
-                                       sdl_color );
-            geometry->vertical_line( renderer, p + point( ( width / 3 ), ( height / 2 ) ),
-                                     p.y + height,
-                                     2,
-                                     sdl_color );
-            geometry->vertical_line( renderer, p + point( ( width * 2 / 3 ), ( height / 2 ) ),
-                                     p.y + height,
-                                     2,
-                                     sdl_color );
+            geometry
+                ->horizontal_line(renderer, p + point(0, (height / 2)), p.x + width, 1, sdl_color);
+            geometry->vertical_line(
+                renderer, p + point((width / 3), (height / 2)), p.y + height, 2, sdl_color);
+            geometry->vertical_line(
+                renderer, p + point((width * 2 / 3), (height / 2)), p.y + height, 2, sdl_color);
             break;
         default:
             break;
@@ -230,39 +200,36 @@ void Font::draw_ascii_lines( const SDL_Renderer_Ptr &renderer, const GeometryRen
 }
 
 CachedTTFFont::CachedTTFFont(
-    const int w, const int h,
-    const palette_array &palette,
-    std::string typeface, int fontsize,
-    const bool fontblending )
-    : Font( w, h, palette )
-    , fontblending( fontblending )
-{
+    const int w, const int h, const palette_array& palette, std::string typeface, int fontsize,
+    const bool fontblending)
+    : Font(w, h, palette),
+      fontblending(fontblending) {
     int faceIndex = 0;
     std::vector<std::string> typefaces;
-    std::vector<std::string> known_suffixes = { ".ttf", ".otf", ".ttc", ".fon" };
+    std::vector<std::string> known_suffixes = {".ttf", ".otf", ".ttc", ".fon"};
     bool add_suffix = true;
-    for( const std::string &ks : known_suffixes ) {
-        if( typeface.ends_with( ks ) ) {
+    for (const std::string& ks : known_suffixes) {
+        if (typeface.ends_with(ks)) {
             add_suffix = false;
             break;
         }
     }
     bool add_prefix = true;
-    std::vector<std::string> known_prefixes = {
-        PATH_INFO::user_fontdir(), PATH_INFO::fontdir()
-    };
+    std::vector<std::string> known_prefixes = {PATH_INFO::user_fontdir(), PATH_INFO::fontdir()};
 
 #if defined(_WIN32)
-    const UINT buf_len = GetSystemWindowsDirectoryW( nullptr, 0 ) + 1;
-    if( buf_len == 0 ) {
-        throw std::runtime_error( "GetSystemWindowsDirectory failed: " + std::to_string( GetLastError() ) );
+    const UINT buf_len = GetSystemWindowsDirectoryW(nullptr, 0) + 1;
+    if (buf_len == 0) {
+        throw std::runtime_error(
+            "GetSystemWindowsDirectory failed: " + std::to_string(GetLastError()));
     }
-    std::wstring buf( buf_len, '\0' );
-    const UINT buf_fin = GetSystemWindowsDirectoryW( &buf[0], buf_len );
-    if( buf_fin == 0 ) {
-        throw std::runtime_error( "GetSystemWindowsDirectory failed: " + std::to_string( GetLastError() ) );
+    std::wstring buf(buf_len, '\0');
+    const UINT buf_fin = GetSystemWindowsDirectoryW(&buf[0], buf_len);
+    if (buf_fin == 0) {
+        throw std::runtime_error(
+            "GetSystemWindowsDirectory failed: " + std::to_string(GetLastError()));
     }
-    known_prefixes.emplace_back( wstr_to_utf8( buf ) + std::string( "\\fonts\\" ) );
+    known_prefixes.emplace_back(wstr_to_utf8(buf) + std::string("\\fonts\\"));
 #elif defined(_APPLE_) && defined(_MACH_)
     /*
     // Well I don't know how osx actually works ....
@@ -274,359 +241,321 @@ CachedTTFFont::CachedTTFFont(
     wordfree( &exp );
     */
 #else // Other POSIX-ish systems
-    known_prefixes.emplace_back( "/usr/share/fonts/" );
-    known_prefixes.emplace_back( "/usr/local/share/fonts/" );
-    const char *home = getenv( "HOME" );
-    if( home ) {
+    known_prefixes.emplace_back("/usr/share/fonts/");
+    known_prefixes.emplace_back("/usr/local/share/fonts/");
+    const char* home = getenv("HOME");
+    if (home) {
         std::string userfontdir = home;
         userfontdir += "/.fonts/";
-        known_prefixes.emplace_back( userfontdir );
+        known_prefixes.emplace_back(userfontdir);
     }
 #endif
 
-    for( const std::string &kp : known_prefixes ) {
-        if( typeface.starts_with( kp ) ) {
+    for (const std::string& kp : known_prefixes) {
+        if (typeface.starts_with(kp)) {
             add_prefix = false;
             break;
         }
     }
 
-    for( const std::string &ks : known_suffixes ) {
-        for( const std::string &kp : known_prefixes ) {
-            if( add_prefix ) {
-                typefaces.emplace_back( kp + typeface + ( add_suffix ? ks : "" ) );
-            }
-            typefaces.emplace_back( typeface + ( add_suffix ? ks : "" ) );
+    for (const std::string& ks : known_suffixes) {
+        for (const std::string& kp : known_prefixes) {
+            if (add_prefix) { typefaces.emplace_back(kp + typeface + (add_suffix ? ks : "")); }
+            typefaces.emplace_back(typeface + (add_suffix ? ks : ""));
         }
     }
-    if( add_suffix ) {
-        typefaces.emplace_back( typeface );
-    }
-    ensure_unifont_loaded( typefaces );
+    if (add_suffix) { typefaces.emplace_back(typeface); }
+    ensure_unifont_loaded(typefaces);
 
-    for( const std::string &tf : typefaces ) {
-        if( !file_exist( tf ) ) {
-            dbg( DL::Warn ) << "Truetype font not found at " << tf;
+    for (const std::string& tf : typefaces) {
+        if (!file_exist(tf)) {
+            dbg(DL::Warn) << "Truetype font not found at " << tf;
             continue;
         }
-        dbg( DL::Info ) << "Loading truetype font " << tf;
+        dbg(DL::Info) << "Loading truetype font " << tf;
         typeface = tf;
         break;
     }
 
-    if( fontsize <= 0 ) {
-        fontsize = height - 1;
-    }
+    if (fontsize <= 0) { fontsize = height - 1; }
     // SDL_ttf handles bitmap fonts size incorrectly
-    if( typeface.length() > 4 && lcequal( typeface.substr( typeface.length() - 4 ), ".fon" ) ) {
-        faceIndex = test_face_size( typeface, fontsize, faceIndex );
+    if (typeface.length() > 4 && lcequal(typeface.substr(typeface.length() - 4), ".fon")) {
+        faceIndex = test_face_size(typeface, fontsize, faceIndex);
     }
-    font.reset( open_font_index( typeface, fontsize, faceIndex ) );
-    if( !font ) {
-        throw std::runtime_error( SDL_GetError() );
-    }
-    TTF_SetFontStyle( font.get(), TTF_STYLE_NORMAL );
+    font.reset(open_font_index(typeface, fontsize, faceIndex));
+    if (!font) { throw std::runtime_error(SDL_GetError()); }
+    TTF_SetFontStyle(font.get(), TTF_STYLE_NORMAL);
 }
 
-SDL_Texture_Ptr CachedTTFFont::create_glyph( const SDL_Renderer_Ptr &renderer,
-        const std::string &ch,
-        const int color )
-{
+SDL_Texture_Ptr CachedTTFFont::create_glyph(
+    const SDL_Renderer_Ptr& renderer, const std::string& ch, const int color) {
     SDL_Surface_Ptr sglyph(
         fontblending
-        ? TTF_RenderText_Blended( font.get(), ch.c_str(), 0, windowsPalette[color] )
-        : TTF_RenderText_Solid( font.get(), ch.c_str(), 0, windowsPalette[color] )
-    );
-    if( !sglyph ) {
-        dbg( DL::Error ) << "Failed to create glyph for " << ch << ": " << SDL_GetError();
+            ? TTF_RenderText_Blended(font.get(), ch.c_str(), 0, windowsPalette[color])
+            : TTF_RenderText_Solid(font.get(), ch.c_str(), 0, windowsPalette[color]));
+    if (!sglyph) {
+        dbg(DL::Error) << "Failed to create glyph for " << ch << ": " << SDL_GetError();
         return nullptr;
     }
-    const int wf = utf8_wrapper( ch ).display_width();
-    SDL_Surface_Ptr surface( SDL_CreateSurface( width * wf, height, SDL_PIXELFORMAT_RGBA32 ) );
-    SDL_Rect src_rect = { 0, 0, sglyph->w, sglyph->h };
-    SDL_Rect dst_rect = { 0, 0, width * wf, height };
-    if( src_rect.w < dst_rect.w ) {
-        dst_rect.x = ( dst_rect.w - src_rect.w ) / 2;
+    const int wf = utf8_wrapper(ch).display_width();
+    SDL_Surface_Ptr surface(SDL_CreateSurface(width * wf, height, SDL_PIXELFORMAT_RGBA32));
+    SDL_Rect src_rect = {0, 0, sglyph->w, sglyph->h};
+    SDL_Rect dst_rect = {0, 0, width * wf, height};
+    if (src_rect.w < dst_rect.w) {
+        dst_rect.x = (dst_rect.w - src_rect.w) / 2;
         dst_rect.w = src_rect.w;
-    } else if( src_rect.w > dst_rect.w ) {
-        src_rect.x = ( src_rect.w - dst_rect.w ) / 2;
+    } else if (src_rect.w > dst_rect.w) {
+        src_rect.x = (src_rect.w - dst_rect.w) / 2;
         src_rect.w = dst_rect.w;
     }
-    if( src_rect.h < dst_rect.h ) {
-        dst_rect.y = ( dst_rect.h - src_rect.h ) / 2;
+    if (src_rect.h < dst_rect.h) {
+        dst_rect.y = (dst_rect.h - src_rect.h) / 2;
         dst_rect.h = src_rect.h;
-    } else if( src_rect.h > dst_rect.h ) {
-        src_rect.y = ( src_rect.h - dst_rect.h ) / 2;
+    } else if (src_rect.h > dst_rect.h) {
+        src_rect.y = (src_rect.h - dst_rect.h) / 2;
         src_rect.h = dst_rect.h;
     }
 
-    if( !printErrorIf( !SDL_BlitSurface( sglyph.get(), &src_rect, surface.get(), &dst_rect ),
-                       "SDL_BlitSurface failed" ) ) {
-        sglyph = std::move( surface );
+    if (!printErrorIf(!SDL_BlitSurface(sglyph.get(), &src_rect, surface.get(), &dst_rect),
+                      "SDL_BlitSurface failed")) {
+        sglyph = std::move(surface);
     }
 
-    return CreateTextureFromSurface( renderer, sglyph );
+    return CreateTextureFromSurface(renderer, sglyph);
 }
 
 // Phase 2i-B-6 helper. Builds the GPU-side mirror of create_glyph's
 // output by rendering the same surface and uploading it once. Returns
 // nullptr handle on any failure (caller falls back to legacy texture).
 static lighting::gpu_texture_unique_ptr create_gpu_glyph(
-    const TTF_Font_Ptr &font, const std::string &ch, int color,
-    int target_w, int target_h, bool fontblending, int &out_w, int &out_h )
-{
+    const TTF_Font_Ptr& font, const std::string& ch, int color, int target_w, int target_h,
+    bool fontblending, int& out_w, int& out_h) {
     out_w = 0;
     out_h = 0;
     SDL_Surface_Ptr sglyph(
         fontblending
-        ? TTF_RenderText_Blended( font.get(), ch.c_str(), 0, windowsPalette[color] )
-        : TTF_RenderText_Solid( font.get(), ch.c_str(), 0, windowsPalette[color] )
-    );
-    if( !sglyph ) {
-        return lighting::gpu_texture_unique_ptr{};
-    }
-    SDL_Surface_Ptr surface( SDL_CreateSurface( target_w, target_h, SDL_PIXELFORMAT_RGBA32 ) );
-    if( !surface ) {
-        return lighting::gpu_texture_unique_ptr{};
-    }
-    SDL_Rect src_rect = { 0, 0, sglyph->w, sglyph->h };
-    SDL_Rect dst_rect = { 0, 0, target_w, target_h };
-    if( src_rect.w < dst_rect.w ) {
-        dst_rect.x = ( dst_rect.w - src_rect.w ) / 2;
+            ? TTF_RenderText_Blended(font.get(), ch.c_str(), 0, windowsPalette[color])
+            : TTF_RenderText_Solid(font.get(), ch.c_str(), 0, windowsPalette[color]));
+    if (!sglyph) { return lighting::gpu_texture_unique_ptr{}; }
+    SDL_Surface_Ptr surface(SDL_CreateSurface(target_w, target_h, SDL_PIXELFORMAT_RGBA32));
+    if (!surface) { return lighting::gpu_texture_unique_ptr{}; }
+    SDL_Rect src_rect = {0, 0, sglyph->w, sglyph->h};
+    SDL_Rect dst_rect = {0, 0, target_w, target_h};
+    if (src_rect.w < dst_rect.w) {
+        dst_rect.x = (dst_rect.w - src_rect.w) / 2;
         dst_rect.w = src_rect.w;
-    } else if( src_rect.w > dst_rect.w ) {
-        src_rect.x = ( src_rect.w - dst_rect.w ) / 2;
+    } else if (src_rect.w > dst_rect.w) {
+        src_rect.x = (src_rect.w - dst_rect.w) / 2;
         src_rect.w = dst_rect.w;
     }
-    if( src_rect.h < dst_rect.h ) {
-        dst_rect.y = ( dst_rect.h - src_rect.h ) / 2;
+    if (src_rect.h < dst_rect.h) {
+        dst_rect.y = (dst_rect.h - src_rect.h) / 2;
         dst_rect.h = src_rect.h;
-    } else if( src_rect.h > dst_rect.h ) {
-        src_rect.y = ( src_rect.h - dst_rect.h ) / 2;
+    } else if (src_rect.h > dst_rect.h) {
+        src_rect.y = (src_rect.h - dst_rect.h) / 2;
         src_rect.h = dst_rect.h;
     }
-    if( !SDL_BlitSurface( sglyph.get(), &src_rect, surface.get(), &dst_rect ) ) {
+    if (!SDL_BlitSurface(sglyph.get(), &src_rect, surface.get(), &dst_rect)) {
         return lighting::gpu_texture_unique_ptr{};
     }
-    auto &rs = lighting::get_render_state();
-    if( !rs.ready() ) {
-        return lighting::gpu_texture_unique_ptr{};
-    }
-    SDL_GPUTexture *raw = rs.upload_surface_to_gpu_texture( surface.get() );
-    if( !raw ) {
-        return lighting::gpu_texture_unique_ptr{};
-    }
+    auto& rs = lighting::get_render_state();
+    if (!rs.ready()) { return lighting::gpu_texture_unique_ptr{}; }
+    SDL_GPUTexture* raw = rs.upload_surface_to_gpu_texture(surface.get());
+    if (!raw) { return lighting::gpu_texture_unique_ptr{}; }
     out_w = target_w;
     out_h = target_h;
-    return lighting::gpu_texture_unique_ptr( raw );
+    return lighting::gpu_texture_unique_ptr(raw);
 }
 
-bool CachedTTFFont::isGlyphProvided( const std::string &ch ) const
-{
-    return TTF_FontHasGlyph( font.get(), UTF8_getch( ch ) );
+bool CachedTTFFont::isGlyphProvided(const std::string& ch) const {
+    return TTF_FontHasGlyph(font.get(), UTF8_getch(ch));
 }
 
-void CachedTTFFont::OutputChar( const SDL_Renderer_Ptr &renderer, const GeometryRenderer_Ptr &,
-                                const std::string &ch, point p,
-                                unsigned char color, const float opacity )
-{
-    key_t    key {ch, static_cast<unsigned char>( color & 0xf )};
+void CachedTTFFont::OutputChar(
+    const SDL_Renderer_Ptr& renderer, const GeometryRenderer_Ptr&, const std::string& ch, point p,
+    unsigned char color, const float opacity) {
+    key_t key{ch, static_cast<unsigned char>(color & 0xf)};
 
-    auto it = glyph_cache_map.find( key );
-    if( it == std::end( glyph_cache_map ) ) {
-        const int wf = utf8_wrapper( key.codepoints ).display_width();
+    auto it = glyph_cache_map.find(key);
+    if (it == std::end(glyph_cache_map)) {
+        const int wf = utf8_wrapper(key.codepoints).display_width();
         const int target_w = width * wf;
         cached_t new_entry;
-        new_entry.texture = create_glyph( renderer, key.codepoints, key.color );
+        new_entry.texture = create_glyph(renderer, key.codepoints, key.color);
         new_entry.width = target_w;
         // Build the GPU mirror alongside. Independent surface render so
         // the legacy path stays bit-exact; only the GPU copy is new.
         new_entry.gpu_texture = create_gpu_glyph(
-                                    font, key.codepoints, key.color,
-                                    target_w, height, fontblending,
-                                    new_entry.gpu_w, new_entry.gpu_h );
-        it = glyph_cache_map.insert( std::make_pair( std::move( key ), std::move( new_entry ) ) ).first;
+            font, key.codepoints, key.color, target_w, height, fontblending, new_entry.gpu_w,
+            new_entry.gpu_h);
+        it = glyph_cache_map.insert(std::make_pair(std::move(key), std::move(new_entry))).first;
     }
-    const cached_t &value = it->second;
+    const cached_t& value = it->second;
 
     // GPU-only path. Bridge removed — legacy RenderCopy goes nowhere.
     // If GPU glyph creation failed, the character is silently skipped
     // (visible as a missing glyph rather than a silent black block).
-    if( value.gpu_texture ) {
-        auto &rs = lighting::get_render_state();
-        rs.queue_font_glyph( value.gpu_texture.get(),
-                             static_cast<float>( p.x ),
-                             static_cast<float>( p.y ),
-                             static_cast<float>( value.gpu_w ),
-                             static_cast<float>( value.gpu_h ),
-                             1.0f, 1.0f, 1.0f, opacity );
+    if (value.gpu_texture) {
+        auto& rs = lighting::get_render_state();
+        rs.queue_font_glyph(
+            value.gpu_texture.get(), static_cast<float>(p.x), static_cast<float>(p.y),
+            static_cast<float>(value.gpu_w), static_cast<float>(value.gpu_h), 1.0f, 1.0f, 1.0f,
+            opacity);
         return;
     }
 
-    if( !value.texture ) {
+    if (!value.texture) {
         // Nothing we can do here )-:
         return;
     }
-    const SDL_FRect frect{ float( p.x ), float( p.y ), float( value.width ), float( height ) };
-    if( opacity != 1.0f ) {
-        SDL_SetTextureAlphaMod( value.texture.get(), opacity * 255.0f );
-    }
-    RenderCopy( renderer, value.texture, nullptr, &frect );
-    if( opacity != 1.0f ) {
-        SDL_SetTextureAlphaMod( value.texture.get(), 255 );
-    }
+    const SDL_FRect frect{float(p.x), float(p.y), float(value.width), float(height)};
+    if (opacity != 1.0f) { SDL_SetTextureAlphaMod(value.texture.get(), opacity * 255.0f); }
+    RenderCopy(renderer, value.texture, nullptr, &frect);
+    if (opacity != 1.0f) { SDL_SetTextureAlphaMod(value.texture.get(), 255); }
 }
 
 BitmapFont::BitmapFont(
-    SDL_Renderer_Ptr &renderer, SDL_PixelFormat format,
-    const int w, const int h,
-    const palette_array &palette,
-    const std::string &typeface_path )
-    : Font( w, h, palette )
-{
-    dbg( DL::Info ) << "Loading bitmap font [" + typeface_path + "].";
-    SDL_Surface_Ptr glyphs = load_image( typeface_path.c_str() );
-    assert( glyphs );
+    SDL_Renderer_Ptr& renderer, SDL_PixelFormat format, const int w, const int h,
+    const palette_array& palette, const std::string& typeface_path)
+    : Font(w, h, palette) {
+    dbg(DL::Info) << "Loading bitmap font [" + typeface_path + "].";
+    SDL_Surface_Ptr glyphs = load_image(typeface_path.c_str());
+    assert(glyphs);
 
     const auto glyph_w = glyphs->w / 16;
     const auto glyph_h = glyphs->h / 16;
     const auto font_w = width;
     const auto font_h = height;
 
-    if( glyph_h == font_h && glyph_w == font_w ) {
+    if (glyph_h == font_h && glyph_w == font_w) {
         /* Do Nothing */
     } else {
         /* Remap Glyphs to expected size */
         /* TODO: Maybe scale if pixel perfect (eg 16x16 to 32x32) */
-        dbg( DL::Warn ) <<
-                        string_format( "Bitmap font glyph size (%d x %d) does not match game glyph size (%d x %d)", glyph_w,
-                                       glyph_h, font_w, font_h );
+        dbg(DL::Warn) << string_format(
+            "Bitmap font glyph size (%d x %d) does not match game glyph size (%d x %d)", glyph_w,
+            glyph_h, font_w, font_h);
 
-        auto new_surf = create_surface_32( font_w * 16, font_h * 16 );
-        const auto new_fmt = SDL_GetPixelFormatDetails( new_surf->format );
-        const Uint32 new_key = SDL_MapRGB( new_fmt, nullptr, 0xFF, 0, 0xFF );
-        SDL_FillSurfaceRect( new_surf.get(), nullptr, new_key );
+        auto new_surf = create_surface_32(font_w * 16, font_h * 16);
+        const auto new_fmt = SDL_GetPixelFormatDetails(new_surf->format);
+        const Uint32 new_key = SDL_MapRGB(new_fmt, nullptr, 0xFF, 0, 0xFF);
+        SDL_FillSurfaceRect(new_surf.get(), nullptr, new_key);
 
-        const auto dx = ( font_w - glyph_w ) / 2;
-        const auto dy = ( font_h - glyph_h ) / 2;
+        const auto dx = (font_w - glyph_w) / 2;
+        const auto dy = (font_h - glyph_h) / 2;
 
-        for( int yy = 0; yy < 16; ++yy ) {
-            for( int xx = 0; xx < 16; ++xx ) {
-                const auto srcRect = SDL_Rect { xx * glyph_w, yy * glyph_h, glyph_w, glyph_h };
-                const auto dstRect = SDL_Rect {xx *font_w + dx, yy *font_h + dy, font_w, font_h};
-                SDL_BlitSurface( glyphs.get(), &srcRect, new_surf.get(), &dstRect );
+        for (int yy = 0; yy < 16; ++yy) {
+            for (int xx = 0; xx < 16; ++xx) {
+                const auto srcRect = SDL_Rect{xx * glyph_w, yy * glyph_h, glyph_w, glyph_h};
+                const auto dstRect = SDL_Rect{xx * font_w + dx, yy * font_h + dy, font_w, font_h};
+                SDL_BlitSurface(glyphs.get(), &srcRect, new_surf.get(), &dstRect);
             }
         }
 
-        glyphs.swap( new_surf );
+        glyphs.swap(new_surf);
     }
 
     // Per-color tinted glyph surfaces, consumed below by both the GPU upload and
     // the legacy CreateTextureFromSurface. ascii_surf[0] is the master copy of the
     // (possibly remapped) glyph sheet; the rest are per-color duplicates.
-    SDL_Surface_Ptr ascii_surf[std::tuple_size<decltype( ascii )>::value];
-    ascii_surf[0].reset( SDL_ConvertSurface( glyphs.get(), format ) );
-    SDL_SetSurfaceRLE( ascii_surf[0].get(), true );
-    for( size_t a = 1; a < std::tuple_size<decltype( ascii )>::value; ++a ) {
-        ascii_surf[a].reset( SDL_ConvertSurface( ascii_surf[0].get(), format ) );
-        SDL_SetSurfaceRLE( ascii_surf[a].get(), true );
+    SDL_Surface_Ptr ascii_surf[std::tuple_size<decltype(ascii)>::value];
+    ascii_surf[0].reset(SDL_ConvertSurface(glyphs.get(), format));
+    SDL_SetSurfaceRLE(ascii_surf[0].get(), true);
+    for (size_t a = 1; a < std::tuple_size<decltype(ascii)>::value; ++a) {
+        ascii_surf[a].reset(SDL_ConvertSurface(ascii_surf[0].get(), format));
+        SDL_SetSurfaceRLE(ascii_surf[a].get(), true);
     }
 
-    constexpr auto COLORS = std::tuple_size_v<decltype( ascii )>;
-    const auto fnt_fmt = SDL_GetPixelFormatDetails( format );
-    const Uint32 fnt_key = SDL_MapRGB( fnt_fmt, nullptr, 0xFF, 0, 0xFF );
+    constexpr auto COLORS = std::tuple_size_v<decltype(ascii)>;
+    const auto fnt_fmt = SDL_GetPixelFormatDetails(format);
+    const Uint32 fnt_key = SDL_MapRGB(fnt_fmt, nullptr, 0xFF, 0, 0xFF);
 
-    for( size_t a = 0; a < std::tuple_size<decltype( ascii )>::value - 1; ++a ) {
-        SDL_LockSurface( ascii_surf[a].get() );
+    for (size_t a = 0; a < std::tuple_size<decltype(ascii)>::value - 1; ++a) {
+        SDL_LockSurface(ascii_surf[a].get());
         int size = ascii_surf[a]->h * ascii_surf[a]->w;
-        Uint32 *pixels = static_cast<Uint32 *>( ascii_surf[a]->pixels );
-        Uint32 color = ( windowsPalette[a].r << 16 ) | ( windowsPalette[a].g << 8 ) | windowsPalette[a].b;
-        for( int i = 0; i < size; i++ ) {
-            if( pixels[i] == 0xFFFFFF ) {
-                pixels[i] = color;
-            }
+        Uint32* pixels = static_cast<Uint32*>(ascii_surf[a]->pixels);
+        Uint32 color =
+            (windowsPalette[a].r << 16) | (windowsPalette[a].g << 8) | windowsPalette[a].b;
+        for (int i = 0; i < size; i++) {
+            if (pixels[i] == 0xFFFFFF) { pixels[i] = color; }
         }
-        SDL_UnlockSurface( ascii_surf[a].get() );
+        SDL_UnlockSurface(ascii_surf[a].get());
     }
     tilewidth = ascii_surf[0]->w / width;
     gpu_sheet_w = ascii_surf[0]->w;
     gpu_sheet_h = ascii_surf[0]->h;
 
-    //convert ascii_surf to SDL_Texture + parallel SDL_GPUTexture upload
-    auto &rs = lighting::get_render_state();
-    for( size_t a = 0; a < std::tuple_size<decltype( ascii )>::value; ++a ) {
+    // convert ascii_surf to SDL_Texture + parallel SDL_GPUTexture upload
+    auto& rs = lighting::get_render_state();
+    for (size_t a = 0; a < std::tuple_size<decltype(ascii)>::value; ++a) {
         // Build the GPU mirror BEFORE the legacy CreateTextureFromSurface
         // call moves the surface into the SDL_Renderer texture: the SDL3
         // wrapper consumes ascii_surf[a] in some build configurations.
-        if( rs.ready() ) {
-            SDL_GPUTexture *raw = rs.upload_surface_to_gpu_texture( ascii_surf[a].get() );
-            if( raw ) {
-                gpu_ascii[a].reset( raw );
-            }
+        if (rs.ready()) {
+            SDL_GPUTexture* raw = rs.upload_surface_to_gpu_texture(ascii_surf[a].get());
+            if (raw) { gpu_ascii[a].reset(raw); }
         }
-        ascii[a] = CreateTextureFromSurface( renderer, ascii_surf[a] );
+        ascii[a] = CreateTextureFromSurface(renderer, ascii_surf[a]);
     }
 }
 
-void BitmapFont::draw_ascii_lines( const SDL_Renderer_Ptr &renderer,
-                                   const GeometryRenderer_Ptr &geometry,
-                                   unsigned char line_id, point p, unsigned char color ) const
-{
-    BitmapFont *t = const_cast<BitmapFont *>( this );
-    switch( line_id ) {
+void BitmapFont::draw_ascii_lines(
+    const SDL_Renderer_Ptr& renderer, const GeometryRenderer_Ptr& geometry, unsigned char line_id,
+    point p, unsigned char color) const {
+    BitmapFont* t = const_cast<BitmapFont*>(this);
+    switch (line_id) {
         // box bottom/top side (horizontal line)
         case LINE_OXOX_C:
-            t->OutputChar( renderer, geometry, 0xcd, p, color );
+            t->OutputChar(renderer, geometry, 0xcd, p, color);
             break;
         // box left/right side (vertical line)
         case LINE_XOXO_C:
-            t->OutputChar( renderer, geometry, 0xba, p, color );
+            t->OutputChar(renderer, geometry, 0xba, p, color);
             break;
         // box top left
         case LINE_OXXO_C:
-            t->OutputChar( renderer, geometry, 0xc9, p, color );
+            t->OutputChar(renderer, geometry, 0xc9, p, color);
             break;
         // box top right
         case LINE_OOXX_C:
-            t->OutputChar( renderer, geometry, 0xbb, p, color );
+            t->OutputChar(renderer, geometry, 0xbb, p, color);
             break;
         // box bottom right
         case LINE_XOOX_C:
-            t->OutputChar( renderer, geometry, 0xbc, p, color );
+            t->OutputChar(renderer, geometry, 0xbc, p, color);
             break;
         // box bottom left
         case LINE_XXOO_C:
-            t->OutputChar( renderer, geometry, 0xc8, p, color );
+            t->OutputChar(renderer, geometry, 0xc8, p, color);
             break;
         // box bottom north T (left, right, up)
         case LINE_XXOX_C:
-            t->OutputChar( renderer, geometry, 0xca, p, color );
+            t->OutputChar(renderer, geometry, 0xca, p, color);
             break;
         // box bottom east T (up, right, down)
         case LINE_XXXO_C:
-            t->OutputChar( renderer, geometry, 0xcc, p, color );
+            t->OutputChar(renderer, geometry, 0xcc, p, color);
             break;
         // box bottom south T (left, right, down)
         case LINE_OXXX_C:
-            t->OutputChar( renderer, geometry, 0xcb, p, color );
+            t->OutputChar(renderer, geometry, 0xcb, p, color);
             break;
         // box X (left down up right)
         case LINE_XXXX_C:
-            t->OutputChar( renderer, geometry, 0xce, p, color );
+            t->OutputChar(renderer, geometry, 0xce, p, color);
             break;
         // box bottom east T (left, down, up)
         case LINE_XOXX_C:
-            t->OutputChar( renderer, geometry, 0xb9, p, color );
+            t->OutputChar(renderer, geometry, 0xb9, p, color);
             break;
         default:
             break;
     }
 }
 
-bool BitmapFont::isGlyphProvided( const std::string &ch ) const
-{
-    const uint32_t t = UTF8_getch( ch );
-    switch( t ) {
+bool BitmapFont::isGlyphProvided(const std::string& ch) const {
+    const uint32_t t = UTF8_getch(ch);
+    switch (t) {
         case LINE_XOXO_UNICODE:
         case LINE_OXOX_UNICODE:
         case LINE_XXOO_UNICODE:
@@ -644,37 +573,32 @@ bool BitmapFont::isGlyphProvided( const std::string &ch ) const
     }
 }
 
-void BitmapFont::OutputChar( const SDL_Renderer_Ptr &renderer, const GeometryRenderer_Ptr &geometry,
-                             const std::string &ch, point p,
-                             unsigned char color, const float opacity )
-{
-    const int t = UTF8_getch( ch );
-    BitmapFont::OutputChar( renderer, geometry, t, p, color, opacity );
+void BitmapFont::OutputChar(
+    const SDL_Renderer_Ptr& renderer, const GeometryRenderer_Ptr& geometry, const std::string& ch,
+    point p, unsigned char color, const float opacity) {
+    const int t = UTF8_getch(ch);
+    BitmapFont::OutputChar(renderer, geometry, t, p, color, opacity);
 }
 
-void BitmapFont::OutputChar( const SDL_Renderer_Ptr &renderer, const GeometryRenderer_Ptr &geometry,
-                             const int t, point p,
-                             unsigned char color, const float opacity )
-{
-    if( t <= 256 ) {
+void BitmapFont::OutputChar(
+    const SDL_Renderer_Ptr& renderer, const GeometryRenderer_Ptr& geometry, const int t, point p,
+    unsigned char color, const float opacity) {
+    if (t <= 256) {
         SDL_Rect src;
-        src.x = ( t % tilewidth ) * width;
-        src.y = ( t / tilewidth ) * height;
+        src.x = (t % tilewidth) * width;
+        src.y = (t / tilewidth) * height;
         src.w = width;
         src.h = height;
         // GPU-only. Bridge removed — legacy RenderCopy goes nowhere.
-        if( gpu_ascii[color] && gpu_sheet_w > 0 && gpu_sheet_h > 0 ) {
-            const float inv_w = 1.0f / static_cast<float>( gpu_sheet_w );
-            const float inv_h = 1.0f / static_cast<float>( gpu_sheet_h );
+        if (gpu_ascii[color] && gpu_sheet_w > 0 && gpu_sheet_h > 0) {
+            const float inv_w = 1.0f / static_cast<float>(gpu_sheet_w);
+            const float inv_h = 1.0f / static_cast<float>(gpu_sheet_h);
             lighting::get_render_state().queue_font_glyph(
-                gpu_ascii[color].get(),
-                static_cast<float>( p.x ), static_cast<float>( p.y ),
-                static_cast<float>( width ), static_cast<float>( height ),
-                static_cast<float>( src.x ) * inv_w,
-                static_cast<float>( src.y ) * inv_h,
-                static_cast<float>( src.w ) * inv_w,
-                static_cast<float>( src.h ) * inv_h,
-                1.0f, 1.0f, 1.0f, opacity );
+                gpu_ascii[color].get(), static_cast<float>(p.x), static_cast<float>(p.y),
+                static_cast<float>(width), static_cast<float>(height),
+                static_cast<float>(src.x) * inv_w, static_cast<float>(src.y) * inv_h,
+                static_cast<float>(src.w) * inv_w, static_cast<float>(src.h) * inv_h, 1.0f, 1.0f,
+                1.0f, opacity);
             return;
         }
         SDL_Rect rect;
@@ -682,18 +606,14 @@ void BitmapFont::OutputChar( const SDL_Renderer_Ptr &renderer, const GeometryRen
         rect.y = p.y;
         rect.w = width;
         rect.h = height;
-        const SDL_FRect fsrc{ float( src.x ), float( src.y ), float( src.w ), float( src.h ) };
-        const SDL_FRect frect{ float( rect.x ), float( rect.y ), float( rect.w ), float( rect.h ) };
-        if( opacity != 1.0f ) {
-            SDL_SetTextureAlphaMod( ascii[color].get(), opacity * 255 );
-        }
-        RenderCopy( renderer, ascii[color], &fsrc, &frect );
-        if( opacity != 1.0f ) {
-            SDL_SetTextureAlphaMod( ascii[color].get(), 255 );
-        }
+        const SDL_FRect fsrc{float(src.x), float(src.y), float(src.w), float(src.h)};
+        const SDL_FRect frect{float(rect.x), float(rect.y), float(rect.w), float(rect.h)};
+        if (opacity != 1.0f) { SDL_SetTextureAlphaMod(ascii[color].get(), opacity * 255); }
+        RenderCopy(renderer, ascii[color], &fsrc, &frect);
+        if (opacity != 1.0f) { SDL_SetTextureAlphaMod(ascii[color].get(), 255); }
     } else {
         unsigned char uc = 0;
-        switch( t ) {
+        switch (t) {
             case LINE_XOXO_UNICODE:
                 uc = LINE_XOXO_C;
                 break;
@@ -730,49 +650,36 @@ void BitmapFont::OutputChar( const SDL_Renderer_Ptr &renderer, const GeometryRen
             default:
                 return;
         }
-        draw_ascii_lines( renderer, geometry, uc, p, color );
+        draw_ascii_lines(renderer, geometry, uc, p, color);
     }
 }
 
 FontFallbackList::FontFallbackList(
-    SDL_Renderer_Ptr &renderer, SDL_PixelFormat format,
-    const int w, const int h,
-    const palette_array &palette,
-    const std::vector<std::string> &typefaces,
-    const int fontsize, const bool fontblending )
-    : Font( w, h, palette )
-{
-    for( const std::string &typeface : typefaces ) {
-        std::unique_ptr<Font> font = Font::load_font( renderer, format, typeface, fontsize, w, h, palette,
-                                     fontblending );
-        if( !font ) {
-            throw std::runtime_error( "Cannot load font " + typeface );
-        }
-        fonts.emplace_back( std::move( font ) );
+    SDL_Renderer_Ptr& renderer, SDL_PixelFormat format, const int w, const int h,
+    const palette_array& palette, const std::vector<std::string>& typefaces, const int fontsize,
+    const bool fontblending)
+    : Font(w, h, palette) {
+    for (const std::string& typeface : typefaces) {
+        std::unique_ptr<Font> font =
+            Font::load_font(renderer, format, typeface, fontsize, w, h, palette, fontblending);
+        if (!font) { throw std::runtime_error("Cannot load font " + typeface); }
+        fonts.emplace_back(std::move(font));
     }
-    if( fonts.empty() ) {
-        throw std::runtime_error( "Typeface list is empty" );
-    }
+    if (fonts.empty()) { throw std::runtime_error("Typeface list is empty"); }
 }
 
-bool FontFallbackList::isGlyphProvided( const std::string & ) const
-{
-    return true;
-}
+bool FontFallbackList::isGlyphProvided(const std::string&) const { return true; }
 
-void FontFallbackList::OutputChar( const SDL_Renderer_Ptr &renderer,
-                                   const GeometryRenderer_Ptr &geometry,
-                                   const std::string &ch, point p,
-                                   unsigned char color, const float opacity )
-{
-    auto cached = glyph_font.find( ch );
-    if( cached == glyph_font.end() ) {
-        for( auto it = fonts.begin(); it != fonts.end(); ++it ) {
-            if( std::next( it ) == fonts.end() || ( *it )->isGlyphProvided( ch ) ) {
-                cached = glyph_font.emplace( ch, it ).first;
+void FontFallbackList::OutputChar(
+    const SDL_Renderer_Ptr& renderer, const GeometryRenderer_Ptr& geometry, const std::string& ch,
+    point p, unsigned char color, const float opacity) {
+    auto cached = glyph_font.find(ch);
+    if (cached == glyph_font.end()) {
+        for (auto it = fonts.begin(); it != fonts.end(); ++it) {
+            if (std::next(it) == fonts.end() || (*it)->isGlyphProvided(ch)) {
+                cached = glyph_font.emplace(ch, it).first;
             }
         }
     }
-    ( *cached->second )->OutputChar( renderer, geometry, ch, p, color, opacity );
+    (*cached->second)->OutputChar(renderer, geometry, ch, p, color, opacity);
 }
-

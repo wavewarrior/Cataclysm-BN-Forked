@@ -14,8 +14,7 @@
 /// the hairline scanline inside its slot boxes. Alpha rather than a colour blend because the
 /// compositor already knows how to fade gold into a dark ground, and because a wrong blend is
 /// invisible until someone retunes the theme.
-namespace nc_bio_scan
-{
+namespace nc_bio_scan {
 
 /// Body rows in the chassis grid. Matches the doll's six rows in newcharacter_ui.cpp; the sweep
 /// travels one row at a time so the rail cannot drift out of step with the grid.
@@ -35,13 +34,12 @@ constexpr float tail = 1.7F;
 /// `rows - 1`, hence `(rows - 1) + 2 * tail` — a plain `rows + tail` clears the glow only while
 /// `tail <= 1`, and this one is deliberately larger, so the bottom box would flash at 0.41
 /// brightness once per pass.
-constexpr float travel_rows = static_cast<float>( rows ) - 1.0F + 2.0F * tail;
+constexpr float travel_rows = static_cast<float>(rows) - 1.0F + 2.0F * tail;
 
 /// Scan-head position in rows for a given elapsed time. Starts at -tail so the first pass fades in
 /// from above the head rather than popping on at full brightness.
-inline auto head_at( float seconds ) -> float
-{
-    const float t = std::fmod( seconds, sweep_secs ) / sweep_secs;
+inline auto head_at(float seconds) -> float {
+    const float t = std::fmod(seconds, sweep_secs) / sweep_secs;
     return t * travel_rows - tail;
 }
 
@@ -49,20 +47,16 @@ inline auto head_at( float seconds ) -> float
 ///
 /// Ahead of the head is zero, NOT a symmetric falloff: a scan leaves a wake, and a symmetric glow
 /// makes the direction of travel ambiguous — which is the whole content of the animation.
-inline auto intensity( float head, int row ) -> float
-{
-    const float behind = head - static_cast<float>( row );
-    if( behind < 0.0F || behind > tail ) {
-        return 0.0F;
-    }
+inline auto intensity(float head, int row) -> float {
+    const float behind = head - static_cast<float>(row);
+    if (behind < 0.0F || behind > tail) { return 0.0F; }
     return 1.0F - behind / tail;
 }
 
 /// Intensity as an 8-bit alpha. Clamped rather than trusted: `intensity` is exact at the ends, but
 /// a future easing curve overshooting 1 would silently wrap the byte.
-inline auto alpha_of( float intensity_01 ) -> int
-{
-    return std::clamp( static_cast<int>( std::lround( intensity_01 * 255.0F ) ), 0, 255 );
+inline auto alpha_of(float intensity_01) -> int {
+    return std::clamp(static_cast<int>(std::lround(intensity_01 * 255.0F)), 0, 255);
 }
 
 } // namespace nc_bio_scan

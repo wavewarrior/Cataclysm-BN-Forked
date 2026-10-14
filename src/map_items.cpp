@@ -1,10 +1,3 @@
-#include "level_cache_freshness.h"
-#include "map.h"
-#include "coop_mutation_log.h"
-
-#include "physics/physics_world.h"
-#include "physics/veh_box2d_solve.h"
-
 #include "active_item_cache.h"
 #include "ammo.h"
 #include "ammo_effect.h"
@@ -24,6 +17,7 @@
 #include "clzones.h"
 #include "color.h"
 #include "construction.h"
+#include "coop_mutation_log.h"
 #include "coordinates.h"
 #include "creature.h"
 #include "cursesdef.h"
@@ -58,10 +52,12 @@
 #include "iuse.h"
 #include "iuse_actor.h"
 #include "legacy_pathfinding.h"
+#include "level_cache_freshness.h"
 #include "lightmap.h"
 #include "line.h"
-#include "map_feature_descriptions.h"
+#include "map.h"
 #include "map/utils/map_functions.h"
+#include "map_feature_descriptions.h"
 #include "map_iterator.h"
 #include "map_memory.h"
 #include "map_selector.h"
@@ -79,6 +75,8 @@
 #include "options.h"
 #include "output.h"
 #include "overmapbuffer.h"
+#include "physics/physics_world.h"
+#include "physics/veh_box2d_solve.h"
 #include "player.h"
 #include "point_float.h"
 #include "profile.h"
@@ -130,42 +128,42 @@
 
 using ammo_effect_str_id = string_id<ammo_effect>;
 
-static const ammo_effect_str_id ammo_effect_INCENDIARY( "INCENDIARY" );
-static const ammo_effect_str_id ammo_effect_LASER( "LASER" );
-static const ammo_effect_str_id ammo_effect_LIGHTNING( "LIGHTNING" );
-static const ammo_effect_str_id ammo_effect_NO_PENETRATE_OBSTACLES( "NO_PENETRATE_OBSTACLES" );
-static const ammo_effect_str_id ammo_effect_PLASMA( "PLASMA" );
+static const ammo_effect_str_id ammo_effect_INCENDIARY("INCENDIARY");
+static const ammo_effect_str_id ammo_effect_LASER("LASER");
+static const ammo_effect_str_id ammo_effect_LIGHTNING("LIGHTNING");
+static const ammo_effect_str_id ammo_effect_NO_PENETRATE_OBSTACLES("NO_PENETRATE_OBSTACLES");
+static const ammo_effect_str_id ammo_effect_PLASMA("PLASMA");
 
-static const fault_id fault_bionic_nonsterile( "fault_bionic_nonsterile" );
+static const fault_id fault_bionic_nonsterile("fault_bionic_nonsterile");
 
-static const itype_id itype_autoclave( "autoclave" );
-static const itype_id itype_battery( "battery" );
-static const itype_id itype_burnt_out_bionic( "burnt_out_bionic" );
-static const itype_id itype_chemistry_set( "chemistry_set" );
-static const itype_id itype_dehydrator( "dehydrator" );
-static const itype_id itype_electrolysis_kit( "electrolysis_kit" );
-static const itype_id itype_food_processor( "food_processor" );
-static const itype_id itype_forge( "forge" );
-static const itype_id itype_hotplate( "hotplate" );
-static const itype_id itype_kiln( "kiln" );
-static const itype_id itype_press( "press" );
-static const itype_id itype_soldering_iron( "soldering_iron" );
-static const itype_id itype_vac_sealer( "vac_sealer" );
-static const itype_id itype_welder( "welder" );
-static const itype_id itype_butchery( "fake_adv_butchery" );
+static const itype_id itype_autoclave("autoclave");
+static const itype_id itype_battery("battery");
+static const itype_id itype_burnt_out_bionic("burnt_out_bionic");
+static const itype_id itype_chemistry_set("chemistry_set");
+static const itype_id itype_dehydrator("dehydrator");
+static const itype_id itype_electrolysis_kit("electrolysis_kit");
+static const itype_id itype_food_processor("food_processor");
+static const itype_id itype_forge("forge");
+static const itype_id itype_hotplate("hotplate");
+static const itype_id itype_kiln("kiln");
+static const itype_id itype_press("press");
+static const itype_id itype_soldering_iron("soldering_iron");
+static const itype_id itype_vac_sealer("vac_sealer");
+static const itype_id itype_welder("welder");
+static const itype_id itype_butchery("fake_adv_butchery");
 
-static const mtype_id mon_zombie( "mon_zombie" );
+static const mtype_id mon_zombie("mon_zombie");
 
-static const skill_id skill_traps( "traps" );
+static const skill_id skill_traps("traps");
 
-static const efftype_id effect_boomered( "boomered" );
-static const efftype_id effect_crushed( "crushed" );
-static const efftype_id effect_onfire( "onfire" );
+static const efftype_id effect_boomered("boomered");
+static const efftype_id effect_crushed("crushed");
+static const efftype_id effect_onfire("onfire");
 
-static const ter_str_id t_rock_floor_no_roof( "t_rock_floor_no_roof" );
+static const ter_str_id t_rock_floor_no_roof("t_rock_floor_no_roof");
 
-static const std::string str_DOOR_LOCKING( "DOOR_LOCKING" );
-static const std::string str_OPENCLOSE_INSIDE( "OPENCLOSE_INSIDE" );
+static const std::string str_DOOR_LOCKING("DOOR_LOCKING");
+static const std::string str_OPENCLOSE_INSIDE("OPENCLOSE_INSIDE");
 
 
 #define dbg(x) DebugLog((x), DC::Map)
@@ -177,503 +175,478 @@ static const std::string str_OPENCLOSE_INSIDE( "OPENCLOSE_INSIDE" );
 // Worker threads never push a context, so they always fall through to g->m.
 
 
-
-
 // Map stack methods.
-
 
 
 // Map class methods.
 
 
-static location_vector<item> nulitems( new fake_item_location() );
+static location_vector<item> nulitems(new fake_item_location());
 
 // Declared in map.cpp (external linkage); resident-only mapbuffer lookup options.
 auto resident_item_lookup() -> mapbuffer_lookup_options;
 // Declared in map.cpp (external linkage); decides whether item mutations at an
 // absolute position can be routed through the mapbuffer instead of this map.
-auto can_delegate_item_mutation_to_mapbuffer( const map &m, const tripoint_abs_ms &p,
-        const submap *sm ) -> bool;
+auto can_delegate_item_mutation_to_mapbuffer(
+    const map& m, const tripoint_abs_ms& p, const submap* sm) -> bool;
 
-map_stack map::i_at( const tripoint_bub_ms& p )
-{
-    const auto abs_pos = map_local_to_abs( *this, p );
+map_stack map::i_at(const tripoint_bub_ms& p) {
+    const auto abs_pos = map_local_to_abs(*this, p);
     point_sm_ms l;
-    submap* const current_submap = get_submap_at( p, l );
-    if( current_submap == nullptr ) {
+    submap* const current_submap = get_submap_at(p, l);
+    if (current_submap == nullptr) {
         nulitems.clear();
-        return map_stack( {
+        return map_stack({
             .stack = &nulitems,
             .location = abs_pos,
             .local_origin = this,
-        } );
+        });
     }
 
-    if( can_delegate_item_mutation_to_mapbuffer( *this, abs_pos, current_submap ) ) {
-        return map_stack( {
-            .stack = &current_submap->get_items( l ),
+    if (can_delegate_item_mutation_to_mapbuffer(*this, abs_pos, current_submap)) {
+        return map_stack({
+            .stack = &current_submap->get_items(l),
             .location = abs_pos,
             .origin = &get_mapbuffer(),
-        } );
+        });
     }
 
-    return map_stack( {
-        .stack = &current_submap->get_items( l ),
+    return map_stack({
+        .stack = &current_submap->get_items(l),
         .location = abs_pos,
         .local_origin = this,
-    } );
+    });
 }
 
 map_stack::iterator map::i_rem(
-    const tripoint_bub_ms& p, map_stack::const_iterator it, detached_ptr<item> *out )
-{
+    const tripoint_bub_ms& p, map_stack::const_iterator it, detached_ptr<item>* out) {
     point_sm_ms l;
-    submap* const current_submap = get_submap_at( tripoint_bub_ms( p ), l );
+    submap* const current_submap = get_submap_at(tripoint_bub_ms(p), l);
 
     // remove from the active items cache (if it isn't there does nothing)
-    current_submap->active_items.remove( *it );
-    if( current_submap->active_items.empty() ) {
-        get_mapbuffer().forget_active_item_submap_index( project_to<coords::sm>( map_local_to_abs( *this,
-                p ) ) );
+    current_submap->active_items.remove(*it);
+    if (current_submap->active_items.empty()) {
+        get_mapbuffer().forget_active_item_submap_index(
+            project_to<coords::sm>(map_local_to_abs(*this, p)));
     }
 
-    const auto removed_emissive = ( *it )->is_emissive();
-    current_submap->update_lum_rem( l, **it );
-    if( removed_emissive ) {
-        level_cache_freshness::report( *this, level_cache_freshness::light_changed {} );
+    const auto removed_emissive = (*it)->is_emissive();
+    current_submap->update_lum_rem(l, **it);
+    if (removed_emissive) {
+        level_cache_freshness::report(*this, level_cache_freshness::light_changed{});
     }
 
-    return current_submap->get_items( l ).erase( std::move( it ), out );
+    return current_submap->get_items(l).erase(std::move(it), out);
 }
 
-detached_ptr<item> map::i_rem( const tripoint_bub_ms& p, item* it )
-{
+detached_ptr<item> map::i_rem(const tripoint_bub_ms& p, item* it) {
     point_sm_ms l;
-    submap* const current_submap = get_submap_at( p, l );
-    if( current_submap == nullptr ) {
-        return detached_ptr<item>();
+    submap* const current_submap = get_submap_at(p, l);
+    if (current_submap == nullptr) { return detached_ptr<item>(); }
+
+    const auto abs_pos = map_local_to_abs(*this, p);
+    if (can_delegate_item_mutation_to_mapbuffer(*this, abs_pos, current_submap)) {
+        return get_mapbuffer().remove_item(abs_pos, it, resident_item_lookup());
     }
 
-    const auto abs_pos = map_local_to_abs( *this, p );
-    if( can_delegate_item_mutation_to_mapbuffer( *this, abs_pos, current_submap ) ) {
-        return get_mapbuffer().remove_item( abs_pos, it,
-                                            resident_item_lookup() );
-    }
-
-    auto& items = current_submap->get_items( l );
-    if( std::ranges::find( items, it ) == items.end() ) {
-        return detached_ptr<item>();
-    }
+    auto& items = current_submap->get_items(l);
+    if (std::ranges::find(items, it) == items.end()) { return detached_ptr<item>(); }
 
     // remove from the active items cache (if it isn't there does nothing)
-    current_submap->active_items.remove( it );
-    if( current_submap->active_items.empty() ) {
-        get_mapbuffer().forget_active_item_submap_index( project_to<coords::sm>( abs_pos ) );
+    current_submap->active_items.remove(it);
+    if (current_submap->active_items.empty()) {
+        get_mapbuffer().forget_active_item_submap_index(project_to<coords::sm>(abs_pos));
     }
 
     const auto removed_emissive = it->is_emissive();
-    current_submap->update_lum_rem( l, *it );
-    if( removed_emissive ) {
-        level_cache_freshness::report( *this, level_cache_freshness::light_changed {} );
+    current_submap->update_lum_rem(l, *it);
+    if (removed_emissive) {
+        level_cache_freshness::report(*this, level_cache_freshness::light_changed{});
     }
 
-    return items.remove( it );
+    return items.remove(it);
 }
 
-std::vector<detached_ptr<item>> map::i_clear( const tripoint_bub_ms& p )
-{
+std::vector<detached_ptr<item>> map::i_clear(const tripoint_bub_ms& p) {
     point_sm_ms l;
-    submap* const current_submap = get_submap_at( tripoint_bub_ms( p ), l );
-    if( current_submap == nullptr ) {
-        return {};
-    }
+    submap* const current_submap = get_submap_at(tripoint_bub_ms(p), l);
+    if (current_submap == nullptr) { return {}; }
 
-    for( item * const& it : current_submap->get_items( l ) ) {
+    for (item* const& it : current_submap->get_items(l)) {
         // remove from the active items cache (if it isn't there does nothing)
-        current_submap->active_items.remove( it );
+        current_submap->active_items.remove(it);
     }
-    if( current_submap->active_items.empty() ) {
-        get_mapbuffer().forget_active_item_submap_index( project_to<coords::sm>( map_local_to_abs( *this,
-                p ) ) );
+    if (current_submap->active_items.empty()) {
+        get_mapbuffer().forget_active_item_submap_index(
+            project_to<coords::sm>(map_local_to_abs(*this, p)));
     }
 
-    const auto had_luminance = current_submap->get_lum( l ) != 0;
-    current_submap->set_lum( l, 0 );
-    if( had_luminance ) {
-        level_cache_freshness::report( *this, level_cache_freshness::light_changed {} );
+    const auto had_luminance = current_submap->get_lum(l) != 0;
+    current_submap->set_lum(l, 0);
+    if (had_luminance) {
+        level_cache_freshness::report(*this, level_cache_freshness::light_changed{});
     }
-    return current_submap->get_items( l ).clear();
+    return current_submap->get_items(l).clear();
 }
 
 detached_ptr<item> map::spawn_an_item(
     const tripoint_bub_ms& p, detached_ptr<item>&& new_item, const int charges,
-    const int damlevel )
-{
-    if( one_in( 3 ) && new_item->has_flag( flag_VARSIZE ) ) { new_item->set_flag( flag_FIT ); }
+    const int damlevel) {
+    if (one_in(3) && new_item->has_flag(flag_VARSIZE)) { new_item->set_flag(flag_FIT); }
 
-    if( charges && new_item->charges > 0 ) {
+    if (charges && new_item->charges > 0) {
         // let's fail silently if we specify charges for an item that doesn't support it
         new_item->charges = charges;
     }
-    detached_ptr<item> spawned_item = item::in_its_container( std::move( new_item ) );
-    if( ( spawned_item->made_of( LIQUID ) && has_flag( "SWIMMABLE", p ) )
-        || has_flag( "DESTROY_ITEM", p ) ) {
+    detached_ptr<item> spawned_item = item::in_its_container(std::move(new_item));
+    if ((spawned_item->made_of(LIQUID) && has_flag("SWIMMABLE", p))
+        || has_flag("DESTROY_ITEM", p)) {
         return detached_ptr<item>();
     }
 
-    spawned_item->set_damage( damlevel );
+    spawned_item->set_damage(damlevel);
 
-    return add_item_or_charges( p, std::move( spawned_item ) );
+    return add_item_or_charges(p, std::move(spawned_item));
 }
 
-float map::item_category_spawn_rate( const item& itm )
-{
+float map::item_category_spawn_rate(const item& itm) {
     const std::string& cat = itm.get_category().id.c_str();
-    float spawn_rate = get_option<float>( "SPAWN_RATE_" + cat );
+    float spawn_rate = get_option<float>("SPAWN_RATE_" + cat);
 
     // strictly search for canned foods only in the first check
-    if( itm.goes_bad_after_opening( true ) ) {
-        float spawn_rate_mod = get_option<float>( "SPAWN_RATE_perishables_canned" );
+    if (itm.goes_bad_after_opening(true)) {
+        float spawn_rate_mod = get_option<float>("SPAWN_RATE_perishables_canned");
         spawn_rate *= spawn_rate_mod;
-    } else if( itm.goes_bad() ) {
-        float spawn_rate_mod = get_option<float>( "SPAWN_RATE_perishables" );
+    } else if (itm.goes_bad()) {
+        float spawn_rate_mod = get_option<float>("SPAWN_RATE_perishables");
         spawn_rate *= spawn_rate_mod;
     }
 
-    return spawn_rate > 1.0f ? roll_remainder( spawn_rate ) : spawn_rate;
+    return spawn_rate > 1.0f ? roll_remainder(spawn_rate) : spawn_rate;
 }
 
-std::vector<detached_ptr<item>> map::spawn_items( const tripoint_bub_ms &p,
-        std::vector<detached_ptr<item>> new_items )
-{
+std::vector<detached_ptr<item>> map::spawn_items(
+    const tripoint_bub_ms& p, std::vector<detached_ptr<item>> new_items) {
     std::vector<detached_ptr<item>> ret;
-    if( has_flag( "DESTROY_ITEM", p ) ) { return ret; }
-    const bool swimmable = has_flag( "SWIMMABLE", p );
-    for( detached_ptr<item> &new_item : new_items ) {
-        if( new_item->made_of( LIQUID ) && swimmable ) { continue; }
-        new_item = add_item_or_charges( p, std::move( new_item ) );
-        if( new_item ) { ret.push_back( std::move( new_item ) ); }
+    if (has_flag("DESTROY_ITEM", p)) { return ret; }
+    const bool swimmable = has_flag("SWIMMABLE", p);
+    for (detached_ptr<item>& new_item : new_items) {
+        if (new_item->made_of(LIQUID) && swimmable) { continue; }
+        new_item = add_item_or_charges(p, std::move(new_item));
+        if (new_item) { ret.push_back(std::move(new_item)); }
     }
 
     return ret;
 }
 
-void map::spawn_artifact( const tripoint_bub_ms& p )
-{
-    add_item_or_charges( p, item::spawn( new_artifact(), calendar::start_of_cataclysm ) );
+void map::spawn_artifact(const tripoint_bub_ms& p) {
+    add_item_or_charges(p, item::spawn(new_artifact(), calendar::start_of_cataclysm));
 }
 
-void map::spawn_natural_artifact( const tripoint_bub_ms& p, artifact_natural_property prop )
-{
-    add_item_or_charges( p, item::spawn( new_natural_artifact( prop ), calendar::start_of_cataclysm ) );
+void map::spawn_natural_artifact(const tripoint_bub_ms& p, artifact_natural_property prop) {
+    add_item_or_charges(p, item::spawn(new_natural_artifact(prop), calendar::start_of_cataclysm));
 }
 
 void map::spawn_item(
     const tripoint_bub_ms& p, const itype_id& type_id, const unsigned quantity, const int charges,
-    const time_point& birthday, const int damlevel )
-{
-    if( type_id.is_null() ) { return; }
+    const time_point& birthday, const int damlevel) {
+    if (type_id.is_null()) { return; }
 
-    if( item_is_blacklisted( type_id ) ) { return; }
+    if (item_is_blacklisted(type_id)) { return; }
 
     // Skip spawning items in dimension-bounded out-of-bounds areas
-    if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, p ) ) ) { return; }
+    if (get_mapbuffer().is_outside_pocket_dimension_bounds(map_local_to_abs(*this, p))) { return; }
 
-    for( size_t i = 0; i < quantity; i++ ) {
+    for (size_t i = 0; i < quantity; i++) {
         // spawn the item
-        detached_ptr<item> new_item = item::spawn( type_id, birthday );
+        detached_ptr<item> new_item = item::spawn(type_id, birthday);
 
-        spawn_an_item( p, std::move( new_item ), charges, damlevel );
+        spawn_an_item(p, std::move(new_item), charges, damlevel);
     }
 }
 
-units::volume map::max_volume( const tripoint_bub_ms& p ) { return i_at( p ).max_volume(); }
+units::volume map::max_volume(const tripoint_bub_ms& p) { return i_at(p).max_volume(); }
 
 // total volume of all the things
-units::volume map::stored_volume( const tripoint_bub_ms& p ) { return i_at( p ).stored_volume(); }
+units::volume map::stored_volume(const tripoint_bub_ms& p) { return i_at(p).stored_volume(); }
 
 // free space
-units::volume map::free_volume( const tripoint_bub_ms& p ) { return i_at( p ).free_volume(); }
+units::volume map::free_volume(const tripoint_bub_ms& p) { return i_at(p).free_volume(); }
 
 detached_ptr<item> map::add_item_or_charges(
-    const tripoint_bub_ms& pos, detached_ptr<item>&& obj, bool overflow )
-{
-    if( !obj ) { return std::move( obj ); }
-    if( obj->is_null() ) {
-        debugmsg( "Tried to add a null item to the map" );
-        return std::move( obj );
+    const tripoint_bub_ms& pos, detached_ptr<item>&& obj, bool overflow) {
+    if (!obj) { return std::move(obj); }
+    if (obj->is_null()) {
+        debugmsg("Tried to add a null item to the map");
+        return std::move(obj);
     }
 
     // Checks if item would not be destroyed if added to this tile
-    auto valid_tile = [&]( const tripoint_bub_ms & e ) {
+    auto valid_tile = [&](const tripoint_bub_ms& e) {
         // Cannot add items to dimension-bounded out-of-bounds areas or unloaded submaps
-        if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, e ) ) ) { return false; }
+        if (get_mapbuffer().is_outside_pocket_dimension_bounds(map_local_to_abs(*this, e))) {
+            return false;
+        }
 
         // Some tiles destroy items (e.g. lava)
-        if( has_flag( "DESTROY_ITEM", e ) ) { return false; }
+        if (has_flag("DESTROY_ITEM", e)) { return false; }
 
         // Cannot drop liquids into tiles that are comprised of liquid
-        if( obj->made_of( LIQUID ) && has_flag( "SWIMMABLE", e ) ) { return false; }
+        if (obj->made_of(LIQUID) && has_flag("SWIMMABLE", e)) { return false; }
 
         return true;
     };
 
     // Checks if sufficient space at tile to add item
-    auto valid_limits = [&]( const tripoint_bub_ms & e ) {
-        return obj->volume() <= free_volume( e ) && i_at( e ).size() < MAX_ITEM_IN_SQUARE;
+    auto valid_limits = [&](const tripoint_bub_ms& e) {
+        return obj->volume() <= free_volume(e) && i_at(e).size() < MAX_ITEM_IN_SQUARE;
     };
 
     // Performs the actual insertion of the object onto the map
-    auto place_item = [&]( const tripoint_bub_ms & tile ) {
-        if( obj->count_by_charges() ) {
-            for( auto& e : i_at( tile ) ) {
+    auto place_item = [&](const tripoint_bub_ms& tile) {
+        if (obj->count_by_charges()) {
+            for (auto& e : i_at(tile)) {
                 // NOLINTNEXTLINE(bugprone-use-after-move)
-                if( e->merge_charges( std::move( obj ) ) ) { return; }
+                if (e->merge_charges(std::move(obj))) { return; }
             }
         }
 
-        support_dirty( tile );
-        add_item( tile, std::move( obj ) );
+        support_dirty(tile);
+        add_item(tile, std::move(obj));
     };
 
     // Some items never exist on map as a discrete item (must be contained by another item)
-    if( obj->has_flag( flag_NO_DROP ) ) { return std::move( obj ); }
+    if (obj->has_flag(flag_NO_DROP)) { return std::move(obj); }
 
     // If intended drop tile destroys the item then we don't attempt to overflow
-    if( !valid_tile( pos ) ) { return std::move( obj ); }
+    if (!valid_tile(pos)) { return std::move(obj); }
 
-    if( ( !has_flag( "NOITEM", pos ) || ( has_flag( "LIQUIDCONT", pos ) && obj->made_of( LIQUID ) ) )
-        && valid_limits( pos ) ) {
+    if ((!has_flag("NOITEM", pos) || (has_flag("LIQUIDCONT", pos) && obj->made_of(LIQUID)))
+        && valid_limits(pos)) {
         // Pass map into on_drop, because this map may not be the global map object (in mapgen, for
         // instance).
-        if( obj->made_of( LIQUID ) || !obj->has_flag( flag_DROP_ACTION_ONLY_IF_LIQUID ) ) {
-            if( obj->on_drop( pos, *this ) ) { return std::move( obj ); }
+        if (obj->made_of(LIQUID) || !obj->has_flag(flag_DROP_ACTION_ONLY_IF_LIQUID)) {
+            if (obj->on_drop(pos, *this)) { return std::move(obj); }
         }
         // If tile can contain items place here...
-        place_item( pos );
+        place_item(pos);
         return detached_ptr<item>();
 
-    } else if( overflow ) {
+    } else if (overflow) {
         // ...otherwise try to overflow to adjacent tiles (if permitted)
         const int max_dist = 2;
-        std::vector<tripoint_bub_ms> tiles = closest_points_first( pos, max_dist );
-        tiles.erase( tiles.begin() ); // we already tried this position
+        std::vector<tripoint_bub_ms> tiles = closest_points_first(pos, max_dist);
+        tiles.erase(tiles.begin()); // we already tried this position
         const int max_path_length = 4 * max_dist;
         const pathfinding_settings
-        setting( 0, max_dist, max_path_length, 0, false, true, false, false, false );
-        for( const auto& e : tiles ) {
-            if( get_mapbuffer().is_outside_pocket_dimension_bounds( map_local_to_abs( *this, e ) ) ) { continue; }
-            // must be a path to the target tile
-            if( route( pos, e, setting ).empty() ) { continue; }
-            if( obj->made_of( LIQUID ) || !obj->has_flag( flag_DROP_ACTION_ONLY_IF_LIQUID ) ) {
-                if( obj->on_drop( e, *this ) ) { return std::move( obj ); }
-            }
-
-            if( !valid_tile( e ) || !valid_limits( e ) || has_flag( "NOITEM", e )
-                || has_flag( "SEALED", e ) ) {
+            setting(0, max_dist, max_path_length, 0, false, true, false, false, false);
+        for (const auto& e : tiles) {
+            if (get_mapbuffer().is_outside_pocket_dimension_bounds(map_local_to_abs(*this, e))) {
                 continue;
             }
-            place_item( e );
+            // must be a path to the target tile
+            if (route(pos, e, setting).empty()) { continue; }
+            if (obj->made_of(LIQUID) || !obj->has_flag(flag_DROP_ACTION_ONLY_IF_LIQUID)) {
+                if (obj->on_drop(e, *this)) { return std::move(obj); }
+            }
+
+            if (!valid_tile(e) || !valid_limits(e) || has_flag("NOITEM", e)
+                || has_flag("SEALED", e)) {
+                continue;
+            }
+            place_item(e);
             return detached_ptr<item>();
         }
     }
 
     // failed due to lack of space at target tile (+/- overflow tiles)
-    return std::move( obj );
+    return std::move(obj);
 }
 
-void map::add_item( const tripoint_bub_ms& p, detached_ptr<item>&& new_item )
-{
-    if( !new_item ) { return; }
+void map::add_item(const tripoint_bub_ms& p, detached_ptr<item>&& new_item) {
+    if (!new_item) { return; }
     point_sm_ms l;
-    submap* const current_submap = get_submap_at( tripoint_bub_ms( p ), l );
-    if( current_submap == nullptr ) { return; }
+    submap* const current_submap = get_submap_at(tripoint_bub_ms(p), l);
+    if (current_submap == nullptr) { return; }
 
     // Process foods when they are added to the map, here instead of add_item_at()
     // to avoid double processing food and corpses during active item processing.
-    if( new_item->is_food() ) {
-        new_item = item::process( std::move( new_item ), nullptr, p, false, 1 );
-        if( !new_item ) { return; }
+    if (new_item->is_food()) {
+        new_item = item::process(std::move(new_item), nullptr, p, false, 1);
+        if (!new_item) { return; }
     }
 
-    if( new_item->made_of( LIQUID ) && has_flag( "SWIMMABLE", p ) ) { return; }
+    if (new_item->made_of(LIQUID) && has_flag("SWIMMABLE", p)) { return; }
 
-    if( has_flag( "DESTROY_ITEM", p ) ) { return; }
+    if (has_flag("DESTROY_ITEM", p)) { return; }
 
-    if( new_item->has_flag( flag_ACT_IN_FIRE ) && get_field( p, fd_fire ) != nullptr ) {
-        if( new_item->has_flag( flag_BOMB ) && new_item->is_transformable() ) {
+    if (new_item->has_flag(flag_ACT_IN_FIRE) && get_field(p, fd_fire) != nullptr) {
+        if (new_item->has_flag(flag_BOMB) && new_item->is_transformable()) {
             // Convert a bomb item into its transformable version, e.g. incendiary grenade -> active
             // incendiary grenade
             new_item->convert(
-                dynamic_cast<const iuse_transform *>(
-                    new_item->type->get_use( "transform" )->get_actor_ptr() )
-                ->target );
+                dynamic_cast<const iuse_transform*>(
+                    new_item->type->get_use("transform")->get_actor_ptr())
+                    ->target);
         }
         new_item->activate();
     }
 
-    if( new_item->is_map() && !new_item->has_var( "reveal_map_center_omt" ) ) {
-        new_item->set_var( "reveal_map_center_omt", project_to<coords::omt>( map_local_to_abs( *this,
-                           p ) ) );
+    if (new_item->is_map() && !new_item->has_var("reveal_map_center_omt")) {
+        new_item
+            ->set_var("reveal_map_center_omt", project_to<coords::omt>(map_local_to_abs(*this, p)));
     }
 
     current_submap->is_uniform = false;
-    invalidate_max_populated_zlev( p.z() );
+    invalidate_max_populated_zlev(p.z());
 
     const auto adds_luminance = new_item->is_emissive();
-    current_submap->update_lum_add( l, *new_item );
-    if( adds_luminance ) {
-        level_cache_freshness::report( *this, level_cache_freshness::light_changed {} );
+    current_submap->update_lum_add(l, *new_item);
+    if (adds_luminance) {
+        level_cache_freshness::report(*this, level_cache_freshness::light_changed{});
     }
-    if( new_item->needs_processing() ) {
-        current_submap->active_items.add( *new_item );
-        get_mapbuffer().refresh_active_item_submap_index(
-            map_local_to_abs( *this, p ), resident_item_lookup() );
+    if (new_item->needs_processing()) {
+        current_submap->active_items.add(*new_item);
+        get_mapbuffer()
+            .refresh_active_item_submap_index(map_local_to_abs(*this, p), resident_item_lookup());
     }
 
-    new_item->on_map_placement( *this, p );
+    new_item->on_map_placement(*this, p);
 
-    current_submap->get_items( l ).push_back( std::move( new_item ) );
-    if( auto * _log = coop_mutation_log::current() ) {
-        _log->push( {coop_event_type::item_spawned, map_local_to_abs( *this, p ), 0} );
+    current_submap->get_items(l).push_back(std::move(new_item));
+    if (auto* _log = coop_mutation_log::current()) {
+        _log->push({coop_event_type::item_spawned, map_local_to_abs(*this, p), 0});
     }
     return;
 }
 
-detached_ptr<item> map::water_from( const tripoint_bub_ms& p )
-{
-    if( has_flag( "SALT_WATER", p ) ) {
-        return item::spawn( "salt_water", calendar::start_of_cataclysm, item::INFINITE_CHARGES );
+detached_ptr<item> map::water_from(const tripoint_bub_ms& p) {
+    if (has_flag("SALT_WATER", p)) {
+        return item::spawn("salt_water", calendar::start_of_cataclysm, item::INFINITE_CHARGES);
     }
 
-    const ter_id terrain_id = ter( p );
-    if( terrain_id == t_sewage ) {
+    const ter_id terrain_id = ter(p);
+    if (terrain_id == t_sewage) {
         detached_ptr<item> ret =
-            item::spawn( "water_sewage", calendar::start_of_cataclysm, item::INFINITE_CHARGES );
-        ret->poison = rng( 1, 7 );
+            item::spawn("water_sewage", calendar::start_of_cataclysm, item::INFINITE_CHARGES);
+        ret->poison = rng(1, 7);
         return ret;
     }
 
 
     // iexamine::water_source requires a valid liquid from this function.
-    if( terrain_id.obj().examine == &iexamine::water_source ) {
+    if (terrain_id.obj().examine == &iexamine::water_source) {
         detached_ptr<item> ret =
-            item::spawn( "water", calendar::start_of_cataclysm, item::INFINITE_CHARGES );
+            item::spawn("water", calendar::start_of_cataclysm, item::INFINITE_CHARGES);
         int poison_chance = 0;
-        if( terrain_id.obj().has_flag( TFLAG_DEEP_WATER ) ) {
-            if( terrain_id.obj().has_flag( TFLAG_CURRENT ) ) {
+        if (terrain_id.obj().has_flag(TFLAG_DEEP_WATER)) {
+            if (terrain_id.obj().has_flag(TFLAG_CURRENT)) {
                 poison_chance = 20;
             } else {
                 poison_chance = 4;
             }
         } else {
-            if( terrain_id.obj().has_flag( TFLAG_CURRENT ) ) {
+            if (terrain_id.obj().has_flag(TFLAG_CURRENT)) {
                 poison_chance = 10;
             } else {
                 poison_chance = 3;
             }
         }
-        if( one_in( poison_chance ) ) { ret->poison = rng( 1, 4 ); }
+        if (one_in(poison_chance)) { ret->poison = rng(1, 4); }
         return ret;
     }
-    if( furn( p ).obj().examine == &iexamine::water_source ) {
-        return item::spawn( "water", calendar::start_of_cataclysm, item::INFINITE_CHARGES );
+    if (furn(p).obj().examine == &iexamine::water_source) {
+        return item::spawn("water", calendar::start_of_cataclysm, item::INFINITE_CHARGES);
     }
-    if( furn( p ).obj().examine == &iexamine::clean_water_source
-        || terrain_id.obj().examine == &iexamine::clean_water_source ) {
-        return item::spawn( "water_clean", calendar::start_of_cataclysm, item::INFINITE_CHARGES );
+    if (furn(p).obj().examine == &iexamine::clean_water_source
+        || terrain_id.obj().examine == &iexamine::clean_water_source) {
+        return item::spawn("water_clean", calendar::start_of_cataclysm, item::INFINITE_CHARGES);
     }
-    if( furn( p ).obj().examine == &iexamine::liquid_source ) {
+    if (furn(p).obj().examine == &iexamine::liquid_source) {
         // Terrains have no "provides_liquids" to work with generic source
-        return item::spawn( furn( p ).obj().provides_liquids, calendar::turn, item::INFINITE_CHARGES );
+        return item::spawn(furn(p).obj().provides_liquids, calendar::turn, item::INFINITE_CHARGES);
     }
     return detached_ptr<item>();
 }
 
-void map::make_inactive( item& loc )
-{
+void map::make_inactive(item& loc) {
     point_sm_ms l;
-    submap* const current_submap = get_submap_at( loc.bub_pos(), l );
+    submap* const current_submap = get_submap_at(loc.bub_pos(), l);
 
     // remove from the active items cache (if it isn't there does nothing)
-    current_submap->active_items.remove( &loc );
-    if( current_submap->active_items.empty() ) {
+    current_submap->active_items.remove(&loc);
+    if (current_submap->active_items.empty()) {
         get_mapbuffer().forget_active_item_submap_index(
-            project_to<coords::sm>( map_local_to_abs( *this, loc.bub_pos() ) ) );
+            project_to<coords::sm>(map_local_to_abs(*this, loc.bub_pos())));
     }
 }
 
-void map::make_active( item& loc )
-{
+void map::make_active(item& loc) {
     item* target = &loc;
 
     // Trust but verify, don't let stinking callers set items active when they shouldn't be.
-    if( !target->needs_processing() ) { return; }
+    if (!target->needs_processing()) { return; }
     point_sm_ms l;
-    submap* const current_submap = get_submap_at( loc.bub_pos(), l );
+    submap* const current_submap = get_submap_at(loc.bub_pos(), l);
 
-    current_submap->active_items.add( *target );
+    current_submap->active_items.add(*target);
     get_mapbuffer().refresh_active_item_submap_index(
-        map_local_to_abs( *this, loc.bub_pos() ), resident_item_lookup() );
+        map_local_to_abs(*this, loc.bub_pos()), resident_item_lookup());
 }
 
-void map::update_lum( item& loc, bool add )
-{
+void map::update_lum(item& loc, bool add) {
     item* target = &loc;
 
     // if the item is not emissive, do nothing
-    if( !target->is_emissive() ) { return; }
+    if (!target->is_emissive()) { return; }
 
     point_sm_ms l;
-    submap* const current_submap = get_submap_at( loc.bub_pos(), l );
+    submap* const current_submap = get_submap_at(loc.bub_pos(), l);
 
-    if( add ) {
-        current_submap->update_lum_add( l, *target );
+    if (add) {
+        current_submap->update_lum_add(l, *target);
     } else {
-        current_submap->update_lum_rem( l, *target );
+        current_submap->update_lum_rem(l, *target);
     }
-    level_cache_freshness::report( *this, level_cache_freshness::light_changed {} );
+    level_cache_freshness::report(*this, level_cache_freshness::light_changed{});
 }
 
 static bool process_map_items(
-    item* item_ref, const tripoint_bub_ms& location, const temperature_flag flag, int turns )
-{
-    ZoneScopedN( "process_map_items" );
-    return item_ref->attempt_detach( [&location, &flag, &turns]( detached_ptr<item>&& it ) {
-        return item::process( std::move( it ), nullptr, location, false, turns, flag );
-    } );
+    item* item_ref, const tripoint_bub_ms& location, const temperature_flag flag, int turns) {
+    ZoneScopedN("process_map_items");
+    return item_ref->attempt_detach([&location, &flag, &turns](detached_ptr<item>&& it) {
+        return item::process(std::move(it), nullptr, location, false, turns, flag);
+    });
 }
 
-static void process_vehicle_items( vehicle& cur_veh, int part )
-{
+static void process_vehicle_items(vehicle& cur_veh, int part) {
 
-    const int recharge_part_idx = cur_veh.part_with_feature( part, VPFLAG_RECHARGE, true );
+    const int recharge_part_idx = cur_veh.part_with_feature(part, VPFLAG_RECHARGE, true);
     static const vehicle_part null_part;
-    const vehicle_part &recharge_part = recharge_part_idx >= 0 ?
-                                        cur_veh.part( recharge_part_idx ) :
-                                        null_part;
-    if( recharge_part_idx >= 0 && recharge_part.enabled &&
-        !recharge_part.removed && !recharge_part.is_broken() ) {
-        for( item * &outer : cur_veh.get_items( part ) ) {
+    const vehicle_part& recharge_part =
+        recharge_part_idx >= 0 ? cur_veh.part(recharge_part_idx) : null_part;
+    if (recharge_part_idx >= 0 && recharge_part.enabled && !recharge_part.removed
+        && !recharge_part.is_broken()) {
+        for (item*& outer : cur_veh.get_items(part)) {
             bool out_of_battery = false;
-            outer->visit_items( [&cur_veh, &recharge_part, &out_of_battery]( item * it ) {
+            outer->visit_items([&cur_veh, &recharge_part, &out_of_battery](item* it) {
                 item& n = *it;
-                if( !n.has_flag( flag_RECHARGE ) && !n.has_flag( flag_USE_UPS ) ) {
+                if (!n.has_flag(flag_RECHARGE) && !n.has_flag(flag_USE_UPS)) {
                     return VisitResponse::NEXT;
                 }
-                if( n.ammo_capacity() > n.ammo_remaining()
-                    || ( n.type->battery && n.type->battery->max_capacity > n.energy_remaining() ) ) {
+                if (n.ammo_capacity() > n.ammo_remaining()
+                    || (n.type->battery && n.type->battery->max_capacity > n.energy_remaining())) {
                     int power = recharge_part.info().bonus;
-                    while( power >= 1000 || x_in_y( power, 1000 ) ) {
-                        const int missing = cur_veh.discharge_battery( 1, false );
-                        if( missing > 0 ) {
+                    while (power >= 1000 || x_in_y(power, 1000)) {
+                        const int missing = cur_veh.discharge_battery(1, false);
+                        if (missing > 0) {
                             out_of_battery = true;
                             return VisitResponse::ABORT;
                         }
-                        if( n.is_battery() ) {
-                            n.mod_energy( 1_kJ );
+                        if (n.is_battery()) {
+                            n.mod_energy(1_kJ);
                         } else {
-                            n.ammo_set( itype_battery, n.ammo_remaining() + 1 );
+                            n.ammo_set(itype_battery, n.ammo_remaining() + 1);
                         }
                         power -= 1000;
                     }
@@ -681,14 +654,13 @@ static void process_vehicle_items( vehicle& cur_veh, int part )
                 }
 
                 return VisitResponse::SKIP;
-            } );
-            if( out_of_battery ) { break; }
+            });
+            if (out_of_battery) { break; }
         }
     }
 }
 
-std::vector<tripoint_abs_sm> map::check_submap_active_item_consistency()
-{
+std::vector<tripoint_abs_sm> map::check_submap_active_item_consistency() {
     std::vector<tripoint_abs_sm> result;
 
     // Direction 1: every in-grid submap with active items should be in the set.
@@ -696,28 +668,27 @@ std::vector<tripoint_abs_sm> map::check_submap_active_item_consistency()
     // shift performance but never registered in submaps_with_active_items.
     const int zmin = -OVERMAP_DEPTH;
     const int zmax = OVERMAP_HEIGHT;
-    for( const auto p : flat_bubble_submaps() ) {
-        for( int z = zmin; z <= zmax; ++z ) {
-            const auto sm_pos = tripoint_bub_sm( p, z );
-            const submap* sm = get_submap_at_grid( sm_pos );
-            if( sm == nullptr || sm->active_items.empty() ) { continue; }
-            const auto abs_pos = map_local_to_abs( *this, sm_pos );
-            if( !get_submaps_with_active_items().contains( abs_pos ) ) { result.push_back( abs_pos ); }
+    for (const auto p : flat_bubble_submaps()) {
+        for (int z = zmin; z <= zmax; ++z) {
+            const auto sm_pos = tripoint_bub_sm(p, z);
+            const submap* sm = get_submap_at_grid(sm_pos);
+            if (sm == nullptr || sm->active_items.empty()) { continue; }
+            const auto abs_pos = map_local_to_abs(*this, sm_pos);
+            if (!get_submaps_with_active_items().contains(abs_pos)) { result.push_back(abs_pos); }
         }
     }
 
     // Direction 2: every entry in the set should point to a loaded submap with active items.
-    mapbuffer& buf = MAPBUFFER_REGISTRY.get( bound_dimension_ );
-    for( const tripoint_abs_sm& p : get_submaps_with_active_items() ) {
-        submap* s = buf.lookup_submap_in_memory( p );
-        if( s == nullptr || s->active_items.empty() ) { result.push_back( p ); }
+    mapbuffer& buf = MAPBUFFER_REGISTRY.get(bound_dimension_);
+    for (const tripoint_abs_sm& p : get_submaps_with_active_items()) {
+        submap* s = buf.lookup_submap_in_memory(p);
+        if (s == nullptr || s->active_items.empty()) { result.push_back(p); }
     }
 
     return result;
 }
 
-void map::process_items( int turns )
-{
+void map::process_items(int turns) {
     // Defer explosion drains during processing: an item here can be detached but
     // still in-stack, and a re-entrant drain would re-detonate it forever (#9696).
     explosion_handler::scoped_drain_deferral defer_explosion_drains;
@@ -728,164 +699,158 @@ void map::process_items( int turns )
     // Process vehicle items from in-bubble submaps via per-z-level caches.
     // Out-of-bubble vehicle items are handled by batch_turns_items().
     {
-        ZoneScopedN( "process_items_vehicles" );
+        ZoneScopedN("process_items_vehicles");
         const int zmin = -OVERMAP_DEPTH;
         const int zmax = OVERMAP_HEIGHT;
-        std::set<submap *> veh_submaps;
-        for( int z = zmin; z <= zmax; ++z ) {
-            for( const vehicle_handle handle : get_cache( z ).vehicle_list ) {
-                vehicle *const veh = resolve_vehicle( handle );
-                if( veh == nullptr ) { continue; }
+        std::set<submap*> veh_submaps;
+        for (int z = zmin; z <= zmax; ++z) {
+            for (const vehicle_handle handle : get_cache(z).vehicle_list) {
+                vehicle* const veh = resolve_vehicle(handle);
+                if (veh == nullptr) { continue; }
                 submap* sm =
-                    MAPBUFFER_REGISTRY.get( bound_dimension_ )
-                    .lookup_submap_in_memory( veh->abs_sm_pos );
-                if( sm != nullptr ) { veh_submaps.insert( sm ); }
+                    MAPBUFFER_REGISTRY.get(bound_dimension_)
+                        .lookup_submap_in_memory(veh->abs_sm_pos);
+                if (sm != nullptr) { veh_submaps.insert(sm); }
             }
         }
-        std::ranges::for_each( veh_submaps, [&]( submap * sm ) {
+        std::ranges::for_each(veh_submaps, [&](submap* sm) {
             {
-                ZoneScopedN( "process_items_count_vehicle_active_items" );
-                for( const auto& veh : sm->vehicles ) {
-                    if( !veh ) { continue; }
+                ZoneScopedN("process_items_count_vehicle_active_items");
+                for (const auto& veh : sm->vehicles) {
+                    if (!veh) { continue; }
                     const auto counts = veh->active_items.count();
                     total_active_items += counts.total;
                     total_rottable_active_items += counts.rottable;
                 }
             }
-            process_items_in_vehicles( *sm, turns );
-        } );
+            process_items_in_vehicles(*sm, turns);
+        });
     }
     // Snapshot because processing can add or remove active submaps.
-    ZoneScopedN( "process_items_submaps" );
+    ZoneScopedN("process_items_submaps");
     std::vector<tripoint_abs_sm> submaps_with_active_items_copy;
     {
-        ZoneScopedN( "process_items_snapshot_active_submaps" );
-        submaps_with_active_items_copy = std::vector <
-                                         tripoint_abs_sm > ( get_submaps_with_active_items().begin(),
-                                             get_submaps_with_active_items().end() );
+        ZoneScopedN("process_items_snapshot_active_submaps");
+        submaps_with_active_items_copy = std::vector<tripoint_abs_sm>(
+            get_submaps_with_active_items().begin(), get_submaps_with_active_items().end());
     }
-    auto active_items = std::vector<item *> {};
+    auto active_items = std::vector<item*>{};
     {
-        ZoneScopedN( "process_items_scan_active_submaps" );
-        const bool stride_skip_turn = !calendar::stride_due( item_process_stride );
+        ZoneScopedN("process_items_scan_active_submaps");
+        const bool stride_skip_turn = !calendar::stride_due(item_process_stride);
         const int map_z = get_avatar().abs_pos().z();
 
-        for( const tripoint_abs_sm& abs_pos : submaps_with_active_items_copy ) {
-            if( !submap_loader.is_simulated( bound_dimension_, tripoint_abs_sm( abs_pos ) ) ) {
+        for (const tripoint_abs_sm& abs_pos : submaps_with_active_items_copy) {
+            if (!submap_loader.is_simulated(bound_dimension_, tripoint_abs_sm(abs_pos))) {
                 continue;
             }
-            const auto local_pos = abs_to_map_local( *this, abs_pos );
-            submap* const current_submap = get_submap_at_grid( local_pos );
-            if( current_submap == nullptr ) { continue; }
-            if( current_submap->active_items.empty() ) { continue; }
+            const auto local_pos = abs_to_map_local(*this, abs_pos);
+            submap* const current_submap = get_submap_at_grid(local_pos);
+            if (current_submap == nullptr) { continue; }
+            if (current_submap->active_items.empty()) { continue; }
 
             // Stride: off-z submaps with no time-critical items skip K-1/K turns.
-            if( stride_skip_turn
-                && abs_pos.z() != map_z
-                && !current_submap->active_items.has_time_critical_items() ) {
-                continue;  // skip counting and processing this turn
+            if (stride_skip_turn && abs_pos.z() != map_z
+                && !current_submap->active_items.has_time_critical_items()) {
+                continue; // skip counting and processing this turn
             }
 
             {
-                ZoneScopedN( "process_items_count_active_items" );
+                ZoneScopedN("process_items_count_active_items");
                 const auto counts = current_submap->active_items.count();
                 total_active_items += counts.total;
                 total_rottable_active_items += counts.rottable;
             }
-            process_items_in_submap( *current_submap, local_pos, active_items, turns );
+            process_items_in_submap(*current_submap, local_pos, active_items, turns);
         }
     }
-    TracyPlot( "Total Active Items", total_active_items );
-    TracyPlot( "Total Rottable Active Items", total_rottable_active_items );
+    TracyPlot("Total Active Items", total_active_items);
+    TracyPlot("Total Rottable Active Items", total_rottable_active_items);
 }
 
 auto map::process_items_in_submap(
-    submap& current_submap, const tripoint_bub_sm& gridp, std::vector<item *> &active_items,
-    int turns )
--> void
-{
-    ZoneScopedN( "process_items_in_submap" );
+    submap& current_submap, const tripoint_bub_sm& gridp, std::vector<item*>& active_items,
+    int turns) -> void {
+    ZoneScopedN("process_items_in_submap");
     // Get a COPY of the active item list for this submap.
     // If more are added as a side effect of processing, they are ignored this turn.
     // If they are destroyed before processing, they don't get processed.
     {
-        ZoneScopedN( "process_items_copy_active_items" );
-        current_submap.active_items.get_for_processing( active_items );
+        ZoneScopedN("process_items_copy_active_items");
+        current_submap.active_items.get_for_processing(active_items);
     }
-    const point grid_offset( gridp.x() * SEEX, gridp.y() * SEEY );
+    const point grid_offset(gridp.x() * SEEX, gridp.y() * SEEY);
     {
-        ZoneScopedN( "process_items_active_items" );
-        for( item * &active_item_ref : active_items ) {
-            if( !active_item_ref || !active_item_ref->is_loaded() ) {
+        ZoneScopedN("process_items_active_items");
+        for (item*& active_item_ref : active_items) {
+            if (!active_item_ref || !active_item_ref->is_loaded()) {
                 // The item was destroyed, so skip it.
                 continue;
             }
 
             const auto map_location = active_item_ref->bub_pos();
-            const auto flag = rot::temp::for_location( *this, *active_item_ref );
-            process_map_items( active_item_ref, map_location, flag, turns );
+            const auto flag = rot::temp::for_location(*this, *active_item_ref);
+            process_map_items(active_item_ref, map_location, flag, turns);
         }
     }
 }
 
-void map::process_items_in_vehicles( submap& current_submap, int turns )
-{
+void map::process_items_in_vehicles(submap& current_submap, int turns) {
     // a copy, important if the vehicle list changes because a
     // vehicle got destroyed by a bomb (an active item!), this list
     // won't change, but veh_in_nonant will change.
-    std::vector<vehicle *> vehicles;
-    vehicles.reserve( current_submap.vehicles.size() );
-    for( const auto& veh : current_submap.vehicles ) { vehicles.push_back( veh.get() ); }
-    for( auto& cur_veh : vehicles ) {
-        if( !current_submap.contains_vehicle( cur_veh ) ) {
+    std::vector<vehicle*> vehicles;
+    vehicles.reserve(current_submap.vehicles.size());
+    for (const auto& veh : current_submap.vehicles) { vehicles.push_back(veh.get()); }
+    for (auto& cur_veh : vehicles) {
+        if (!current_submap.contains_vehicle(cur_veh)) {
             // vehicle not in the vehicle list of the nonant, has been
             // destroyed (or moved to another nonant?)
             // Can't be sure that it still exists, so skip it
             continue;
         }
 
-        process_items_in_vehicle( *cur_veh, current_submap, turns );
+        process_items_in_vehicle(*cur_veh, current_submap, turns);
     }
 }
 
-void map::process_items_in_vehicle( vehicle& cur_veh, submap& current_submap, int turns )
-{
-    const bool engine_heater_is_on = cur_veh.has_part( "E_HEATER", true ) && cur_veh.engine_on;
-    for( const vpart_reference& vp : cur_veh.get_any_parts( VPFLAG_FLUIDTANK ) ) {
-        vp.part().process_contents( vp.pos(), engine_heater_is_on );
+void map::process_items_in_vehicle(vehicle& cur_veh, submap& current_submap, int turns) {
+    const bool engine_heater_is_on = cur_veh.has_part("E_HEATER", true) && cur_veh.engine_on;
+    for (const vpart_reference& vp : cur_veh.get_any_parts(VPFLAG_FLUIDTANK)) {
+        vp.part().process_contents(vp.pos(), engine_heater_is_on);
     }
 
     // OPP-4 / MISSED-4: if there is nothing to do (no active items and no cargo
     // recharge), skip the get_parts_including_carried() call entirely.
     // Building cargo_parts is not free on vehicles with many cargo slots.
-    if( cur_veh.active_items.empty() && !cur_veh.has_cargo_recharge ) { return; }
+    if (cur_veh.active_items.empty() && !cur_veh.has_cargo_recharge) { return; }
 
-    auto cargo_parts = cur_veh.get_parts_including_carried( VPFLAG_CARGO );
-    if( cur_veh.has_cargo_recharge ) {
-        for( const vpart_reference& vp : cargo_parts ) {
-            process_vehicle_items( cur_veh, vp.part_index() );
+    auto cargo_parts = cur_veh.get_parts_including_carried(VPFLAG_CARGO);
+    if (cur_veh.has_cargo_recharge) {
+        for (const vpart_reference& vp : cargo_parts) {
+            process_vehicle_items(cur_veh, vp.part_index());
         }
     }
 
-    if( cur_veh.active_items.empty() ) { return; }
+    if (cur_veh.active_items.empty()) { return; }
 
-    for( item * active_item_ref : cur_veh.active_items.get_for_processing() ) {
-        if( cargo_parts.empty() ) { return; }
-        const auto it = std::ranges::find_if( cargo_parts, [&]( const vpart_reference & part ) {
-            return active_item_ref->bub_pos() == cur_veh.bub_part_location( part.part() );
-        } );
+    for (item* active_item_ref : cur_veh.active_items.get_for_processing()) {
+        if (cargo_parts.empty()) { return; }
+        const auto it = std::ranges::find_if(cargo_parts, [&](const vpart_reference& part) {
+            return active_item_ref->bub_pos() == cur_veh.bub_part_location(part.part());
+        });
 
-        if( it == cargo_parts.end() ) {
+        if (it == cargo_parts.end()) {
             continue; // Can't find a cargo part matching the active item.
         }
         const item& target = *active_item_ref;
         // Find the cargo part and coordinates corresponding to the current active item.
         const auto item_loc = it->pos();
         auto flag = temperature_flag::TEMP_NORMAL;
-        if( target.is_food() || target.is_food_container() || target.is_corpse() ) {
-            flag = rot::temp::for_part( cur_veh, it->part_index(), engine_heater_is_on );
+        if (target.is_food() || target.is_food_container() || target.is_corpse()) {
+            flag = rot::temp::for_part(cur_veh, it->part_index(), engine_heater_is_on);
         }
-        if( !process_map_items( active_item_ref, item_loc, flag, turns ) ) {
+        if (!process_map_items(active_item_ref, item_loc, flag, turns)) {
             // If the item was NOT destroyed, we can skip the remainder,
             // which handles fallout from the vehicle being damaged.
             continue;
@@ -893,7 +858,7 @@ void map::process_items_in_vehicle( vehicle& cur_veh, submap& current_submap, in
 
         // item does not exist anymore, might have been an exploding bomb,
         // check if the vehicle is still valid (does exist)
-        if( !current_submap.contains_vehicle( &cur_veh ) ) {
+        if (!current_submap.contains_vehicle(&cur_veh)) {
             // Nope, vehicle is not in the vehicle list of the submap,
             // it might have moved to another submap (unlikely)
             // or be destroyed, anyway it does not need to be processed here
@@ -904,7 +869,7 @@ void map::process_items_in_vehicle( vehicle& cur_veh, submap& current_submap, in
         // the list of cargo parts might have changed (imagine a part with
         // a low index has been removed by an explosion, all the other
         // parts would move up to fill the gap).
-        cargo_parts = cur_veh.get_any_parts( VPFLAG_CARGO );
+        cargo_parts = cur_veh.get_any_parts(VPFLAG_CARGO);
     }
 }
 
@@ -912,102 +877,93 @@ void map::process_items_in_vehicle( vehicle& cur_veh, submap& current_submap, in
 
 // Note: this is called quite a lot when drawing tiles
 // Console build has the most expensive parts optimized out
-bool map::sees_some_items( const tripoint_bub_ms& p, const Creature& who ) const
-{
+bool map::sees_some_items(const tripoint_bub_ms& p, const Creature& who) const {
     // Can only see items if there are any items.
-    return has_items( p ) && could_see_items( p, who.bub_pos() );
+    return has_items(p) && could_see_items(p, who.bub_pos());
 }
 
-bool map::sees_some_items( const tripoint_bub_ms& p, const tripoint_bub_ms& from ) const
-{
-    return has_items( p ) && could_see_items( p, from );
+bool map::sees_some_items(const tripoint_bub_ms& p, const tripoint_bub_ms& from) const {
+    return has_items(p) && could_see_items(p, from);
 }
 
-bool map::could_see_items( const tripoint_bub_ms& p, const Creature& who ) const
-{
-    return could_see_items( p, who.bub_pos() );
+bool map::could_see_items(const tripoint_bub_ms& p, const Creature& who) const {
+    return could_see_items(p, who.bub_pos());
 }
 
-bool map::could_see_items( const tripoint_bub_ms &p, const tripoint_bub_ms &from ) const
-{
-    static const std::string container_string( "CONTAINER" );
-    const bool container = has_flag_ter_or_furn( container_string, p );
-    const bool sealed = has_flag_ter_or_furn( TFLAG_SEALED, p );
-    if( sealed && container ) {
+bool map::could_see_items(const tripoint_bub_ms& p, const tripoint_bub_ms& from) const {
+    static const std::string container_string("CONTAINER");
+    const bool container = has_flag_ter_or_furn(container_string, p);
+    const bool sealed = has_flag_ter_or_furn(TFLAG_SEALED, p);
+    if (sealed && container) {
         // never see inside of sealed containers
         return false;
     }
-    if( container ) {
+    if (container) {
         // can see inside of containers if adjacent or
         // on top of the container
-        return ( std::abs( p.x() - from.x() ) <= 1 &&
-                 std::abs( p.y() - from.y() ) <= 1 &&
-                 std::abs( p.z() - from.z() ) <= 1 );
+        return (std::abs(p.x() - from.x()) <= 1 && std::abs(p.y() - from.y()) <= 1
+                && std::abs(p.z() - from.z()) <= 1);
     }
     return true;
 }
 
-bool map::has_items( const tripoint_bub_ms& p ) const
-{
+bool map::has_items(const tripoint_bub_ms& p) const {
     point_sm_ms l;
-    submap* const current_submap = get_submap_at( tripoint_bub_ms( p ), l );
-    if( current_submap == nullptr ) { return false; }
+    submap* const current_submap = get_submap_at(tripoint_bub_ms(p), l);
+    if (current_submap == nullptr) { return false; }
 
-    return !current_submap->get_items( l ).empty();
+    return !current_submap->get_items(l).empty();
 }
 
 template <typename Stack>
-std::vector<detached_ptr<item>> use_amount_stack( Stack stack, const itype_id &type, int &quantity,
-        const std::function<bool( const item & )> &filter )
-{
+std::vector<detached_ptr<item>> use_amount_stack(
+    Stack stack, const itype_id& type, int& quantity,
+    const std::function<bool(const item&)>& filter) {
     std::vector<detached_ptr<item>> ret;
 
-    stack.remove_top_items_with( [&quantity, &filter, &type, &ret]( detached_ptr<item>&& it ) {
-        if( quantity <= 0 ) { return std::move( it ); }
-        detached_ptr<item> new_it = item::use_amount( std::move( it ), type, quantity, ret, filter );
+    stack.remove_top_items_with([&quantity, &filter, &type, &ret](detached_ptr<item>&& it) {
+        if (quantity <= 0) { return std::move(it); }
+        detached_ptr<item> new_it = item::use_amount(std::move(it), type, quantity, ret, filter);
         // NOLINTNEXTLINE(bugprone-use-after-move)
-        if( it && !new_it ) { ret.push_back( std::move( it ) ); }
+        if (it && !new_it) { ret.push_back(std::move(it)); }
         return new_it;
-    } );
+    });
     return ret;
 }
 
-std::vector<detached_ptr<item>> map::use_amount_square( const tripoint_bub_ms &p,
-        const itype_id &type,
-        int &quantity, const std::function<bool( const item & )> &filter )
-{
+std::vector<detached_ptr<item>> map::use_amount_square(
+    const tripoint_bub_ms& p, const itype_id& type, int& quantity,
+    const std::function<bool(const item&)>& filter) {
     std::vector<detached_ptr<item>> ret;
     // Handle infinite map sources.
-    detached_ptr<item> water = water_from( p );
-    if( water && water->typeId() == type ) {
-        ret.push_back( std::move( water ) );
+    detached_ptr<item> water = water_from(p);
+    if (water && water->typeId() == type) {
+        ret.push_back(std::move(water));
         quantity = 0;
         return ret;
     }
 
-    if( const std::optional<vpart_reference> vp = veh_at( p ).part_with_feature( "CARGO", true ) ) {
+    if (const std::optional<vpart_reference> vp = veh_at(p).part_with_feature("CARGO", true)) {
         std::vector<detached_ptr<item>> tmp =
-            use_amount_stack( vp->vehicle().get_items( vp->part_index() ), type, quantity, filter );
-        ret.insert( ret.end(), std::make_move_iterator( tmp.begin() ),
-                    std::make_move_iterator( tmp.end() ) );
+            use_amount_stack(vp->vehicle().get_items(vp->part_index()), type, quantity, filter);
+        ret.insert(ret.end(), std::make_move_iterator(tmp.begin()),
+                   std::make_move_iterator(tmp.end()));
     }
-    std::vector<detached_ptr<item>> tmp = use_amount_stack( i_at( p ), type, quantity, filter );
-    ret.insert( ret.end(), std::make_move_iterator( tmp.begin() ),
-                std::make_move_iterator( tmp.end() ) );
+    std::vector<detached_ptr<item>> tmp = use_amount_stack(i_at(p), type, quantity, filter);
+    ret.insert(ret.end(), std::make_move_iterator(tmp.begin()), std::make_move_iterator(tmp.end()));
     return ret;
 }
 
-std::vector<detached_ptr<item>> map::use_amount( const tripoint_bub_ms &origin, const int range,
-        const itype_id &type,
-        int &quantity, const std::function<bool( const item & )> &filter )
-{
+std::vector<detached_ptr<item>> map::use_amount(
+    const tripoint_bub_ms& origin, const int range, const itype_id& type, int& quantity,
+    const std::function<bool(const item&)>& filter) {
     std::vector<detached_ptr<item>> ret;
-    for( int radius = 0; radius <= range && quantity > 0; radius++ ) {
-        for( const tripoint_bub_ms& p : points_in_radius( origin, radius ) ) {
-            if( rl_dist( origin, p ) >= radius ) {
-                std::vector<detached_ptr<item>> tmp = use_amount_square( p, type, quantity, filter );
-                ret.insert( ret.end(), std::make_move_iterator( tmp.begin() ),
-                            std::make_move_iterator( tmp.end() ) );
+    for (int radius = 0; radius <= range && quantity > 0; radius++) {
+        for (const tripoint_bub_ms& p : points_in_radius(origin, radius)) {
+            if (rl_dist(origin, p) >= radius) {
+                std::vector<detached_ptr<item>> tmp = use_amount_square(p, type, quantity, filter);
+                ret.insert(ret.end(), std::make_move_iterator(tmp.begin()),
+                           std::make_move_iterator(tmp.end()));
             }
         }
     }
@@ -1015,48 +971,46 @@ std::vector<detached_ptr<item>> map::use_amount( const tripoint_bub_ms &origin, 
 }
 
 template <typename Stack>
-std::vector<detached_ptr<item>> use_charges_from_stack( Stack stack, const itype_id &type,
-        int &quantity,
-        const tripoint_bub_ms &pos, const std::function<bool( const item & )> &filter )
-{
+std::vector<detached_ptr<item>> use_charges_from_stack(
+    Stack stack, const itype_id& type, int& quantity, const tripoint_bub_ms& pos,
+    const std::function<bool(const item&)>& filter) {
 
     std::vector<detached_ptr<item>> ret;
 
-    stack.remove_top_items_with( [&quantity, &filter, &type, &pos, &ret]( detached_ptr<item>&& it ) {
-        if( quantity <= 0 || it->made_of( LIQUID ) ) { return std::move( it ); }
+    stack.remove_top_items_with([&quantity, &filter, &type, &pos, &ret](detached_ptr<item>&& it) {
+        if (quantity <= 0 || it->made_of(LIQUID)) { return std::move(it); }
         detached_ptr<item> new_it =
-            item::use_charges( std::move( it ), type, quantity, ret, pos, filter );
+            item::use_charges(std::move(it), type, quantity, ret, pos, filter);
         // NOLINTNEXTLINE(bugprone-use-after-move)
-        if( it && !new_it ) { ret.push_back( std::move( it ) ); }
+        if (it && !new_it) { ret.push_back(std::move(it)); }
         return new_it;
-    } );
+    });
     return ret;
 }
 
 static void use_charges_from_furn(
-    const furn_t &f, const itype_id& type, int &quantity, map* m, const tripoint_bub_ms& p,
-    std::vector<detached_ptr<item>> &ret, const std::function<bool( const item & )> &filter )
-{
-    if( m->has_flag( "LIQUIDCONT", p ) ) {
-        auto item_list = m->i_at( p );
+    const furn_t& f, const itype_id& type, int& quantity, map* m, const tripoint_bub_ms& p,
+    std::vector<detached_ptr<item>>& ret, const std::function<bool(const item&)>& filter) {
+    if (m->has_flag("LIQUIDCONT", p)) {
+        auto item_list = m->i_at(p);
         auto current_item = item_list.begin();
-        for( ; current_item != item_list.end(); ++current_item ) {
+        for (; current_item != item_list.end(); ++current_item) {
             // looking for a liquid that matches
-            if( filter( **current_item ) && ( *current_item )->made_of( LIQUID )
-                && type == ( *current_item )->typeId() ) {
+            if (filter(**current_item) && (*current_item)->made_of(LIQUID)
+                && type == (*current_item)->typeId()) {
 
-                if( ( *current_item )->charges - quantity > 0 ) {
-                    ret.push_back( ( *current_item )->split( quantity ) );
+                if ((*current_item)->charges - quantity > 0) {
+                    ret.push_back((*current_item)->split(quantity));
                     // All the liquid needed was found, no other sources will be needed
                     quantity = 0;
                 } else {
                     // The liquid copy in ret already contains how much was available
                     // The leftover quantity returned will check other sources
-                    quantity -= ( *current_item )->charges;
+                    quantity -= (*current_item)->charges;
                     // Remove liquid item from the world
                     detached_ptr<item> det;
-                    item_list.erase( current_item, &det );
-                    ret.push_back( std::move( det ) );
+                    item_list.erase(current_item, &det);
+                    ret.push_back(std::move(det));
                 }
                 return;
             }
@@ -1064,137 +1018,128 @@ static void use_charges_from_furn(
     }
 
     const std::vector<itype> item_list = f.crafting_pseudo_item_types();
-    static const flag_id json_flag_USES_GRID_POWER( flag_USES_GRID_POWER );
-    for( const itype& itt : item_list ) {
-        if( itt.has_flag( json_flag_USES_GRID_POWER ) ) {
-            const auto abspos( map_local_to_abs( *m, p ) );
-            auto& grid = get_distribution_grid_tracker().grid_at( abspos );
+    static const flag_id json_flag_USES_GRID_POWER(flag_USES_GRID_POWER);
+    for (const itype& itt : item_list) {
+        if (itt.has_flag(json_flag_USES_GRID_POWER)) {
+            const auto abspos(map_local_to_abs(*m, p));
+            auto& grid = get_distribution_grid_tracker().grid_at(abspos);
             detached_ptr<item> furn_item =
-                item::spawn( itt.get_id(), calendar::start_of_cataclysm, grid.get_resource() );
+                item::spawn(itt.get_id(), calendar::start_of_cataclysm, grid.get_resource());
             int initial_quantity = quantity;
-            if( filter( *furn_item ) ) {
-                item::use_charges( std::move( furn_item ), type, quantity, ret, p );
+            if (filter(*furn_item)) {
+                item::use_charges(std::move(furn_item), type, quantity, ret, p);
                 // That quantity math thing is atrocious. Punishment for the int& "argument".
-                grid.mod_resource( quantity - initial_quantity );
+                grid.mod_resource(quantity - initial_quantity);
             }
-        } else if( itt.tool && !itt.tool->ammo_id.empty() ) {
-            const itype_id ammo = ammotype( *itt.tool->ammo_id.begin() )->default_ammotype();
-            if( itt.tool->subtype != type && type != ammo && itt.get_id() != type ) { continue; }
-            auto stack = m->i_at( p );
-            auto iter = std::ranges::find_if( stack, [ammo]( const item * const & i ) {
+        } else if (itt.tool && !itt.tool->ammo_id.empty()) {
+            const itype_id ammo = ammotype(*itt.tool->ammo_id.begin())->default_ammotype();
+            if (itt.tool->subtype != type && type != ammo && itt.get_id() != type) { continue; }
+            auto stack = m->i_at(p);
+            auto iter = std::ranges::find_if(stack, [ammo](const item* const& i) {
                 return i->typeId() == ammo;
-            } );
-            if( iter != stack.end() ) {
+            });
+            if (iter != stack.end()) {
 
-                ( *iter )->attempt_detach(
-                [&filter, &ammo, &quantity, &ret, &p]( detached_ptr<item>&& it ) {
-                    if( filter( *it ) ) {
-                        return item::use_charges( std::move( it ), ammo, quantity, ret, p );
-                    }
-                    return std::move( it );
-                } );
+                (*iter)->attempt_detach(
+                    [&filter, &ammo, &quantity, &ret, &p](detached_ptr<item>&& it) {
+                        if (filter(*it)) {
+                            return item::use_charges(std::move(it), ammo, quantity, ret, p);
+                        }
+                        return std::move(it);
+                    });
             }
         }
     }
 }
 
-std::vector<detached_ptr<item>> map::use_charges( const tripoint_bub_ms &origin, const int range,
-        const itype_id &type, int &quantity,
-        const std::function<bool( const item & )> &filter )
-{
+std::vector<detached_ptr<item>> map::use_charges(
+    const tripoint_bub_ms& origin, const int range, const itype_id& type, int& quantity,
+    const std::function<bool(const item&)>& filter) {
     std::vector<detached_ptr<item>> ret;
 
     // populate a grid of spots that can be reached
     std::vector<tripoint_bub_ms> reachable_pts;
 
-    if( range <= 0 ) {
-        reachable_pts.push_back( origin );
+    if (range <= 0) {
+        reachable_pts.push_back(origin);
     } else {
-        reachable_flood_steps( reachable_pts, origin, range, 1, 100 );
+        reachable_flood_steps(reachable_pts, origin, range, 1, 100);
     }
 
     // We prefer infinite map sources where available, so search for those
     // first
-    for( const tripoint_bub_ms& p : reachable_pts ) {
+    for (const tripoint_bub_ms& p : reachable_pts) {
         // Handle infinite map sources.
-        detached_ptr<item> water = water_from( p );
-        if( water && water->typeId() == type ) {
+        detached_ptr<item> water = water_from(p);
+        if (water && water->typeId() == type) {
             water->charges = quantity;
-            ret.push_back( std::move( water ) );
+            ret.push_back(std::move(water));
             quantity = 0;
             return ret;
         }
     }
 
-    for( const tripoint_bub_ms& p : reachable_pts ) {
-        if( has_furn( p ) ) {
-            use_charges_from_furn( furn( p ).obj(), type, quantity, this, p, ret, filter );
-            if( quantity <= 0 ) { return ret; }
+    for (const tripoint_bub_ms& p : reachable_pts) {
+        if (has_furn(p)) {
+            use_charges_from_furn(furn(p).obj(), type, quantity, this, p, ret, filter);
+            if (quantity <= 0) { return ret; }
         }
 
-        if( accessible_items( p ) ) {
+        if (accessible_items(p)) {
             std::vector<detached_ptr<item>> tmp =
-                use_charges_from_stack( i_at( p ), type, quantity, p, filter );
-            ret.insert( ret.end(), std::make_move_iterator( tmp.begin() ),
-                        std::make_move_iterator( tmp.end() ) );
-            if( quantity <= 0 ) { return ret; }
+                use_charges_from_stack(i_at(p), type, quantity, p, filter);
+            ret.insert(ret.end(), std::make_move_iterator(tmp.begin()),
+                       std::make_move_iterator(tmp.end()));
+            if (quantity <= 0) { return ret; }
         }
 
-        const optional_vpart_position vp = veh_at( p );
-        if( !vp ) { continue; }
+        const optional_vpart_position vp = veh_at(p);
+        if (!vp) { continue; }
 
-        const std::optional<vpart_reference> crafterpart = vp.part_with_feature( "CRAFTER", true );
-        const std::optional<vpart_reference> faupart = vp.part_with_feature( "FAUCET", true );
+        const std::optional<vpart_reference> crafterpart = vp.part_with_feature("CRAFTER", true);
+        const std::optional<vpart_reference> faupart = vp.part_with_feature("FAUCET", true);
         const std::optional<vpart_reference> autoclavepart =
-            vp.part_with_feature( "AUTOCLAVE", true );
-        const std::optional<vpart_reference> cargo = vp.part_with_feature( "CARGO", true );
+            vp.part_with_feature("AUTOCLAVE", true);
+        const std::optional<vpart_reference> cargo = vp.part_with_feature("CARGO", true);
 
-        auto drain_vehicle_pseudo_item = [&ret, &quantity, &type]( vehicle & veh,
-        const itype_id & drain_type ) -> bool {
-            const auto drained = veh.drain( drain_type, quantity );
+        auto drain_vehicle_pseudo_item =
+            [&ret, &quantity, &type](vehicle& veh, const itype_id& drain_type) -> bool {
+            const auto drained = veh.drain(drain_type, quantity);
             quantity -= drained;
-            if( drained <= 0 ) {
-                return quantity == 0;
-            }
-            auto tmp = item::spawn( type, calendar::turn );
+            if (drained <= 0) { return quantity == 0; }
+            auto tmp = item::spawn(type, calendar::turn);
             tmp->charges = drained;
-            ret.push_back( std::move( tmp ) );
+            ret.push_back(std::move(tmp));
             return quantity == 0;
         };
 
-        if( crafterpart ) {
-            for( const auto &id : crafterpart->info().craftertools() ) {
-                if( type == id && drain_vehicle_pseudo_item( crafterpart->vehicle(), itype_battery ) ) {
+        if (crafterpart) {
+            for (const auto& id : crafterpart->info().craftertools()) {
+                if (type == id
+                    && drain_vehicle_pseudo_item(crafterpart->vehicle(), itype_battery)) {
                     return ret;
                 }
             }
         }
-        if( faupart ) { // we have a faucet, now to see what to drain
-            if( drain_vehicle_pseudo_item( faupart->vehicle(), type ) ) {
-                return ret;
-            }
+        if (faupart) { // we have a faucet, now to see what to drain
+            if (drain_vehicle_pseudo_item(faupart->vehicle(), type)) { return ret; }
         }
 
-        if( autoclavepart ) { // we have an autoclave, now to see what to drain
+        if (autoclavepart) { // we have an autoclave, now to see what to drain
             auto ftype = itype_id::NULL_ID();
 
-            if( type == itype_autoclave ) { ftype = itype_battery; }
+            if (type == itype_autoclave) { ftype = itype_battery; }
 
-            if( drain_vehicle_pseudo_item( autoclavepart->vehicle(), ftype ) ) {
-                return ret;
-            }
+            if (drain_vehicle_pseudo_item(autoclavepart->vehicle(), ftype)) { return ret; }
         }
 
-        if( cargo ) {
-            std::vector<detached_ptr<item>> tmp =
-                use_charges_from_stack( cargo->vehicle().get_items( cargo->part_index() ), type, quantity,
-                                        tripoint_bub_ms( p ),
-                                        filter );
-            ret.insert( ret.end(), std::make_move_iterator( tmp.begin() ),
-                        std::make_move_iterator( tmp.end() ) );
-            if( quantity <= 0 ) {
-                return ret;
-            }
+        if (cargo) {
+            std::vector<detached_ptr<item>> tmp = use_charges_from_stack(
+                cargo->vehicle().get_items(cargo->part_index()), type, quantity, tripoint_bub_ms(p),
+                filter);
+            ret.insert(ret.end(), std::make_move_iterator(tmp.begin()),
+                       std::make_move_iterator(tmp.end()));
+            if (quantity <= 0) { return ret; }
         }
     }
 

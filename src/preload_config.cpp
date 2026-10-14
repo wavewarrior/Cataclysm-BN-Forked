@@ -7,17 +7,15 @@
 #include <string>
 #include <string_view>
 
-namespace preload_config
-{
+namespace preload_config {
 
-namespace
-{
+namespace {
 
 struct state_t {
-    compute_accel accel{ compute_accel::auto_select };
+    compute_accel accel{compute_accel::auto_select};
     std::string gpu_backend;
     bool gpu_backend_override_set = false;
-    tristate texture_streaming { tristate::auto_select };
+    tristate texture_streaming{tristate::auto_select};
     // True (default) preserves today's behaviour: an explicit gpu/gpu_software selection that
     // fails to create a device is a hard error (DL::Error). Callers with their own working
     // fallback for an IMPLICIT/best-effort selection — e.g. tests/test_main.cpp's default guess
@@ -28,9 +26,8 @@ struct state_t {
 
 state_t s_state;
 
-auto tristate_from_legacy_int( const int value ) -> tristate
-{
-    switch( static_cast<tristate>( value ) ) {
+auto tristate_from_legacy_int(const int value) -> tristate {
+    switch (static_cast<tristate>(value)) {
         case tristate::enable:
             return tristate::enable;
         case tristate::disable:
@@ -43,76 +40,70 @@ auto tristate_from_legacy_int( const int value ) -> tristate
 
 } // namespace
 
-auto load() -> void
-{
+auto load() -> void {
     read_from_file_json(
         PATH_INFO::preload(),
-    [&]( JsonIn & jsin ) {
-        const auto jObj = jsin.get_object();
+        [&](JsonIn& jsin) {
+            const auto jObj = jsin.get_object();
 
-        s_state.accel = compute_accel_from_string(
-                            jObj.get_string( "compute_acceleration", "auto" ) //
-                        );
+            s_state.accel = compute_accel_from_string(
+                jObj.get_string("compute_acceleration", "auto") //
+            );
 
-        if( !s_state.gpu_backend_override_set ) {
-            s_state.gpu_backend = jObj.get_string( "gpu_backend", "" );
-        }
+            if (!s_state.gpu_backend_override_set) {
+                s_state.gpu_backend = jObj.get_string("gpu_backend", "");
+            }
 
-        if( jObj.has_string( "texture_streaming" ) ) {
-            s_state.texture_streaming = tristate_from_string(
-                                            jObj.get_string( "texture_streaming" ) );
-        } else {
-            s_state.texture_streaming = tristate_from_legacy_int(
-                                            jObj.get_int( "texture_streaming",
-                                                static_cast<int>( tristate::auto_select ) ) );
-        }
-    },
-    true );
+            if (jObj.has_string("texture_streaming")) {
+                s_state.texture_streaming = tristate_from_string(
+                    jObj.get_string("texture_streaming"));
+            } else {
+                s_state.texture_streaming = tristate_from_legacy_int(
+                    jObj.get_int("texture_streaming", static_cast<int>(tristate::auto_select)));
+            }
+        },
+        true);
 }
 
-auto save() -> void
-{
-    write_to_file( PATH_INFO::preload(), [&]( std::ostream & fout ) {
-        JsonOut jout( fout, true );
-        jout.start_object();
-        jout.member( "compute_acceleration",
-                     std::string{ compute_accel_to_string( s_state.accel ) } );
-        if( !s_state.gpu_backend.empty() ) {
-            jout.member( "gpu_backend", s_state.gpu_backend );
-        }
-        jout.member( "texture_streaming",
-                     std::string{ tristate_to_string( s_state.texture_streaming ) } );
-        jout.end_object();
-    }, "preload config" );
+auto save() -> void {
+    write_to_file(
+        PATH_INFO::preload(),
+        [&](std::ostream& fout) {
+            JsonOut jout(fout, true);
+            jout.start_object();
+            jout.member("compute_acceleration", std::string{compute_accel_to_string(s_state.accel)});
+            if (!s_state.gpu_backend.empty()) { jout.member("gpu_backend", s_state.gpu_backend); }
+            jout.member("texture_streaming",
+                        std::string{tristate_to_string(s_state.texture_streaming)});
+            jout.end_object();
+        },
+        "preload config");
 }
 
-auto get_compute_accel() -> compute_accel                         { return s_state.accel; }
-auto set_compute_accel( compute_accel val ) -> void               { s_state.accel = val; }
+auto get_compute_accel() -> compute_accel { return s_state.accel; }
+auto set_compute_accel(compute_accel val) -> void { s_state.accel = val; }
 
-auto get_require_gpu_device() -> bool                             { return s_state.require_gpu_device; }
-auto set_require_gpu_device( bool val ) -> void                   { s_state.require_gpu_device = val; }
+auto get_require_gpu_device() -> bool { return s_state.require_gpu_device; }
+auto set_require_gpu_device(bool val) -> void { s_state.require_gpu_device = val; }
 
-auto get_gpu_backend_override() -> std::string_view               { return s_state.gpu_backend; }
-auto set_gpu_backend_override( std::string_view s ) -> void
-{
+auto get_gpu_backend_override() -> std::string_view { return s_state.gpu_backend; }
+auto set_gpu_backend_override(std::string_view s) -> void {
     s_state.gpu_backend = s;
     s_state.gpu_backend_override_set = true;
 }
 
-auto get_texture_streaming() -> tristate                         { return s_state.texture_streaming; }
-auto set_texture_streaming( tristate val ) -> void               { s_state.texture_streaming = val; }
+auto get_texture_streaming() -> tristate { return s_state.texture_streaming; }
+auto set_texture_streaming(tristate val) -> void { s_state.texture_streaming = val; }
 
-auto compute_accel_from_string( std::string_view s ) -> compute_accel
-{
-    if( s == "off" || s == "cpu" || s == "cpu_compute" ) { return compute_accel::cpu; }
-    if( s == "force" || s == "gpu" || s == "hardware" ) { return compute_accel::gpu; }
-    if( s == "software" || s == "gpu_software" ) { return compute_accel::gpu_software; }
+auto compute_accel_from_string(std::string_view s) -> compute_accel {
+    if (s == "off" || s == "cpu" || s == "cpu_compute") { return compute_accel::cpu; }
+    if (s == "force" || s == "gpu" || s == "hardware") { return compute_accel::gpu; }
+    if (s == "software" || s == "gpu_software") { return compute_accel::gpu_software; }
     return compute_accel::auto_select;
 }
 
-auto compute_accel_to_string( compute_accel val ) -> std::string_view
-{
-    switch( val ) {
+auto compute_accel_to_string(compute_accel val) -> std::string_view {
+    switch (val) {
         case compute_accel::cpu:
             return "cpu";
         case compute_accel::gpu:
@@ -124,16 +115,14 @@ auto compute_accel_to_string( compute_accel val ) -> std::string_view
     }
 }
 
-auto tristate_from_string( std::string_view s ) -> tristate
-{
-    if( s == "off" || s == "disable" ) { return tristate::disable; }
-    if( s == "on" || s == "enable" ) { return tristate::enable; }
+auto tristate_from_string(std::string_view s) -> tristate {
+    if (s == "off" || s == "disable") { return tristate::disable; }
+    if (s == "on" || s == "enable") { return tristate::enable; }
     return tristate::auto_select;
 }
 
-auto  tristate_to_string( tristate val ) -> std::string_view
-{
-    switch( val ) {
+auto tristate_to_string(tristate val) -> std::string_view {
+    switch (val) {
         case tristate::enable:
             return "enable";
         case tristate::disable:

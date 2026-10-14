@@ -68,8 +68,7 @@ struct splat_colors_push {
 /// Build a graphics pipeline for a procedural quad draw.
 auto make_pipeline(
     SDL_GPUDevice* dev, SDL_GPUShader* vert, SDL_GPUShader* frag, SDL_GPUTextureFormat fmt,
-    const SDL_GPUColorTargetBlendState& blend) -> SDL_GPUGraphicsPipeline* // *NOPAD*
-{
+    const SDL_GPUColorTargetBlendState& blend) -> SDL_GPUGraphicsPipeline* {
     SDL_GPUColorTargetDescription ctd{};
     ctd.format = fmt;
     ctd.blend_state = blend;

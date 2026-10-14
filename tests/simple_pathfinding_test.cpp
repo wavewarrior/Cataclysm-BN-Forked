@@ -7,7 +7,7 @@
 #include "state_helpers.h"
 
 template <typename Point> static void test_greedy_line_path() {
-    const Point start(0, 0); // NOLINT(cata-use-named-point-constants,cata-point-initialization)
+    const Point start(0, 0);
     const Point finish(3, 0);
     const Point max(10, 10);
 
@@ -18,8 +18,8 @@ template <typename Point> static void test_greedy_line_path() {
 
     const pf::directed_path<Point> pth = pf::greedy_path(start, finish, max, estimate);
     REQUIRE(pth.nodes.size() == 4);
-    CHECK(pth.nodes[3].pos == Point(0, 0)); // NOLINT(cata-use-named-point-constants)
-    CHECK(pth.nodes[2].pos == Point(1, 0)); // NOLINT(cata-use-named-point-constants)
+    CHECK(pth.nodes[3].pos == Point(0, 0));
+    CHECK(pth.nodes[2].pos == Point(1, 0));
     CHECK(pth.nodes[1].pos == Point(2, 0));
     CHECK(pth.nodes[0].pos == Point(3, 0));
 }
@@ -31,7 +31,7 @@ TEST_CASE("greedy_simple_line_path", "[pathfinding]") {
 }
 
 template <typename Point> static void test_greedy_u_bend() {
-    const Point start(0, 0); // NOLINT(cata-use-named-point-constants,cata-point-initialization)
+    const Point start(0, 0);
     const Point finish(2, 0);
     const Point max(3, 3);
     // Test area and expected path:
@@ -47,9 +47,9 @@ template <typename Point> static void test_greedy_u_bend() {
 
     const pf::directed_path<Point> pth = pf::greedy_path(start, finish, max, estimate);
     REQUIRE(pth.nodes.size() == 7);
-    CHECK(pth.nodes[6].pos == Point(0, 0)); // NOLINT(cata-use-named-point-constants)
+    CHECK(pth.nodes[6].pos == Point(0, 0));
     CHECK(pth.nodes[6].dir == om_direction::type::invalid);
-    CHECK(pth.nodes[5].pos == Point(0, 1)); // NOLINT(cata-use-named-point-constants)
+    CHECK(pth.nodes[5].pos == Point(0, 1));
     CHECK(pth.nodes[5].dir == om_direction::type::north);
     CHECK(pth.nodes[4].pos == Point(0, 2));
     CHECK(pth.nodes[4].dir == om_direction::type::north);

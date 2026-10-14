@@ -29,6 +29,5 @@ using fire_trajectory = std::vector<tripoint_bub_ms>;
 
 /// Compute the deterministic aim line from source toward target.
 /// Pure: no RNG, no game state mutations, safe to call from any thread.
-auto resolve_aim_line(
-    const tripoint_bub_ms& source,
-    const tripoint_bub_ms& target ) -> fire_trajectory; // *NOPAD*
+auto resolve_aim_line(const tripoint_bub_ms& source, const tripoint_bub_ms& target)
+    -> fire_trajectory;

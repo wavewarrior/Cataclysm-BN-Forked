@@ -1,13 +1,13 @@
 #pragma once
 
-#include <string>
-#include <vector>
-
 #include "coordinates.h"
+#include "enchantments/enchantment.h"
 #include "json_source_location.h"
 #include "magic/magic.h"
-#include "enchantments/enchantment.h"
 #include "translations.h"
+
+#include <string>
+#include <vector>
 
 class Creature;
 class JsonIn;
@@ -55,100 +55,88 @@ enum class relic_recharge_req {
     num
 };
 
-template<>
-struct enum_traits<relic_recharge_type> {
+template <> struct enum_traits<relic_recharge_type> {
     static constexpr relic_recharge_type last = relic_recharge_type::num;
 };
 
-template<>
-struct enum_traits<relic_recharge_req> {
+template <> struct enum_traits<relic_recharge_req> {
     static constexpr relic_recharge_req last = relic_recharge_req::num;
 };
 
-class relic_recharge
-{
-        json_source_location src_loc;
+class relic_recharge {
+    json_source_location src_loc;
 
-    public:
-        /** Relic recharge type */
-        relic_recharge_type type = relic_recharge_type::time;
-        /** Relic recharge requirements */
-        relic_recharge_req req = relic_recharge_req::none;
-        /** If relic consumes fields to recharge, this specifies field type */
-        field_type_str_id field_type;
-        /** If relic consumes traps to recharge, this specifies trap type */
-        trap_str_id trap_type;
-        /** For time-based recharge, specifies recharge interval */
-        time_duration interval = 1_seconds;
-        /** For intensity-based recharge types, specifies min intensity */
-        int intensity_min = 0;
-        /** For intensity-based recharge types, specifies max intensity */
-        int intensity_max = 0;
-        /** Specifies amount of charges gained per charge operation.  Can be 0 or even negative. */
-        int rate = 0;
-        /** Recharge activation message. */
-        std::optional<std::string> message;
+public:
+    /** Relic recharge type */
+    relic_recharge_type type = relic_recharge_type::time;
+    /** Relic recharge requirements */
+    relic_recharge_req req = relic_recharge_req::none;
+    /** If relic consumes fields to recharge, this specifies field type */
+    field_type_str_id field_type;
+    /** If relic consumes traps to recharge, this specifies trap type */
+    trap_str_id trap_type;
+    /** For time-based recharge, specifies recharge interval */
+    time_duration interval = 1_seconds;
+    /** For intensity-based recharge types, specifies min intensity */
+    int intensity_min = 0;
+    /** For intensity-based recharge types, specifies max intensity */
+    int intensity_max = 0;
+    /** Specifies amount of charges gained per charge operation.  Can be 0 or even negative. */
+    int rate = 0;
+    /** Recharge activation message. */
+    std::optional<std::string> message;
 
-        bool operator==( const relic_recharge &rhs ) const;
+    bool operator==(const relic_recharge& rhs) const;
 
-        void load( const JsonObject &jo );
-        void serialize( JsonOut &json ) const;
-        void deserialize( JsonIn &jsin );
-        void check() const;
+    void load(const JsonObject& jo);
+    void serialize(JsonOut& json) const;
+    void deserialize(JsonIn& jsin);
+    void check() const;
 };
 
-class relic
-{
-    private:
-        std::vector<fake_spell> active_effects;
-        std::vector<enchantment> passive_effects;
-        std::vector<relic_recharge> recharge_scheme;
+class relic {
+private:
+    std::vector<fake_spell> active_effects;
+    std::vector<enchantment> passive_effects;
+    std::vector<relic_recharge> recharge_scheme;
 
-        // the item's name will be replaced with this if the string is not empty
-        translation item_name_override;
+    // the item's name will be replaced with this if the string is not empty
+    translation item_name_override;
 
-        int charges_per_activation;
-        // activating an artifact overrides all spell casting costs
-        int moves;
-    public:
-        bool operator==( const relic &rhs ) const;
+    int charges_per_activation;
+    // activating an artifact overrides all spell casting costs
+    int moves;
 
-        std::string name() const;
-        // returns number of charges that should be consumed
-        int activate( Creature &caster, const tripoint_bub_ms &target ) const;
+public:
+    bool operator==(const relic& rhs) const;
 
-        void load( const JsonObject &jo );
+    std::string name() const;
+    // returns number of charges that should be consumed
+    int activate(Creature& caster, const tripoint_bub_ms& target) const;
 
-        void serialize( JsonOut &jsout ) const;
-        void deserialize( JsonIn &jsin );
+    void load(const JsonObject& jo);
 
-        void add_passive_effect( const enchantment &ench );
-        void add_active_effect( const fake_spell &sp );
-        void add_recharge_scheme( const relic_recharge &r );
+    void serialize(JsonOut& jsout) const;
+    void deserialize(JsonIn& jsin);
 
-        const std::vector<fake_spell> &get_spells() const {
-            return active_effects;
-        }
-        const std::vector<enchantment> &get_enchantments() const {
-            return passive_effects;
-        }
-        const std::vector<relic_recharge> &get_recharge_scheme() const {
-            return recharge_scheme;
-        }
+    void add_passive_effect(const enchantment& ench);
+    void add_active_effect(const fake_spell& sp);
+    void add_recharge_scheme(const relic_recharge& r);
 
-        void check() const;
+    const std::vector<fake_spell>& get_spells() const { return active_effects; }
+    const std::vector<enchantment>& get_enchantments() const { return passive_effects; }
+    const std::vector<relic_recharge>& get_recharge_scheme() const { return recharge_scheme; }
 
-        void finalize();
+    void check() const;
+
+    void finalize();
 };
 
-namespace relic_funcs
-{
+namespace relic_funcs {
 
-bool check_recharge_reqs( const item &itm, const relic_recharge &rech, const Character *carrier );
-bool process_recharge_entry( item &itm, const relic_recharge &rech, Character *carrier );
+bool check_recharge_reqs(const item& itm, const relic_recharge& rech, const Character* carrier);
+bool process_recharge_entry(item& itm, const relic_recharge& rech, Character* carrier);
 
-void process_recharge( item &itm, Character *carrier );
+void process_recharge(item& itm, Character* carrier);
 
 } // namespace relic_funcs
-
-

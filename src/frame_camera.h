@@ -161,46 +161,45 @@ struct frame_camera {
 
     /// The tile size the cursor/hover inverse map divides by: today's
     /// `std::max( 1, get_tile_width() )` at the two call sites.
-    auto cursor_tile_w() const -> int { return std::max( 1, tile_w ); }
-    auto cursor_tile_h() const -> int { return std::max( 1, tile_h ); }
+    auto cursor_tile_w() const -> int { return std::max(1, tile_w); }
+    auto cursor_tile_h() const -> int { return std::max(1, tile_h); }
 
     /// A world tile point to logical screen pixels: the single-application
     /// transform the overlays, the glow pass and the shafts use. Takes the
     /// site's own tile size because each site keeps its `> 0 ? : 32` fallback
     /// around the published value; reads the PUBLISHED offsets, i.e. exactly
     /// what the mirror handed these passes.
-    auto screen_pos_of( float tile_x, float tile_y, float tp ) const -> std::pair<float, float> {
-        return {( tile_x + pub_cam_off_x() ) * tp, ( tile_y + pub_cam_off_y() ) * tp};
+    auto screen_pos_of(float tile_x, float tile_y, float tp) const -> std::pair<float, float> {
+        return {(tile_x + pub_cam_off_x()) * tp, (tile_y + pub_cam_off_y()) * tp};
     }
     /// The sound-pulse transform, WHICH DOUBLE-COUNTS THE PIXEL OFFSET:
     /// `cam_off` already contains `op / tile_px`, and this adds `op` again
     /// (issue #127). Preserved verbatim by the strict no-behaviour-change rule
     /// and kept apart from `screen_pos_of` so the difference is visible in a
     /// name and pinned by a test.
-    auto sound_pulse_pos_of( float tile_x, float tile_y, float tp ) const -> std::pair<float, float> {
-        const std::pair<float, float> p = screen_pos_of( tile_x, tile_y, tp );
+    auto sound_pulse_pos_of(float tile_x, float tile_y, float tp) const -> std::pair<float, float> {
+        const std::pair<float, float> p = screen_pos_of(tile_x, tile_y, tp);
         return {p.first + pub_op_x(), p.second + pub_op_y()};
     }
     /// The world tile under a logical-pixel screen point, via the stale tile
     /// context — the inverse of the drawing transform, as the cursor light and
     /// the dev-light hover computed it today.
-    auto world_tile_at( float screen_x, float screen_y ) const -> std::pair<float, float>;
+    auto world_tile_at(float screen_x, float screen_y) const -> std::pair<float, float>;
 
-    auto operator==( const frame_camera & ) const -> bool = default;
+    auto operator==(const frame_camera&) const -> bool = default;
 };
 
 /// The frame's camera, from the day's raw facts. Pure.
-inline auto derive_frame_camera( const frame_camera_source& src ) -> frame_camera
-{
+inline auto derive_frame_camera(const frame_camera_source& src) -> frame_camera {
     frame_camera cam;
 
     // A — the clip rect, transcribed from the old `build_lighting` block.
-    if( src.have_tile_context ) {
-        if( src.have_game ) {
-            const float cx = static_cast<float>( src.player_x + src.view_offset_x );
-            const float cy = static_cast<float>( src.player_y + src.view_offset_y );
-            cam.cam_x0 = static_cast<int>( std::floor( cx ) ) - src.pos_x;
-            cam.cam_y0 = static_cast<int>( std::floor( cy ) ) - src.pos_y;
+    if (src.have_tile_context) {
+        if (src.have_game) {
+            const float cx = static_cast<float>(src.player_x + src.view_offset_x);
+            const float cy = static_cast<float>(src.player_y + src.view_offset_y);
+            cam.cam_x0 = static_cast<int>(std::floor(cx)) - src.pos_x;
+            cam.cam_y0 = static_cast<int>(std::floor(cy)) - src.pos_y;
         } else {
             cam.cam_x0 = src.map_origin_x;
             cam.cam_y0 = src.map_origin_y;
@@ -210,13 +209,13 @@ inline auto derive_frame_camera( const frame_camera_source& src ) -> frame_camer
     }
     // The consumer's own rule (`frame_build.cpp:136`), not "tile context
     // present": the windowed driver reaches whole_bubble WITH a tile context.
-    cam.mode = ( cam.cam_w > 0 && cam.cam_h > 0 ) ? camera_mode::cropped : camera_mode::whole_bubble;
+    cam.mode = (cam.cam_w > 0 && cam.cam_h > 0) ? camera_mode::cropped : camera_mode::whole_bubble;
 
     // Facts the tile context owns, carried whenever it exists — the play-area
     // mask, the rain origin and the cursor inverse map gate on the tile
     // context alone, not on B's validity.
     cam.have_tile_context = src.have_tile_context;
-    if( src.have_tile_context ) {
+    if (src.have_tile_context) {
         cam.tile_w = src.tile_w;
         cam.tile_h = src.tile_h;
         cam.screentile_w = src.screentile_w;
@@ -238,29 +237,28 @@ inline auto derive_frame_camera( const frame_camera_source& src ) -> frame_camer
     // context — the value the GPU stamp takes (`tile_stamp_px`), kept distinct
     // from the camera's `tile_px` so neither replaces the other.
     cam.tile_stamp_px =
-        src.have_tile_context ? static_cast<float>( src.tile_w ) : frame_camera::k_startup_tile_px;
-    if( src.have_game && src.have_tile_context && cam.tile_stamp_px > 0.0f ) {
+        src.have_tile_context ? static_cast<float>(src.tile_w) : frame_camera::k_startup_tile_px;
+    if (src.have_game && src.have_tile_context && cam.tile_stamp_px > 0.0f) {
         cam.float_camera_valid = true;
         cam.cam_off_x =
-            static_cast<float>( src.draw_off_px_x ) / cam.tile_stamp_px
-            - static_cast<float>( src.map_origin_x );
+            static_cast<float>(src.draw_off_px_x) / cam.tile_stamp_px
+            - static_cast<float>(src.map_origin_x);
         cam.cam_off_y =
-            static_cast<float>( src.draw_off_px_y ) / cam.tile_stamp_px
-            - static_cast<float>( src.map_origin_y );
-        cam.op_x = static_cast<float>( src.draw_off_px_x );
-        cam.op_y = static_cast<float>( src.draw_off_px_y );
+            static_cast<float>(src.draw_off_px_y) / cam.tile_stamp_px
+            - static_cast<float>(src.map_origin_y);
+        cam.op_x = static_cast<float>(src.draw_off_px_x);
+        cam.op_y = static_cast<float>(src.draw_off_px_y);
         cam.tile_px = cam.tile_stamp_px;
     }
     return cam;
 }
 
-inline auto frame_camera::world_tile_at( float screen_x, float screen_y ) const
--> std::pair<float, float>
-{
-    return {( screen_x - static_cast<float>( draw_off_px_x ) ) / static_cast<float>( cursor_tile_w() )
-            + static_cast<float>( map_origin_x ),
-            ( screen_y - static_cast<float>( draw_off_px_y ) ) / static_cast<float>( cursor_tile_h() )
-            + static_cast<float>( map_origin_y )};
+inline auto frame_camera::world_tile_at(float screen_x, float screen_y) const
+    -> std::pair<float, float> {
+    return {(screen_x - static_cast<float>(draw_off_px_x)) / static_cast<float>(cursor_tile_w())
+                + static_cast<float>(map_origin_x),
+            (screen_y - static_cast<float>(draw_off_px_y)) / static_cast<float>(cursor_tile_h())
+                + static_cast<float>(map_origin_y)};
 }
 
 #endif // CATA_SRC_FRAME_CAMERA_H

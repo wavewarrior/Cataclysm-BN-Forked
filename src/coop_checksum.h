@@ -16,5 +16,4 @@
 ///
 /// `radius` is in submap coordinates (default 2 → 5×5 grid, matching
 /// build_and_send_sync's dx/dy range).
-auto coop_world_checksum( int radius = 2 ) -> uint64_t;
-
+auto coop_world_checksum(int radius = 2) -> uint64_t;

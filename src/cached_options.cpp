@@ -27,41 +27,41 @@ bool pixel_minimap_option = false;
 int PICKUP_RANGE;
 
 bool monster_lod_enabled = true;
-int  lod_tier_full_dist = 20;
-int  lod_tier_coarse_dist = 40;
-int  lod_demotion_cooldown = 3;
-int  lod_action_budget = 128;
-int  lod_macro_interval = 3;
-int  lod_coarse_scent_interval = 3;
-int  lod_group_morale_max_tier = 0;
-int  activity_skip_monster_lod_gate = 1;
+int lod_tier_full_dist = 20;
+int lod_tier_coarse_dist = 40;
+int lod_demotion_cooldown = 3;
+int lod_action_budget = 128;
+int lod_macro_interval = 3;
+int lod_coarse_scent_interval = 3;
+int lod_group_morale_max_tier = 0;
+int activity_skip_monster_lod_gate = 1;
 
 int lod_z_penalty = 16;
 int lod_lifecycle_stride = 4;
 
-int  vehicle_idle_stride   = 5;
-int  vehicle_outer_stride  = 2;
-int  item_process_stride   = 1;
+int vehicle_idle_stride = 5;
+int vehicle_outer_stride = 2;
+int item_process_stride = 1;
 
-bool npc_lod_enabled       = true;
-int  npc_tier0_dist        = 30;
-int  npc_tier1_dist        = 75;
-int  npc_demotion_cooldown = 3;
-int  npc_action_budget     = 16;
-int  npc_coarse_danger_interval = 5;
-int  npc_macro_interval         = 3;
+bool npc_lod_enabled = true;
+int npc_tier0_dist = 30;
+int npc_tier1_dist = 75;
+int npc_demotion_cooldown = 3;
+int npc_action_budget = 16;
+int npc_coarse_danger_interval = 5;
+int npc_macro_interval = 3;
 
 bool reality_bubble_fire_spread = false;
 visibility_scaling_mode visibility_scaling = visibility_scaling_mode::smart;
-bool lazy_border_enabled        = false;
-int  retained_omt_cache_length = 3;
-int  fire_spread_submap_cap    = 25;
+bool lazy_border_enabled = false;
+int retained_omt_cache_length = 3;
+int fire_spread_submap_cap = 25;
 pocket_sim_level pocket_simulation_level = pocket_sim_level::off;
-int  safe_mode_proximity = 0;
+int safe_mode_proximity = 0;
 
 bool parallel_enabled = true;
 bool parallel_monster_planning = true;
-int  monster_plan_chunk_size = 8;
+int monster_plan_chunk_size = 8;
 bool parallel_map_cache = true;
 bool parallel_scent_update = true;
 

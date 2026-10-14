@@ -1,7 +1,7 @@
 #pragma once
 
-#include "point.h"
 #include "coordinates.h"
+#include "point.h"
 
 /**
  * Rotate point clockwise @param turns times, 90 degrees per turn,
@@ -9,19 +9,17 @@
  * by @param dim
  * set dim to (0, 0) to rotate around the origin.
  */
-auto rotate( point p, point dim, int turns ) -> point;
+auto rotate(point p, point dim, int turns) -> point;
 
 /**
  * Rotates just the x,y component of the tripoint. See point::rotate()
  */
-auto rotate( const tripoint &p, point dim, int turns ) -> tripoint;
+auto rotate(const tripoint& p, point dim, int turns) -> tripoint;
 
 /** works like rotate but for submaps. */
-auto rotate_point_sm( const tripoint_bub_ms &p, const tripoint_bub_ms &orig,
-                      int turns ) -> tripoint_bub_ms;
+auto rotate_point_sm(const tripoint_bub_ms& p, const tripoint_bub_ms& orig, int turns)
+    -> tripoint_bub_ms;
 
 class overmapbuffer;
-auto get_rot_turns( const tripoint_abs_omt &here, const tripoint_abs_omt &there,
-                    overmapbuffer &omb ) -> int;
-
-
+auto get_rot_turns(const tripoint_abs_omt& here, const tripoint_abs_omt& there, overmapbuffer& omb)
+    -> int;
