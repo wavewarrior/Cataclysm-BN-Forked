@@ -144,7 +144,10 @@ async function main(): Promise<number> {
     await skipRest("the guard failed", 1)
     return exitCode(events)
   }
-  await record("guard", "pass", started, `${diff.all.length} changed file(s), none protected`)
+  const protectedNote = violations.length > 0
+    ? `${violations.length} protected, allowed by CHECK_ALLOW_PROTECTED`
+    : "none protected"
+  await record("guard", "pass", started, `${diff.all.length} changed file(s), ${protectedNote}`)
   if (options.dryRun) {
     console.log(`dry run: planned ${planned.join(", ")}; base ${base}`)
     return 0
