@@ -5,7 +5,6 @@
 #include "units_angle.h"
 
 #include <string>
-#include <utility>
 #include <vector>
 
 class vehicle;
