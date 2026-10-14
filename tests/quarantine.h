@@ -37,12 +37,12 @@ inline constexpr auto quarantine_entries = std::to_array<quarantine_entry>({
     {
         .name = "vehicle_efficiency",
         .expires = "2026-10-27",
-        .reason = "passed 10/10 alone on default and CPU paths at seed 1; failed once inside the forked suite: load- or order-dependent",
+        .reason = "flaky on CPU compute with pool off only: seed 1 failed 2 of 5 runs, seed 3 1 of 1, seeds 2 and 4-10 passed; default path passed all 10 seeds",
     },
     {
         .name = "Items rot away",
         .expires = "2026-10-27",
-        .reason = "passed 10/10 alone on default and CPU paths at seed 3; failed once inside the forked suite: load- or order-dependent",
+        .reason = "unexplained: failed once in the forked suite; passes alone on seeds 1-10 on default and CPU/pool-off paths",
     },
     {
         .name = "vehicle_move_notifications_per_turn",
