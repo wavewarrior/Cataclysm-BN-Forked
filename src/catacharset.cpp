@@ -8,10 +8,12 @@
 #include <cstdlib>
 #include <cstring>
 
+// clang-format off
 #if defined(_WIN32)
-#    include "mmsystem.h"
 #    include "platform_win.h"
+#    include "mmsystem.h" // must follow platform_win.h
 #endif
+// clang-format on
 
 // UTF-8 decode helper; type changed from unsigned to uint32_t
 uint32_t UTF8_getch(const char** src, int* srclen) {
