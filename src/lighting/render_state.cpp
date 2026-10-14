@@ -304,6 +304,10 @@ void render_state::init(SDL_Window* host_window) {
 void render_state::shutdown() noexcept {
     // Phase 3: stop collector thread before releasing GPU resources.
     collector_.reset();
+    // Frames submitted by the last render may still be in flight. Releasing their resources, or
+    // the device, under them crashed intermittently inside VULKAN_Wait / pending destroys on
+    // Windows (0xC0000005 at exit of the [render] run). Drain the queue first.
+    if (device_.ready()) { SDL_WaitForGPUIdle(device_.raw()); }
 
     // Release the compositor textures + tonemap pass while the device is live.
     ui_target_.reset();
