@@ -118,20 +118,46 @@ struct test_harness {
         return rs->ready();
     }
 
-    // Order matters: the GPU device claimed the window, and both need SDL video alive. Shutting
-    // down after SDL_QuitSubSystem (the old member order) crashed in the device destroy at exit.
-    ~test_harness() {
+    /// Idempotent. Called by the run-end listener below, while the process is still healthy; the
+    /// destructor is only a backstop. Tearing the D3D12 device down from a static destructor at
+    /// process exit crashed inside the driver (0xC0000005 in the device destroy).
+    auto teardown() -> void {
+        if (torn_down) { return; }
+        torn_down = true;
         lighting::shutdown_render_state();
-        if (window) { SDL_DestroyWindow(window); }
+        if (window) {
+            SDL_DestroyWindow(window);
+            window = nullptr;
+        }
     }
+
+    ~test_harness() { teardown(); }
+
+private:
+    bool torn_down = false;
 };
 
+test_harness* g_harness = nullptr;
+
 auto get_harness() -> test_harness& {
+    // Statics are destroyed in reverse order of construction. Build the render_state singleton
+    // first so it outlives the harness, whose destructor is the backstop teardown.
+    (void)lighting::get_render_state();
     static test_harness h{};
+    g_harness = &h;
     static bool once = false;
     if (!once) { once = h.init(); }
     return h;
 }
+
+struct render_teardown_listener: Catch::EventListenerBase {
+    using EventListenerBase::EventListenerBase;
+
+    auto testRunEnded(const Catch::TestRunStats& stats) -> void override {
+        EventListenerBase::testRunEnded(stats);
+        if (g_harness != nullptr) { g_harness->teardown(); }
+    }
+};
 
 auto create_offscreen(lighting::render_state& rs, int w, int h) -> SDL_GPUTexture* {
     SDL_GPUTextureCreateInfo tci{};
@@ -204,6 +230,8 @@ auto render_checker(lighting::render_state& rs, const checker_options& opts)
     return render_and_capture(rs, target, w, h);
 }
 } // namespace
+
+CATCH_REGISTER_LISTENER(render_teardown_listener)
 
 TEST_CASE("render_regression", "[.gpu][render]") {
     auto& h = get_harness();
@@ -529,7 +557,7 @@ TEST_CASE("render_regression", "[.gpu][render]") {
         const auto base_a = render_checker(rs, spec);
         const auto base_b = render_checker(rs, spec);
         const auto dimmed = render_checker(
-            rs, {.target = spec.target, .w = W, .h = H, .tile_px = TILE_PX, .scale = 0.5f});
+            rs, {.target = offscreen, .w = W, .h = H, .tile_px = TILE_PX, .scale = 0.5f});
         SDL_ReleaseGPUTexture(rs.device().raw(), offscreen);
 
         const auto a = render_compare::image_from_rgba(base_a, W, H);
