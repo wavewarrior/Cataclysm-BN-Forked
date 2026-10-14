@@ -23,7 +23,7 @@ import {
 
 const CORRECTNESS_CHECKS = "cata-determinism,cata-no-long,cata-test-filename"
 const STYLE_FIX_CHECKS = "modernize-use-trailing-return-type,modernize-use-auto"
-const DEFAULT_BUILD_DIR = "out/build/linux-tidy"
+const DEFAULT_BUILD_DIR = "out/build/linux-fast"
 const CONCURRENCY = 4
 
 const USAGE = `usage: deno task tidy:changed [options]
@@ -119,7 +119,7 @@ export async function run(argv: string[]): Promise<number> {
   const buildDir = resolve(opts.buildDir)
   const compileDb = join(buildDir, "compile_commands.json")
   const configureHint = `Configure it with:\n` +
-    `  cmake --preset ${opts.fix ? "linux-slim" : "linux-tidy"}\n` +
+    `  cmake --preset linux-fast\n` +
     `(or pass --build-dir pointing at a configured build directory)`
   if (!await exists(compileDb)) {
     console.error(`tidy: no compile database at ${compileDb}.`)
@@ -133,10 +133,14 @@ export async function run(argv: string[]): Promise<number> {
     if (plugin === null) {
       console.error(`tidy: the Cata clang-tidy plugin is missing from ${buildDir}.`)
       console.error(
-        `Build it with:\n  cmake --preset linux-tidy && cmake --build --preset linux-tidy`,
+        `Build it with:\n  cmake -S tools/clang-tidy-plugin -B ${
+          join(buildDir, "tools", "clang-tidy-plugin")
+        } -G Ninja ` +
+          `&& cmake --build ${join(buildDir, "tools", "clang-tidy-plugin")}`,
       )
       console.error(
-        `(the linux-tidy preset is in CMakePresets.json; needs LLVM/Clang ${CLANG_TIDY_VERSION} dev packages)`,
+        `(standalone, so it does not collide with the clang targets the shadercross build brings; ` +
+          `needs LLVM/Clang ${CLANG_TIDY_VERSION} dev packages)`,
       )
       return 2
     }

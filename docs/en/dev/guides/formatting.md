@@ -56,8 +56,9 @@ Correctness linting (determinism, no `long`, test filenames) runs over changed l
 deno task tidy:changed --base origin/feature/improvements
 ```
 
-It needs the Cata clang-tidy plugin; the command prints the exact `cmake --preset linux-tidy`
-recipe if the build directory does not have it yet.
+It needs the Cata clang-tidy plugin, built standalone next to the `linux-fast` build
+(`cmake -S tools/clang-tidy-plugin -B out/build/linux-fast/tools/clang-tidy-plugin -G Ninja`, then
+`cmake --build` on that directory); the command prints the exact recipe when it is missing.
 
 ## JSON Formatting
 

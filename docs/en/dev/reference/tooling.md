@@ -24,8 +24,9 @@ deno task tidy:changed --base origin/feature/improvements   # 3 checks, changed 
 deno task fix:tidy                                         # trailing-return / auto autofix
 ```
 
-`tidy:changed` loads the Cata clang-tidy plugin from a build directory; it prints the
-`cmake --preset linux-tidy` recipe to create one when it is missing.
+`tidy:changed` loads the Cata clang-tidy plugin from a build directory (default
+`out/build/linux-fast`, which supplies the compile database); it prints the standalone
+`cmake -S tools/clang-tidy-plugin` recipe to build the plugin when it is missing.
 
 ### Invoking formatting via pre-commit hook
 

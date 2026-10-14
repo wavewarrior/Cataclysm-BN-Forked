@@ -1,4 +1,10 @@
 cmake_minimum_required(VERSION 3.24)
+
+# Built standalone (cmake -S tools/clang-tidy-plugin): the main build's shadercross dependency
+# brings its own clang targets on Linux, so find_package(Clang) cannot share a configure with it.
+if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    project(CataAnalyzerPlugin CXX)
+endif ()
 include(ExternalProject)
 
 find_package(LLVM REQUIRED CONFIG)
