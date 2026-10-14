@@ -6,7 +6,10 @@ Reached from AGENTS.md "WHEN given a link to an issue". PR mechanics live in the
 - **Context**: Fetch issue details via GitHub MCP.
 - **Branch**: `deno task lane <issue>` creates the worktree `$LANE_ROOT/lane-<issue>` on branch
   `lane/<issue>-<slug>` and starts the agent session in it (see
-  [the check guide](../en/dev/guides/check.md)). Working by hand instead, use plain git:
+  [the check guide](../en/dev/guides/check.md)). On the Mac, `deno task worktree new
+  <type>/<issue-id>/<slug>` (see `tools/worktree/`) wraps `herdr worktree create` from the primary
+  checkout, copies the gitignored `data/shaders/*.msl` and configures; `list` and `remove` manage
+  the fleet. Working by hand instead, use plain git:
   `git worktree add -b lane/<issue>-<slug> ~/cbn/lanes/lane-<issue> origin/feature/improvements`.
 - **Code**: Refer to "WHEN working on code changes" in AGENTS.md.
 - **Definition of done**: `deno task check` green in the worktree. Formatting is fixed for you by the
