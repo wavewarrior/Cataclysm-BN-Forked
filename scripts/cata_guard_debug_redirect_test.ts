@@ -28,17 +28,43 @@ async function runCmakeScript(
 }
 
 // A preset that sets Debug and can run on macOS would hit the guard at configure time. The
-// `lint` preset did exactly that: the documented JSON formatting loop died at configure.
-Deno.test("no configure preset that can run on macOS builds as Debug", async () => {
+// `lint` preset did exactly that: the documented JSON formatting loop died at configure. A child
+// that inherits Debug is the same trap, so build type and condition resolve through `inherits`
+// (the child's own value wins, then the parents in order, as CMake resolves them).
+type Preset = {
+  name: string
+  inherits?: string | string[]
+  condition?: { lhs?: string; rhs?: string }
+  cacheVariables?: Record<string, unknown>
+}
+
+function resolve<T>(
+  preset: Preset,
+  byName: Map<string, Preset>,
+  pick: (preset: Preset) => T | undefined,
+): T | undefined {
+  const own = pick(preset)
+  if (own !== undefined) return own
+  const parents = [preset.inherits ?? []].flat()
+  for (const parent of parents) {
+    const found = resolve(byName.get(parent) as Preset, byName, pick)
+    if (found !== undefined) return found
+  }
+  return undefined
+}
+
+Deno.test("no configure preset that can run on macOS builds as Debug, inherited or not", async () => {
   const presets = JSON.parse(await Deno.readTextFile(join(repoRoot, "CMakePresets.json")))
+    .configurePresets as Preset[]
+  const byName = new Map(presets.map((preset) => [preset.name, preset]))
   const offenders: string[] = []
-  for (const preset of presets.configurePresets) {
-    const type = preset.cacheVariables?.CMAKE_BUILD_TYPE
-    const windowsOnly = preset.condition?.lhs === "${hostSystemName}" &&
-      preset.condition?.rhs === "Windows"
+  for (const preset of presets) {
+    const type = resolve(preset, byName, (p) => p.cacheVariables?.CMAKE_BUILD_TYPE)
+    const condition = resolve(preset, byName, (p) => p.condition)
+    const windowsOnly = condition?.lhs === "${hostSystemName}" && condition?.rhs === "Windows"
     if (type === "Debug" && !windowsOnly) offenders.push(preset.name)
   }
-  assertEquals(offenders, [], "these presets set Debug without a Windows-only condition")
+  assertEquals(offenders, [], "these presets resolve to Debug without a Windows-only condition")
 })
 
 Deno.test("guard refuses Debug on Apple, naming the osx-arm-slim preset", async () => {
