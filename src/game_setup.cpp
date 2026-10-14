@@ -718,7 +718,12 @@ bool game::start_game() {
     // The player is centered in the map, but lev[xyz] refers to the top left point of the map
     lev.x() -= g_half_mapsize;
     lev.y() -= g_half_mapsize;
-    u.setpos(project_to<coords::ms>(lev + tripoint_rel_sm(g_half_mapsize, g_half_mapsize, 0)));
+    // Character::setpos, not player::setpos: the player override runs update_map(), which
+    // walks the still-unloaded map here one submap at a time from its old origin, generating
+    // every edge column on the way and reporting each step's incomplete bubble.  load_map()
+    // below loads the bubble around this position in one go.
+    u.Character::setpos(
+        project_to<coords::ms>(lev + tripoint_rel_sm(g_half_mapsize, g_half_mapsize, 0)));
     load_map(lev, /*pump_events=*/true);
 
     level_cache_freshness::invalidate_level(m, get_levz());
