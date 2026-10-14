@@ -26,6 +26,18 @@ const STYLE_FIX_CHECKS = "modernize-use-trailing-return-type,modernize-use-auto"
 const DEFAULT_BUILD_DIR = "out/build/linux-fast"
 const CONCURRENCY = 4
 
+/// The first `.cpp` under `src/` or `tests/` that includes `header` by its file name, or null.
+async function includingUnit(header: string): Promise<string | null> {
+  const name = header.split("/").pop() ?? header
+  const found = await new Deno.Command("git", {
+    args: ["grep", "-l", "-F", `#include "${name}"`, "--", "src/*.cpp", "tests/*.cpp"],
+    stdout: "piped",
+    stderr: "null",
+  }).output()
+  const units = new TextDecoder().decode(found.stdout).split("\n").filter((line) => line !== "")
+  return units[0] ?? null
+}
+
 const USAGE = `usage: deno task tidy:changed [options]
        deno task fix:tidy [options]
 
@@ -169,15 +181,18 @@ export async function run(argv: string[]): Promise<number> {
     return 0
   }
 
-  // clang-tidy analyses translation units; a changed header rides along on its
-  // sibling TU, with --line-filter confining findings to the changed header lines.
+  // clang-tidy analyses translation units; a changed header rides along on its sibling TU, or
+  // when it has none (a header-only file) on a TU that includes it, with --line-filter confining
+  // findings to the changed header lines.
   const jobs: Array<{ tu: string; name: string; ranges: Array<[number, number]> }> = []
   const unserviceable: string[] = []
   for (const file of targets) {
     const ranges = await changedLineRanges(file, { kind: "base", base: opts.base })
     if (ranges.length === 0) continue
-    const tu = file.endsWith(".h") ? file.replace(/\.h$/, ".cpp") : file
-    if (await exists(tu)) jobs.push({ tu, name: file, ranges })
+    const isHeader = file.endsWith(".h") || file.endsWith(".hpp")
+    const sibling = isHeader ? file.replace(/\.hpp?$/, ".cpp") : file
+    const tu = (await exists(sibling)) ? sibling : isHeader ? await includingUnit(file) : null
+    if (tu !== null) jobs.push({ tu, name: file, ranges })
     else unserviceable.push(file)
   }
   if (unserviceable.length > 0) {
