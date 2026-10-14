@@ -26,6 +26,7 @@ import {
   type StepEvent,
   type StepId,
   type StepStatus,
+  TOOLING_TS,
 } from "./steps.ts"
 
 const PRESET = "linux-fast"
@@ -133,8 +134,10 @@ async function main(): Promise<number> {
 
   const diff = classifyFiles(await changedFiles(base))
   const planned = planSteps(options, diff)
-  const skipRest = async (reason: string, from: number) => {
-    for (const step of planned.slice(from)) await record(step, "skipped", Date.now(), reason)
+  const skipAfter = async (reason: string, after: StepId) => {
+    for (const step of planned.slice(planned.indexOf(after) + 1)) {
+      await record(step, "skipped", Date.now(), reason)
+    }
   }
 
   // (a) The guard.
@@ -143,7 +146,7 @@ async function main(): Promise<number> {
   if (violations.length > 0 && flag("CHECK_ALLOW_PROTECTED") !== "1") {
     await record("guard", "fail", started, `${violations.length} protected file(s) changed`)
     for (const file of violations) console.error(`  protected: ${file}`)
-    await skipRest("the guard failed", 1)
+    await skipAfter("the guard failed", "guard")
     return exitCode(events)
   }
   const protectedNote = violations.length > 0
@@ -180,6 +183,30 @@ async function main(): Promise<number> {
       }`,
     )
   }
+  // (b2) The Deno tooling the gate runs on: types, lint and unit tests over what changed.
+  if (planned.includes("tools")) {
+    started = Date.now()
+    const files = diff.all.filter((f) => TOOLING_TS.test(f))
+    const roots = [...new Set(files.map((f) => f.split("/").slice(0, 2).join("/")))]
+    const typed = await runTee(["deno", "check", ...files], join(logDir, "tools.log"))
+    const linted = typed.code === 0
+      ? await runTee(["deno", "lint", ...files], join(logDir, "tools-lint.log"))
+      : typed
+    const tested = linted.code === 0
+      ? await runTee(["deno", "test", "-A", ...roots], join(logDir, "tools-test.log"))
+      : linted
+    const ok = tested.code === 0
+    await record(
+      "tools",
+      ok ? "pass" : "fail",
+      started,
+      `${files.length} file(s) in ${roots.join(", ")}`,
+    )
+    if (!ok) {
+      await skipAfter("the tooling check failed", "tools")
+      return exitCode(events)
+    }
+  }
 
   // (c) Configure (offline when a seed dir is given) and build both shipping binaries.
   started = Date.now()
@@ -201,7 +228,7 @@ async function main(): Promise<number> {
     const log = configured.code !== 0 ? "configure.log" : "build.log"
     const first = (await tail(join(logDir, log), 5)).split("\n")[0] ?? ""
     await record("build", "fail", started, `exit ${built.code}: ${first.slice(0, 160)}`)
-    await skipRest("the build failed", 2)
+    await skipAfter("the build failed", "build")
     return exitCode(events)
   }
   await record("build", "pass", started, `preset ${PRESET} with ${jobs} jobs`)
@@ -218,7 +245,7 @@ async function main(): Promise<number> {
     testSummary(tests.stdout, tests.code),
   )
   if (tests.code !== 0) {
-    await skipRest("the suite failed", 3)
+    await skipAfter("the suite failed", "tests")
     return exitCode(events)
   }
 

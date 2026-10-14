@@ -3,11 +3,19 @@
 import { DEFAULT_BASE } from "./base.ts"
 import type { CheckOptions } from "./args.ts"
 
-export type StepId = "guard" | "autofix" | "build" | "tests" | "tidy" | "coop"
+export type StepId = "guard" | "autofix" | "tools" | "build" | "tests" | "tidy" | "coop"
 
 /// The order `check` runs the steps in. A step may be planned away (nothing to fix, a co-op-free
 /// change) but never reordered: everything after `build` needs the binaries `build` produced.
-export const STEP_ORDER: readonly StepId[] = ["guard", "autofix", "build", "tests", "tidy", "coop"]
+export const STEP_ORDER: readonly StepId[] = [
+  "guard",
+  "autofix",
+  "tools",
+  "build",
+  "tests",
+  "tidy",
+  "coop",
+]
 
 /// A step that cannot run because something before it failed is reported skipped, never passed.
 export type StepStatus = "pass" | "fail" | "skipped"
@@ -23,6 +31,8 @@ export type ChangedFiles = {
 
 const COOP_OR_NET = /^src\/(?:coop|net)[^/]*\.(?:cpp|h|hpp)$/
 const CPP = /^(?:src\/[^/]+\/|tests\/).*\.(?:cpp|h|hpp)$/
+/// The Deno tooling the gate itself runs on: a change to it is checked before the slow steps.
+export const TOOLING_TS = /^(?:tools|scripts)\/.*\.ts$/
 
 /// Bucket a list of changed repo-relative paths. Deleted files are filtered out by the caller.
 export function classifyFiles(files: readonly string[]): ChangedFiles {
@@ -41,6 +51,7 @@ export function planSteps(options: CheckOptions, diff: ChangedFiles): StepId[] {
     planned.push("autofix")
   }
   if (options.dryRun) return planned
+  if (diff.all.some((f) => TOOLING_TS.test(f))) planned.push("tools")
   planned.push("build", "tests", "tidy")
   if (diff.all.some((f) => COOP_OR_NET.test(f))) planned.push("coop")
   return planned

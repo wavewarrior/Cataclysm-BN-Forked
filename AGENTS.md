@@ -243,7 +243,7 @@ Do not enable `poteto-mode`, `autopilot-*` or any pstack playbook: they overlap 
 ## Token Optimization
 
 - Prepend `rtk` to inherently verbose commands (builds, test runs, git logs, large listings) to compress their output before it enters context.
-- The harness routes shell `grep`/`cat`/`find` to the dedicated `grep`/`read`/`glob` tools; write shell commands accordingly instead of fighting the block.
+- Write any multi-line script with the `write` tool, then run it with `ssh <host> '<interpreter> -s' < file` (or locally). Heredocs, `cat`, `sed -i` and shell `grep` are blocked; `read`, `edit`, `grep` and `glob` replace them. Over ssh to the home box, never inline PowerShell or quoted `wsl -e bash -c`: send a script file.
 - Page large outputs instead of dumping them: `read` line ranges, `artifact://<id>` for spilled tool output, and `proc://<name>:-80` for the tail of a build/service log.
 
 ### Playtesting and visual verification

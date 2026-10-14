@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Refuses a push whose tip `deno task check` has not passed on this clone: a passing run writes
 # the commit it tested to <CHECK_LOG_DIR or .check>/passed, and every pushed branch tip must match.
-# Run the check where the executor is (the Linux box); push from the clone where it passed.
+# The stamp is written where `check` ran (the Linux box); a push from another clone needs the stamp
+# copied there, or the override below.
 # A deliberate override, visible in the command line:  CHECK_SKIP=1 git push
 # Enable once per clone: git config core.hooksPath .githooks
 set -euo pipefail

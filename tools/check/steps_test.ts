@@ -28,6 +28,21 @@ Deno.test("classification splits C++ under a src subdirectory or tests from JSON
   assertEquals(diff.all.length, 7)
 })
 
+Deno.test("a change to the Deno tooling plans a tools step before the build; other changes do not", () => {
+  assertEquals(
+    planSteps(options({ noFix: true }), classifyFiles(["tools/check/main.ts", "src/map.cpp"])),
+    ["guard", "tools", "build", "tests", "tidy"],
+  )
+  assertEquals(
+    planSteps(options({ noFix: true }), classifyFiles(["scripts/changelog/main.ts"])),
+    ["guard", "tools", "build", "tests", "tidy"],
+  )
+  assertEquals(
+    planSteps(options({ noFix: true }), classifyFiles(["src/map.cpp", "docs/a.md"])),
+    ["guard", "build", "tests", "tidy"],
+  )
+})
+
 Deno.test("the full plan is guard, autofix, build, tests, tidy, and coop only for a networking change", () => {
   assertEquals(planSteps(options(), classifyFiles(["src/lighting/snapshot.cpp"])), [
     "guard",

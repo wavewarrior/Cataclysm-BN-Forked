@@ -59,6 +59,8 @@ post-build `deno task docs:gen` runs `deno fmt` over the whole tree. Regenerate 
 
 A passing run writes the commit it tested to `.check/passed` (only when every step passed and the
 tracked tree matched that commit). `.githooks/pre-push` refuses a push whose branch tip is not that
-commit, so a push without a passing `check` fails locally. Run `check` on the Linux executor and
-push from the clone where it passed. `CHECK_SKIP=1 git push` overrides it, deliberately and visibly.
+commit, so a push without a passing `check` fails locally. Today the stamp is written on the Linux
+executor, and the WSL clone holds no push credential, so a push from the Mac fails the hook unless
+the stamp is copied back (or `CHECK_SKIP=1 git push` overrides it, deliberately and visibly). Which
+of those two is the flow is an open decision: see the plan.
 Enable the hooks once per clone with `git config core.hooksPath .githooks`.
