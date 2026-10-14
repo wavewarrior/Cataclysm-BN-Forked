@@ -26,6 +26,7 @@ import {
   type StepEvent,
   type StepId,
   type StepStatus,
+  testFilesFor,
   TOOLING_TS,
 } from "./steps.ts"
 
@@ -187,20 +188,25 @@ async function main(): Promise<number> {
   if (planned.includes("tools")) {
     started = Date.now()
     const files = diff.all.filter((f) => TOOLING_TS.test(f))
-    const roots = [...new Set(files.map((f) => f.split("/").slice(0, 2).join("/")))]
+    const present = new Set<string>()
+    for (const file of files) {
+      const own = file.replace(/\.ts$/, "_test.ts")
+      if (own !== file && await Deno.stat(own).then(() => true, () => false)) present.add(own)
+    }
+    const testFiles = testFilesFor(files, present)
     const typed = await runTee(["deno", "check", ...files], join(logDir, "tools.log"))
     const linted = typed.code === 0
       ? await runTee(["deno", "lint", ...files], join(logDir, "tools-lint.log"))
       : typed
-    const tested = linted.code === 0
-      ? await runTee(["deno", "test", "-A", ...roots], join(logDir, "tools-test.log"))
+    const tested = linted.code === 0 && testFiles.length > 0
+      ? await runTee(["deno", "test", "-A", ...testFiles], join(logDir, "tools-test.log"))
       : linted
     const ok = tested.code === 0
     await record(
       "tools",
       ok ? "pass" : "fail",
       started,
-      `${files.length} file(s) in ${roots.join(", ")}`,
+      `${files.length} file(s) checked, ${testFiles.length} test file(s) run`,
     )
     if (!ok) {
       await skipAfter("the tooling check failed", "tools")

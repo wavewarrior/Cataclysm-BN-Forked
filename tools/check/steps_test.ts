@@ -1,6 +1,13 @@
 import { assertEquals } from "@std/assert"
 import type { CheckOptions } from "./args.ts"
-import { classifyFiles, exitCode, formatStep, planSteps, type StepEvent } from "./steps.ts"
+import {
+  classifyFiles,
+  exitCode,
+  formatStep,
+  planSteps,
+  type StepEvent,
+  testFilesFor,
+} from "./steps.ts"
 
 const options = (over: Partial<CheckOptions> = {}): CheckOptions => ({
   noFix: false,
@@ -9,10 +16,11 @@ const options = (over: Partial<CheckOptions> = {}): CheckOptions => ({
   ...over,
 })
 
-Deno.test("classification splits C++ under a src subdirectory or tests from JSON from the rest", () => {
+Deno.test("classification takes project C++ under src and tests, not vendored C++, JSON or the rest", () => {
   const diff = classifyFiles([
     "src/lighting/render_state.cpp",
     "src/map.cpp",
+    "src/lua/lua.h",
     "tests/map_test.cpp",
     "tests/catch/catch_test.cpp",
     "data/json/items/tool.json",
@@ -21,11 +29,23 @@ Deno.test("classification splits C++ under a src subdirectory or tests from JSON
   ])
   assertEquals(diff.cpp, [
     "src/lighting/render_state.cpp",
+    "src/map.cpp",
     "tests/map_test.cpp",
-    "tests/catch/catch_test.cpp",
   ])
   assertEquals(diff.json, ["data/json/items/tool.json"])
-  assertEquals(diff.all.length, 7)
+  assertEquals(diff.all.length, 8)
+})
+
+Deno.test("tooling tests are the changed tests plus each changed module's own, never the module", () => {
+  const present = new Set(["tools/check/steps_test.ts", "scripts/utils_test.ts"])
+  assertEquals(
+    testFilesFor(
+      ["tools/check/steps.ts", "scripts/gen_cli_docs.ts", "scripts/utils_test.ts"],
+      present,
+    ),
+    ["scripts/utils_test.ts", "tools/check/steps_test.ts"],
+  )
+  assertEquals(testFilesFor(["scripts/gen_cli_docs.ts"], present), [])
 })
 
 Deno.test("a change to the Deno tooling plans a tools step before the build; other changes do not", () => {

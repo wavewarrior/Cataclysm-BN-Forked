@@ -1,6 +1,7 @@
 /// Step ordering, diff classification and the event record for `check`. Pure: no IO here, so the
 /// whole policy is unit-testable without a compiler.
 import { DEFAULT_BASE } from "./base.ts"
+import { isFormattableCpp } from "../format/cpp_common.ts"
 import type { CheckOptions } from "./args.ts"
 
 export type StepId = "guard" | "autofix" | "tools" | "build" | "tests" | "tidy" | "coop"
@@ -30,14 +31,29 @@ export type ChangedFiles = {
 }
 
 const COOP_OR_NET = /^src\/(?:coop|net)[^/]*\.(?:cpp|h|hpp)$/
-const CPP = /^(?:src\/[^/]+\/|tests\/).*\.(?:cpp|h|hpp)$/
+const CPP = /^(?:src|tests)\/.*\.(?:cpp|h|hpp)$/
 /// The Deno tooling the gate itself runs on: a change to it is checked before the slow steps.
 export const TOOLING_TS = /^(?:tools|scripts)\/.*\.ts$/
+
+/// The test files to run for changed tooling: each changed `*_test.ts`, and the `*_test.ts` beside
+/// each changed module that has one (`present` holds the ones that exist). Never the module
+/// itself: a script without an `import.meta.main` guard would run its body inside the gate.
+export function testFilesFor(files: readonly string[], present: ReadonlySet<string>): string[] {
+  const tests = new Set<string>()
+  for (const file of files) {
+    if (file.endsWith("_test.ts")) tests.add(file)
+    else {
+      const own = file.replace(/\.ts$/, "_test.ts")
+      if (present.has(own)) tests.add(own)
+    }
+  }
+  return [...tests].sort()
+}
 
 /// Bucket a list of changed repo-relative paths. Deleted files are filtered out by the caller.
 export function classifyFiles(files: readonly string[]): ChangedFiles {
   return {
-    cpp: files.filter((f) => CPP.test(f)),
+    cpp: files.filter((f) => CPP.test(f) && isFormattableCpp(f)),
     json: files.filter((f) => f.endsWith(".json")),
     all: [...files],
   }
