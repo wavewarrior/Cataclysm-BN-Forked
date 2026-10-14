@@ -28,6 +28,7 @@
 #include "item_factory.h"
 #include "itype.h"
 #include "json.h"
+#include "level_cache.h"
 #include "lighting/solid_overlay.h"
 #include "lighting/tile_occlusion.h"
 #include "lightmap.h"

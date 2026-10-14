@@ -88,6 +88,7 @@
 #include "iuse_actor.h"
 #include "json.h"
 #include "kill_tracker.h"
+#include "level_cache.h"
 #include "level_cache_freshness.h"
 #include "lightmap.h"
 #include "line.h"

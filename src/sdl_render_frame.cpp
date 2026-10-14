@@ -14,6 +14,7 @@
 #include "game.h"
 #include "game_constants.h"
 #include "hud_shake.h"
+#include "level_cache.h"
 #include "level_cache_freshness.h"
 #include "lighting/dev_test_lights.h"
 #include "lighting/dust_mote_effect.h"

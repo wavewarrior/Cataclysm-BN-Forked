@@ -12,6 +12,7 @@
 #    include "gpu_platform.h"
 #    include "item.h"
 #    include "itype.h"
+#    include "level_cache.h"
 #    include "level_cache_freshness.h"
 #    include "lightmap.h"
 #    include "map.h"

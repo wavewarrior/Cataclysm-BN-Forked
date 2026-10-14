@@ -16,6 +16,7 @@
 #include "input.h"
 #include "int_id.h"
 #include "item.h"
+#include "level_cache.h"
 #include "level_cache_freshness.h"
 #include "lighting/rmlui_layer.h"
 #include "line.h"

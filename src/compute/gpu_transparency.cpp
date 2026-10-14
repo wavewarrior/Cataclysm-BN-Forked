@@ -5,6 +5,7 @@
 #    include "debug.h"
 #    include "field.h"
 #    include "gpu_platform.h"
+#    include "level_cache.h"
 #    include "map.h"
 #    include "mapbuffer.h"
 #    include "mapdata.h"

@@ -5,6 +5,7 @@
 #include "game.h"
 #include "game_constants.h"
 #include "hsv_color.h"
+#include "level_cache.h"
 #include "lighting/emitter_collector.h"
 #include "lighting/render_state.h"
 #include "lighting/sdf_pass.h"

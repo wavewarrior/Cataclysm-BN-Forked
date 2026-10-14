@@ -3,6 +3,7 @@
 #include "catch/catch_amalgamated.hpp"
 #include "coordinates.h"
 #include "game.h"
+#include "level_cache.h"
 #include "level_cache_freshness.h"
 #include "lightmap.h"
 #include "map.h"

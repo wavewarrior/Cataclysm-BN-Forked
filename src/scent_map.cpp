@@ -7,6 +7,7 @@
 #include "debug.h"
 #include "game.h"
 #include "generic_factory.h"
+#include "level_cache.h"
 #include "map.h"
 #include "mapbuffer.h"
 #include "options.h"

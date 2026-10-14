@@ -12,6 +12,7 @@
 #include "generic_factory.h"
 #include "int_id.h"
 #include "json.h"
+#include "level_cache.h"
 #include "level_cache_freshness.h"
 #include "map.h"
 #include "map_extras.h"

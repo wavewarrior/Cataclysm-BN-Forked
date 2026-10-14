@@ -9,6 +9,7 @@
 #include "coordinates.h"
 #include "cuboid_rectangle.h"
 #include "field.h"
+#include "level_cache.h"
 #include "fragment_cloud.h" // IWYU pragma: keep
 #include "game.h"
 #include "game_constants.h"

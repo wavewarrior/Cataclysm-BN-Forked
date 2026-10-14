@@ -7,6 +7,7 @@
 #include "game.h"
 #include "game_constants.h"
 #include "item.h"
+#include "level_cache.h"
 #include "lightmap.h"
 #include "map.h"
 #include "map_helpers.h"

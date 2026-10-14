@@ -11,6 +11,7 @@
 #include "game.h"
 #include "game_constants.h"
 #include "int_id.h"
+#include "level_cache.h"
 #include "line.h"
 #include "map.h"
 #include "map_iterator.h"

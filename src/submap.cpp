@@ -3,6 +3,7 @@
 #include "coop_mutation_log.h"
 #include "debug.h"
 #include "int_id.h"
+#include "level_cache.h"
 #include "lighting/render_state.h"
 #include "lightmap.h"
 #include "map.h"

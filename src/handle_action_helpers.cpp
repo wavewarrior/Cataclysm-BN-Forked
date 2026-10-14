@@ -55,6 +55,7 @@
 #include "itype.h"
 #include "iuse.h"
 #include "json.h"
+#include "level_cache.h"
 #include "lightmap.h"
 #include "line.h"
 #include "magic/magic.h"

@@ -7,6 +7,7 @@
 #include "enums.h"
 #include "game.h"
 #include "lighting/render_state.h"
+#include "level_cache.h"
 #include "lighting/rmlui_layer.h"
 #include "map.h"
 #include "mapdata.h"

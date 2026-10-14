@@ -15,6 +15,7 @@
 #include "game_constants.h"
 #include "item.h"
 #include "itype.h"
+#include "level_cache.h"
 #include "level_cache_freshness.h"
 #include "line.h"
 #include "map.h"

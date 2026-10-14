@@ -7,6 +7,7 @@
 #include "debug.h"
 #include "driver_capture.h"
 #include "game.h"
+#include "level_cache.h"
 #include "lighting/dev_test_lights.h"
 #include "lighting/gpu_emitter.h"
 #include "lighting/lighting_settings.h"

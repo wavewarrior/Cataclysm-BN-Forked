@@ -27,6 +27,7 @@
 #include "item_factory.h"
 #include "itype.h"
 #include "json.h"
+#include "level_cache.h"
 #include "lighting/render_state.h"
 #include "line.h"
 #include "map.h"

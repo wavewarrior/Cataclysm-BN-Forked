@@ -1,4 +1,5 @@
 #include "coop_mutation_log.h"
+#include "level_cache.h"
 #include "level_cache_freshness.h"
 #include "map.h"
 // S2: the GPU lightmap dispatch and the readiness latch both live in build_map_cache below.

@@ -4,6 +4,7 @@
 #include "cata_dynamic_bitset.h"
 #include "coordinates.h"
 #include "game_constants.h"
+#include "level_cache.h"
 #include "map.h"
 #include "map_iterator.h"
 #include "mapbuffer.h"

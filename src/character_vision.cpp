@@ -50,6 +50,7 @@
 #include "iuse.h"
 #include "iuse_actor.h"
 #include "legacy_pathfinding.h"
+#include "level_cache.h"
 #include "lightmap.h"
 #include "line.h"
 #include "make_static.h"

@@ -9,6 +9,7 @@
 #include "game.h"
 #include "game_constants.h"
 #include "item.h"
+#include "level_cache.h"
 #include "lighting/dev_test_lights.h"
 #include "map.h"
 #include "map_iterator.h"
