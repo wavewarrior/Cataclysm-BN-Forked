@@ -24,3 +24,20 @@ export function chooseUnit(candidates: string[], compiled: Set<string>): string 
   if (compiled.size === 0) return candidates[0] ?? null
   return candidates.find((candidate) => compiled.has(candidate)) ?? null
 }
+
+export type Serviceability = "run" | "skip" | "fail"
+
+/// What to do with a changed file once a unit was (or was not) chosen for it. A source file this
+/// build does not compile (another platform's, or behind a disabled option) is skipped and
+/// reported: that is not a failure of the gate. A header nothing includes cannot be analysed at
+/// all, which is a failure: it must never pass silently.
+export function serviceability(
+  file: string,
+  isHeader: boolean,
+  unit: string | null,
+  compiled: Set<string>,
+): Serviceability {
+  if (unit !== null) return "run"
+  if (!isHeader && compiled.size > 0 && !compiled.has(file)) return "skip"
+  return "fail"
+}

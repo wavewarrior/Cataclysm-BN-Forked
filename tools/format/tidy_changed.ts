@@ -20,7 +20,7 @@ import {
   pinnedClangTidy,
   toolMajorVersion,
 } from "./cpp_common.ts"
-import { chooseUnit, compiledUnits } from "./tidy_units.ts"
+import { chooseUnit, compiledUnits, serviceability } from "./tidy_units.ts"
 
 const CORRECTNESS_CHECKS = "cata-determinism,cata-no-long,cata-test-filename"
 const STYLE_FIX_CHECKS = "modernize-use-trailing-return-type,modernize-use-auto"
@@ -187,6 +187,7 @@ export async function run(argv: string[]): Promise<number> {
   // findings to the changed header lines.
   const jobs: Array<{ tu: string; name: string; ranges: Array<[number, number]> }> = []
   const unserviceable: string[] = []
+  const skipped: string[] = []
   for (const file of targets) {
     const ranges = await changedLineRanges(file, { kind: "base", base: opts.base })
     if (ranges.length === 0) continue
@@ -196,9 +197,12 @@ export async function run(argv: string[]): Promise<number> {
     const present: string[] = []
     for (const candidate of candidates) if (await exists(candidate)) present.push(candidate)
     const tu = chooseUnit(present, compiled)
-    if (tu !== null) jobs.push({ tu, name: file, ranges })
+    const verdict = serviceability(file, isHeader, tu, compiled)
+    if (verdict === "run" && tu !== null) jobs.push({ tu, name: file, ranges })
+    else if (verdict === "skip") skipped.push(file)
     else unserviceable.push(file)
   }
+  for (const file of skipped) console.log(`tidy: skipped ${file}: not compiled in this build`)
   if (unserviceable.length > 0) {
     console.error(`tidy: no translation unit to analyse the changes in:`)
     for (const file of unserviceable) console.error(`  ${file}`)

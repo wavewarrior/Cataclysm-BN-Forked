@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert"
-import { chooseUnit, compiledUnits } from "./tidy_units.ts"
+import { chooseUnit, compiledUnits, serviceability } from "./tidy_units.ts"
 
 const db = JSON.stringify([
   { file: "/repo/tests/test_main.cpp", directory: "/repo/out/build/x" },
@@ -31,4 +31,22 @@ Deno.test("no compiled candidate means no unit, not a guess", () => {
 Deno.test("an unreadable database keeps the first candidate", () => {
   assertEquals(chooseUnit(["tests/a.cpp", "tests/b.cpp"], new Set()), "tests/a.cpp")
   assertEquals(chooseUnit([], new Set()), null)
+})
+
+Deno.test("a chosen unit runs", () => {
+  assertEquals(serviceability("src/map.cpp", false, "src/map.cpp", new Set(["src/map.cpp"])), "run")
+})
+
+Deno.test("a source file this build does not compile is skipped, not a failure", () => {
+  const compiled = new Set(["src/map.cpp"])
+  assertEquals(serviceability("src/platform/win.cpp", false, null, compiled), "skip")
+})
+
+Deno.test("a header that nothing includes fails, never passes silently", () => {
+  const compiled = new Set(["src/map.cpp"])
+  assertEquals(serviceability("src/orphan.h", true, null, compiled), "fail")
+})
+
+Deno.test("with an unreadable database an unserviceable source file still fails", () => {
+  assertEquals(serviceability("src/map.cpp", false, null, new Set()), "fail")
 })
