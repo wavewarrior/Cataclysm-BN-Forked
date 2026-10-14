@@ -44,10 +44,6 @@ struct sdl_video_session {
     }
 };
 
-struct render_state_guard {
-    ~render_state_guard() { lighting::shutdown_render_state(); }
-};
-
 auto pixel_luma(const uint8_t* rgba) -> float {
     return 0.299f * rgba[0] + 0.587f * rgba[1] + 0.114f * rgba[2];
 }
@@ -105,7 +101,7 @@ auto make_white_sprite(float x, float y, float w, float h) -> lighting::sprite_i
 // automatically at process exit.
 struct test_harness {
     SDL_Window* window = nullptr;
-    render_state_guard guard;
+    sdl_video_session sdl;
     lighting::render_state* rs = nullptr;
 
     auto init() -> bool {
@@ -122,11 +118,12 @@ struct test_harness {
         return rs->ready();
     }
 
+    // Order matters: the GPU device claimed the window, and both need SDL video alive. Shutting
+    // down after SDL_QuitSubSystem (the old member order) crashed in the device destroy at exit.
     ~test_harness() {
+        lighting::shutdown_render_state();
         if (window) { SDL_DestroyWindow(window); }
     }
-
-    sdl_video_session sdl;
 };
 
 auto get_harness() -> test_harness& {
