@@ -44,10 +44,6 @@ struct sdl_video_session {
     }
 };
 
-struct render_state_guard {
-    ~render_state_guard() { lighting::shutdown_render_state(); }
-};
-
 auto pixel_luma(const uint8_t* rgba) -> float {
     return 0.299f * rgba[0] + 0.587f * rgba[1] + 0.114f * rgba[2];
 }
@@ -105,7 +101,7 @@ auto make_white_sprite(float x, float y, float w, float h) -> lighting::sprite_i
 // automatically at process exit.
 struct test_harness {
     SDL_Window* window = nullptr;
-    render_state_guard guard;
+    sdl_video_session sdl;
     lighting::render_state* rs = nullptr;
 
     auto init() -> bool {
@@ -122,11 +118,12 @@ struct test_harness {
         return rs->ready();
     }
 
+    // Order matters: the GPU device claimed the window, and both need SDL video alive. Shutting
+    // down after SDL_QuitSubSystem (the old member order) crashed in the device destroy at exit.
     ~test_harness() {
+        lighting::shutdown_render_state();
         if (window) { SDL_DestroyWindow(window); }
     }
-
-    sdl_video_session sdl;
 };
 
 auto get_harness() -> test_harness& {
@@ -172,11 +169,19 @@ auto render_and_capture(lighting::render_state& rs, SDL_GPUTexture* target, int 
 }
 
 
-/// The checker grid of fixture B at a brightness `scale`: one fresh frame, captured. Every call
+struct checker_options {
+    SDL_GPUTexture* target = nullptr;
+    int w = 0;
+    int h = 0;
+    float tile_px = 0.0f;
+    float scale = 1.0f;
+};
+
+/// The checker grid of fixture B at `opts.scale` brightness: one fresh frame, captured. Every call
 /// starts from cleared queues so repeated calls are the same scene.
-auto render_checker(
-    lighting::render_state& rs, SDL_GPUTexture* target, int w, int h, float tile_px, float scale)
+auto render_checker(lighting::render_state& rs, const checker_options& opts)
     -> std::vector<uint8_t> {
+    const auto [target, w, h, tile_px, scale] = opts;
     auto* white = rs.geometry().white_texture();
     REQUIRE(white != nullptr);
     rs.clear_frame_queues();
@@ -497,9 +502,10 @@ TEST_CASE("render_regression", "[.gpu][render]") {
         SDL_GPUTexture* offscreen = create_offscreen(rs, W, H);
         REQUIRE(offscreen != nullptr);
 
-        const auto first = render_checker(rs, offscreen, W, H, TILE_PX, 1.0f);
-        const auto second = render_checker(rs, offscreen, W, H, TILE_PX, 1.0f);
-        const auto third = render_checker(rs, offscreen, W, H, TILE_PX, 1.0f);
+        const auto spec = checker_options{.target = offscreen, .w = W, .h = H, .tile_px = TILE_PX};
+        const auto first = render_checker(rs, spec);
+        const auto second = render_checker(rs, spec);
+        const auto third = render_checker(rs, spec);
         SDL_ReleaseGPUTexture(rs.device().raw(), offscreen);
 
         const auto a1 = render_compare::image_from_rgba(first, W, H);
@@ -519,9 +525,11 @@ TEST_CASE("render_regression", "[.gpu][render]") {
         SDL_GPUTexture* offscreen = create_offscreen(rs, W, H);
         REQUIRE(offscreen != nullptr);
 
-        const auto base_a = render_checker(rs, offscreen, W, H, TILE_PX, 1.0f);
-        const auto base_b = render_checker(rs, offscreen, W, H, TILE_PX, 1.0f);
-        const auto dimmed = render_checker(rs, offscreen, W, H, TILE_PX, 0.5f);
+        const auto spec = checker_options{.target = offscreen, .w = W, .h = H, .tile_px = TILE_PX};
+        const auto base_a = render_checker(rs, spec);
+        const auto base_b = render_checker(rs, spec);
+        const auto dimmed = render_checker(
+            rs, {.target = spec.target, .w = W, .h = H, .tile_px = TILE_PX, .scale = 0.5f});
         SDL_ReleaseGPUTexture(rs.device().raw(), offscreen);
 
         const auto a = render_compare::image_from_rgba(base_a, W, H);
