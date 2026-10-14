@@ -47,6 +47,14 @@ deno task lane stop 123
 There is no watcher, no label state machine and no stamps: the issue is the queue, `check` is the
 gate, the human merges.
 
+## Auto-fix and the stamp
+
+Without `--no-fix`, `check` first rewrites formatting in the files the diff touches. A run that changed any
+tracked file is never stamped, because the tested tree is no longer the commit. The lane's flow is: run
+`check`, commit what auto-fix changed, then run `check --no-fix`; that second run writes the stamp.
+A build must not modify tracked files either: `linux-fast` sets `LUA_DOCS_ON_BUILD=OFF` because the
+post-build `deno task docs:gen` runs `deno fmt` over the whole tree. Regenerate the docs explicitly.
+
 ## The pre-push hook
 
 A passing run writes the commit it tested to `.check/passed` (only when every step passed and the
@@ -54,4 +62,3 @@ tracked tree matched that commit). `.githooks/pre-push` refuses a push whose bra
 commit, so a push without a passing `check` fails locally. Run `check` on the Linux executor and
 push from the clone where it passed. `CHECK_SKIP=1 git push` overrides it, deliberately and visibly.
 Enable the hooks once per clone with `git config core.hooksPath .githooks`.
-
