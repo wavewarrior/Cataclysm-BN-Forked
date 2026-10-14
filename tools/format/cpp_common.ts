@@ -18,6 +18,8 @@ const EXCLUDED_PREFIXES = [
   "src/third-party/",
   "tests/catch/",
   "tools/clang-tidy-plugin/test/",
+  "src/fmtlib_",
+  "src/minicoro.h",
 ]
 
 const CPP_SUFFIXES = [".cpp", ".h", ".hpp"]

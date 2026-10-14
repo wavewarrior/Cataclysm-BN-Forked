@@ -51,7 +51,11 @@ export function stripText(source: string): StripResult {
       return kept.length > 0 ? `${keyword}(${kept.join(", ")})` : ""
     })
     if (cleaned) {
-      if (COMMENT_RESIDUE.test(text)) continue
+      if (COMMENT_RESIDUE.test(text)) {
+        // A residue that still closes a block comment must keep its terminator.
+        if (text.trimEnd().endsWith("*/")) out.push(`${text.match(/^[ \t]*/)![0]}*/`)
+        continue
+      }
       text = text.replace(/(\/\/|\/\*+\s*\*\/)[ \t]*$/, "").trimEnd()
     }
     out.push(text)

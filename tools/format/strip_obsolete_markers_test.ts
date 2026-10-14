@@ -57,6 +57,22 @@ Deno.test("stripText leaves unrelated NOLINTs and prose untouched", () => {
   assertEquals(text, source)
 })
 
+Deno.test("stripText keeps the terminator of a block comment that ended in a NOLINT", () => {
+  const source = [
+    "    /**",
+    "     * Rotates by turns.",
+    "     * NOLINTNEXTLINE(cata-use-named-point-constants) */",
+    "    point rotate( int turns ) const;",
+  ].join("\n")
+  const { text } = stripText(source)
+  assertEquals(text.split("\n"), [
+    "    /**",
+    "     * Rotates by turns.",
+    "     */",
+    "    point rotate( int turns ) const;",
+  ])
+})
+
 Deno.test("stripText rewrites a real temp file end to end", async () => {
   const dir = await Deno.makeTempDir()
   try {
