@@ -52,3 +52,30 @@ fi
 
 staged=(${cpp_files[@]+"${cpp_files[@]}"} ${json_files[@]+"${json_files[@]}"} ${doc_files[@]+"${doc_files[@]}"} ${lua_files[@]+"${lua_files[@]}"})
 if ((${#staged[@]})); then git add -- "${staged[@]}"; fi
+
+# Advisory fan-out report (issue #181): a staged hub header drags hundreds of TUs into
+# every rebuild that touches it. Print one line per staged src/ header whose fan-out is at
+# least FANOUT_ADVISORY_THRESHOLD (default 100) TUs. Strictly advisory: every failure path
+# degrades to a warning, the commit is never blocked and this never changes the exit code.
+if [[ -n "$DENO" ]]; then
+    fanout_threshold="${FANOUT_ADVISORY_THRESHOLD:-100}"
+    if [[ ! "$fanout_threshold" =~ ^[0-9]+$ ]]; then
+        echo "warning: FANOUT_ADVISORY_THRESHOLD='$fanout_threshold' is not a number; using 100" >&2
+        fanout_threshold=100
+    fi
+    fanout_tab="$(printf '\t')"
+    while IFS= read -r -d '' file; do
+        case "$file" in src/*.h | src/*.hpp) ;; *) continue ;; esac
+        [[ -f "$file" ]] || continue
+        line="$("$DENO" run --allow-read --allow-run=git,ninja tools/fanout/main.ts --text --porcelain "$file" 2>/dev/null)" || line=""
+        rest="${line#*"$fanout_tab"}"
+        count="${rest%%"$fanout_tab"*}"
+        if [[ ! "$count" =~ ^[0-9]+$ ]]; then
+            echo "warning: fanout advisory skipped for $file" >&2
+            continue
+        fi
+        if ((count >= fanout_threshold)); then
+            echo "fanout advisory: $file reaches $count TUs (threshold $fanout_threshold); a change here rebuilds them all"
+        fi
+    done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+fi
