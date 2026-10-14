@@ -127,6 +127,9 @@ struct test_harness {
 };
 
 auto get_harness() -> test_harness& {
+    // Statics are destroyed in reverse order of construction. Build the render_state singleton
+    // first so it outlives the harness, whose destructor shuts it down.
+    (void)lighting::get_render_state();
     static test_harness h{};
     static bool once = false;
     if (!once) { once = h.init(); }
