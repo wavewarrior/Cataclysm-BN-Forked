@@ -34,57 +34,54 @@ constexpr int H = 12;
 /// The generator the expectation table was built with: a plain LCG filling a frame with bytes.
 struct lcg {
     unsigned state = 1;
-    explicit lcg( const unsigned seed ): state( seed ) {}
+    explicit lcg(const unsigned seed): state(seed) {}
     unsigned next() {
-        state = ( 1103515245u * state + 12345u ) & 0x7fffffffu;
+        state = (1103515245u * state + 12345u) & 0x7fffffffu;
         return state;
     }
 };
 
 /// The 0/1-per-pixel view of an image whose first channel encodes a bit: `dilate`'s input.
-auto raw_bits( const image &img ) -> std::vector<std::uint8_t> {
-    std::vector<std::uint8_t> bits( img.pixel_count() );
-    for( std::size_t p = 0; p < bits.size(); ++p ) {
-        bits[p] = img.rgb[p * 3] != 0 ? 1 : 0;
-    }
+auto raw_bits(const image& img) -> std::vector<std::uint8_t> {
+    std::vector<std::uint8_t> bits(img.pixel_count());
+    for (std::size_t p = 0; p < bits.size(); ++p) { bits[p] = img.rgb[p * 3] != 0 ? 1 : 0; }
     return bits;
 }
 
-auto count_set( const std::vector<std::uint8_t> &bits ) -> std::size_t {
-    return std::count_if(
-        bits.begin(), bits.end(), []( const std::uint8_t b ) { return b != 0; } );
+auto count_set(const std::vector<std::uint8_t>& bits) -> std::size_t {
+    return std::count_if(bits.begin(), bits.end(), [](const std::uint8_t b) { return b != 0; });
 }
 
 /// The unchanged-state frame: 192 pixels of pseudo-random colour.
 auto base_frame() -> image {
-    image a( W, H );
-    lcg gen( 20261013u );
-    for( auto &byte : a.rgb ) { byte = static_cast<std::uint8_t>( gen.next() % 256 ); }
+    image a(W, H);
+    lcg gen(20261013u);
+    for (auto& byte : a.rgb) { byte = static_cast<std::uint8_t>(gen.next() % 256); }
     return a;
 }
 
 /// A second capture of the SAME state: +/-1 LSB on one channel of every eleventh pixel, which is
 /// the shape of the driver noise the A/A mask exists to excuse.
-auto noisy_sibling( const image &a ) -> image {
+auto noisy_sibling(const image& a) -> image {
     image b = a;
-    for( int k = 0; k < W * H; k += 11 ) {
-        const int ch = ( k * 7 ) % 3;
-        const int delta = ( k % 2 ) ? 1 : -1;
+    for (int k = 0; k < W * H; k += 11) {
+        const int ch = (k * 7) % 3;
+        const int delta = (k % 2) ? 1 : -1;
         const int v = b.rgb[k * 3 + ch] + delta;
-        b.rgb[k * 3 + ch] = static_cast<std::uint8_t>( std::max( 0, std::min( 255, v ) ) );
+        b.rgb[k * 3 + ch] = static_cast<std::uint8_t>(std::max(0, std::min(255, v)));
     }
     return b;
 }
 
 /// The same state with a deliberate change: a bright block covering x 3..10, y 6..9 (+120 red,
 /// +60 green), standing in for the lighting change a Render tier case will make for real.
-auto changed_frame( const image &a ) -> image {
+auto changed_frame(const image& a) -> image {
     image b = a;
-    for( int y = 6; y < 10; ++y ) {
-        for( int x = 3; x < 11; ++x ) {
-            const std::size_t p = ( static_cast<std::size_t>( y ) * W + x ) * 3;
-            b.rgb[p + 0] = static_cast<std::uint8_t>( std::min( 255, b.rgb[p + 0] + 120 ) );
-            b.rgb[p + 1] = static_cast<std::uint8_t>( std::min( 255, b.rgb[p + 1] + 60 ) );
+    for (int y = 6; y < 10; ++y) {
+        for (int x = 3; x < 11; ++x) {
+            const std::size_t p = (static_cast<std::size_t>(y) * W + x) * 3;
+            b.rgb[p + 0] = static_cast<std::uint8_t>(std::min(255, b.rgb[p + 0] + 120));
+            b.rgb[p + 1] = static_cast<std::uint8_t>(std::min(255, b.rgb[p + 1] + 60));
         }
     }
     return b;
@@ -92,197 +89,196 @@ auto changed_frame( const image &a ) -> image {
 
 } // namespace
 
-TEST_CASE( "render_compare: mean_abs_delta matches the deno frameDelta",
-    "[render_compare]" ) {
+TEST_CASE("render_compare: mean_abs_delta matches the deno frameDelta", "[render_compare]") {
     const image a = base_frame();
-    const image n = noisy_sibling( a );
-    const image c = changed_frame( a );
-    const region centre{ .x = 0.25, .y = 0.25, .w = 0.5, .h = 0.5 };
+    const image n = noisy_sibling(a);
+    const image c = changed_frame(a);
+    const region centre{.x = 0.25, .y = 0.25, .w = 0.5, .h = 0.5};
 
-    SECTION( "identical frames differ by nothing" ) {
-        CHECK( mean_abs_delta( a, a ) == 0.0 );
-        CHECK( mean_abs_delta( a, a, centre ) == 0.0 );
+    SECTION("identical frames differ by nothing") {
+        CHECK(mean_abs_delta(a, a) == 0.0);
+        CHECK(mean_abs_delta(a, a, centre) == 0.0);
     }
 
-    SECTION( "whole-frame and regional means equal the transcribed values" ) {
-        CHECK( mean_abs_delta( a, n ) == Catch::Approx( 0.00012254901960784314 ) );
-        CHECK( mean_abs_delta( a, c ) == Catch::Approx( 0.030296840958605666 ) );
-        CHECK( mean_abs_delta( a, c, centre ) == Catch::Approx( 0.080882352941176475 ) );
-        CHECK( mean_abs_delta( a, n, centre ) == Catch::Approx( 0.00010893246187363834 ) );
+    SECTION("whole-frame and regional means equal the transcribed values") {
+        CHECK(mean_abs_delta(a, n) == Catch::Approx(0.00012254901960784314));
+        CHECK(mean_abs_delta(a, c) == Catch::Approx(0.030296840958605666));
+        CHECK(mean_abs_delta(a, c, centre) == Catch::Approx(0.080882352941176475));
+        CHECK(mean_abs_delta(a, n, centre) == Catch::Approx(0.00010893246187363834));
     }
 
-    SECTION( "black against white is the full range" ) {
-        image black( 4, 4 );
-        image white( 4, 4 );
-        std::fill( white.rgb.begin(), white.rgb.end(), std::uint8_t( 255 ) );
-        CHECK( mean_abs_delta( black, white ) == Catch::Approx( 1.0 ) );
+    SECTION("black against white is the full range") {
+        image black(4, 4);
+        image white(4, 4);
+        std::fill(white.rgb.begin(), white.rgb.end(), std::uint8_t(255));
+        CHECK(mean_abs_delta(black, white) == Catch::Approx(1.0));
     }
 
-    SECTION( "different sizes are never compared" ) {
-        const image other( W, H + 1 );
-        CHECK_THROWS_AS( mean_abs_delta( a, other ), std::invalid_argument );
-        CHECK_THROWS_AS( channel_delta( a, other ), std::invalid_argument );
-        CHECK_THROWS_AS( noise_mask( a, other ), std::invalid_argument );
-        CHECK_THROWS_AS( changed_pixel_count( a, other, {} ), std::invalid_argument );
+    SECTION("different sizes are never compared") {
+        const image other(W, H + 1);
+        CHECK_THROWS_AS(mean_abs_delta(a, other), std::invalid_argument);
+        CHECK_THROWS_AS(channel_delta(a, other), std::invalid_argument);
+        CHECK_THROWS_AS(noise_mask(a, other), std::invalid_argument);
+        CHECK_THROWS_AS(changed_pixel_count(a, other, {}), std::invalid_argument);
     }
 }
 
-TEST_CASE( "render_compare: the noise mask matches the deno mask", "[render_compare]" ) {
+TEST_CASE("render_compare: the noise mask matches the deno mask", "[render_compare]") {
     const image a = base_frame();
-    const image n = noisy_sibling( a );
+    const image n = noisy_sibling(a);
 
-    SECTION( "the raw disagreement is 18 pixels; dilation grows it as the original does" ) {
-        CHECK( noise_mask( a, n, 0 ).size() == static_cast<std::size_t>( W * H ) );
-        CHECK( count_set( noise_mask( a, n, 0 ) ) == 18 );
-        CHECK( count_set( noise_mask( a, n, 1 ) ) == 83 );
-        CHECK( count_set( noise_mask( a, n, 2 ) ) == 148 );
-        CHECK( count_set( noise_mask( a, n, 4 ) ) == 192 ); // saturated: the frame is small
+    SECTION("the raw disagreement is 18 pixels; dilation grows it as the original does") {
+        CHECK(noise_mask(a, n, 0).size() == static_cast<std::size_t>(W * H));
+        CHECK(count_set(noise_mask(a, n, 0)) == 18);
+        CHECK(count_set(noise_mask(a, n, 1)) == 83);
+        CHECK(count_set(noise_mask(a, n, 2)) == 148);
+        CHECK(count_set(noise_mask(a, n, 4)) == 192); // saturated: the frame is small
     }
 
-    SECTION( "the default dilation is the original's 2" ) {
-        CHECK( noise_mask( a, n ) == noise_mask( a, n, 2 ) );
+    SECTION("the default dilation is the original's 2") {
+        CHECK(noise_mask(a, n) == noise_mask(a, n, 2));
     }
 
-    SECTION( "spot-checked bits agree with the transcription" ) {
-        const auto mask = noise_mask( a, n, 2 );
+    SECTION("spot-checked bits agree with the transcription") {
+        const auto mask = noise_mask(a, n, 2);
         // Python: bits 0,1,2 and 5 set, 3 and 4 clear, the last pixel clear.
-        CHECK( mask[0] == 1 );
-        CHECK( mask[1] == 1 );
-        CHECK( mask[2] == 1 );
-        CHECK( mask[3] == 0 );
-        CHECK( mask[4] == 0 );
-        CHECK( mask[5] == 1 );
-        CHECK( mask[static_cast<std::size_t>( W ) * H - 1] == 0 );
+        CHECK(mask[0] == 1);
+        CHECK(mask[1] == 1);
+        CHECK(mask[2] == 1);
+        CHECK(mask[3] == 0);
+        CHECK(mask[4] == 0);
+        CHECK(mask[5] == 1);
+        CHECK(mask[static_cast<std::size_t>(W) * H - 1] == 0);
     }
 
-    SECTION( "a frame identical to itself yields an empty mask" ) {
-        CHECK( count_set( noise_mask( a, a, 2 ) ) == 0 );
+    SECTION("a frame identical to itself yields an empty mask") {
+        CHECK(count_set(noise_mask(a, a, 2)) == 0);
     }
 
-    SECTION( "dilation of a lone pixel is a radius-2 diamond of 13 pixels" ) {
-        image seed( 8, 8 );
-        seed.rgb[( 4 * 8 + 4 ) * 3] = 1;
-        const auto grown = dilate( raw_bits( seed ), 8, 8, 2 );
-        CHECK( count_set( grown ) == 13 );
-        CHECK( grown[4 * 8 + 2] == 1 ); // two steps left
-        CHECK( grown[4 * 8 + 6] == 1 ); // two steps right
-        CHECK( grown[2 * 8 + 4] == 1 ); // two steps up
-        CHECK( grown[6 * 8 + 4] == 1 ); // two steps down
-        CHECK( grown[3 * 8 + 3] == 1 ); // a diagonal, reached in two steps
-        CHECK( grown[2 * 8 + 2] == 0 ); // the Chebyshev corner: outside a diamond
+    SECTION("dilation of a lone pixel is a radius-2 diamond of 13 pixels") {
+        image seed(8, 8);
+        seed.rgb[(4 * 8 + 4) * 3] = 1;
+        const auto grown = dilate(raw_bits(seed), 8, 8, 2);
+        CHECK(count_set(grown) == 13);
+        CHECK(grown[4 * 8 + 2] == 1); // two steps left
+        CHECK(grown[4 * 8 + 6] == 1); // two steps right
+        CHECK(grown[2 * 8 + 4] == 1); // two steps up
+        CHECK(grown[6 * 8 + 4] == 1); // two steps down
+        CHECK(grown[3 * 8 + 3] == 1); // a diagonal, reached in two steps
+        CHECK(grown[2 * 8 + 2] == 0); // the Chebyshev corner: outside a diamond
     }
 
-    SECTION( "dilation is clipped at the frame edge" ) {
-        image seed( 4, 4 );
+    SECTION("dilation is clipped at the frame edge") {
+        image seed(4, 4);
         seed.rgb[0] = 1;
         // A full diamond is 13 cells; only the 6 inside the 4x4 frame survive.
-        CHECK( count_set( dilate( raw_bits( seed ), 4, 4, 2 ) ) == 6 );
+        CHECK(count_set(dilate(raw_bits(seed), 4, 4, 2)) == 6);
     }
 }
 
-TEST_CASE( "render_compare: changed_pixel_count matches the deno verdict", "[render_compare]" ) {
+TEST_CASE("render_compare: changed_pixel_count matches the deno verdict", "[render_compare]") {
     const image a = base_frame();
-    const image n = noisy_sibling( a );
-    const image c = changed_frame( a );
-    const auto mask = noise_mask( a, n, 2 );
+    const image n = noisy_sibling(a);
+    const image c = changed_frame(a);
+    const auto mask = noise_mask(a, n, 2);
 
-    SECTION( "the A/A pair changes nothing outside its own mask" ) {
-        const auto aa = changed_pixel_count( a, n, mask );
-        CHECK( aa.count == 0 );
-        CHECK( aa.pct == 0.0 );
-        CHECK( aa.max_delta == 0 );
-        CHECK( false == aa.box.has_value() );
-        CHECK( aa.within() );
+    SECTION("the A/A pair changes nothing outside its own mask") {
+        const auto aa = changed_pixel_count(a, n, mask);
+        CHECK(aa.count == 0);
+        CHECK(aa.pct == 0.0);
+        CHECK(aa.max_delta == 0);
+        CHECK(false == aa.box.has_value());
+        CHECK(aa.within());
     }
 
-    SECTION( "the deliberate change survives the mask" ) {
+    SECTION("the deliberate change survives the mask") {
         // The mask swallows the block's rim (within 2 px of a noise pixel); 4 interior pixels
         // remain, at bbox [6,6,7,9] with the block's full 120 red step.
-        const auto ch = changed_pixel_count( a, c, mask );
-        CHECK( ch.count == 4 );
-        CHECK( ch.pct == Catch::Approx( 2.0833 ) );
-        CHECK( ch.max_delta == 120 );
-        REQUIRE( ch.box.has_value() );
-        CHECK( ch.box->left == 6 );
-        CHECK( ch.box->top == 6 );
-        CHECK( ch.box->right == 7 );
-        CHECK( ch.box->bottom == 9 );
-        CHECK( ch.within() ); // 4 <= 1500: the gate is a noise allowance, not a change detector
+        const auto ch = changed_pixel_count(a, c, mask);
+        CHECK(ch.count == 4);
+        CHECK(ch.pct == Catch::Approx(2.0833));
+        CHECK(ch.max_delta == 120);
+        REQUIRE(ch.box.has_value());
+        CHECK(ch.box->left == 6);
+        CHECK(ch.box->top == 6);
+        CHECK(ch.box->right == 7);
+        CHECK(ch.box->bottom == 9);
+        CHECK(ch.within()); // 4 <= 1500: the gate is a noise allowance, not a change detector
     }
 
-    SECTION( "without a mask the whole block counts" ) {
-        const auto ch = changed_pixel_count( a, c, {} );
-        CHECK( ch.count == 32 );
-        CHECK( ch.pct == Catch::Approx( 16.6667 ) );
-        CHECK( ch.max_delta == 120 );
-        REQUIRE( ch.box.has_value() );
-        CHECK( ch.box->left == 3 );
-        CHECK( ch.box->top == 6 );
-        CHECK( ch.box->right == 10 );
-        CHECK( ch.box->bottom == 9 );
+    SECTION("without a mask the whole block counts") {
+        const auto ch = changed_pixel_count(a, c, {});
+        CHECK(ch.count == 32);
+        CHECK(ch.pct == Catch::Approx(16.6667));
+        CHECK(ch.max_delta == 120);
+        REQUIRE(ch.box.has_value());
+        CHECK(ch.box->left == 3);
+        CHECK(ch.box->top == 6);
+        CHECK(ch.box->right == 10);
+        CHECK(ch.box->bottom == 9);
     }
 
-    SECTION( "the threshold raises what counts as changed" ) {
+    SECTION("the threshold raises what counts as changed") {
         // The A/A noise is +/-1: a threshold of 2 hides it even with no mask at all.
-        CHECK( changed_pixel_count( a, n, {}, 0 ).count == 18 );
-        CHECK( changed_pixel_count( a, n, {}, 2 ).count == 0 );
+        CHECK(changed_pixel_count(a, n, {}, 0).count == 18);
+        CHECK(changed_pixel_count(a, n, {}, 2).count == 0);
         // The block moved red +120 and green +60, so raising the threshold peels the rim of
         // green-only pixels first: 32 -> 30 at 50, 17 at 100, nothing above 120.
-        CHECK( changed_pixel_count( a, c, {}, 50 ).count == 30 );
-        CHECK( changed_pixel_count( a, c, {}, 100 ).count == 17 );
-        CHECK( changed_pixel_count( a, c, {}, 121 ).count == 0 );
+        CHECK(changed_pixel_count(a, c, {}, 50).count == 30);
+        CHECK(changed_pixel_count(a, c, {}, 100).count == 17);
+        CHECK(changed_pixel_count(a, c, {}, 121).count == 0);
         // Masked, the same ladder leaves 4, then 1, then nothing.
-        CHECK( changed_pixel_count( a, c, mask, 50 ).count == 4 );
-        CHECK( changed_pixel_count( a, c, mask, 100 ).count == 1 );
-        CHECK( changed_pixel_count( a, c, mask, 121 ).count == 0 );
+        CHECK(changed_pixel_count(a, c, mask, 50).count == 4);
+        CHECK(changed_pixel_count(a, c, mask, 100).count == 1);
+        CHECK(changed_pixel_count(a, c, mask, 121).count == 0);
     }
 
-    SECTION( "within() implements the gate inclusively" ) {
-        auto verdict = changed_pixel_count( a, c, {} );
+    SECTION("within() implements the gate inclusively") {
+        auto verdict = changed_pixel_count(a, c, {});
         verdict.count = 1500;
-        CHECK( verdict.within() );
-        CHECK( verdict.within( 1500 ) );
+        CHECK(verdict.within());
+        CHECK(verdict.within(1500));
         verdict.count = 1501;
-        CHECK_FALSE( verdict.within() );
-        CHECK_FALSE( verdict.within( 1501 ) );
-        CHECK( verdict.within( 1502 ) );
+        CHECK_FALSE(verdict.within());
+        CHECK_FALSE(verdict.within(1500));
+        CHECK(verdict.within(1501));
     }
 }
 
-TEST_CASE( "render_compare: image_from_rgba drops alpha faithfully", "[render_compare]" ) {
+TEST_CASE("render_compare: image_from_rgba drops alpha faithfully", "[render_compare]") {
     std::vector<std::uint8_t> rgba;
-    for( int i = 0; i < 2 * 2 * 4; ++i ) {
-        rgba.push_back( static_cast<std::uint8_t>( i ) );
-    }
-    const image img = image_from_rgba( rgba, 2, 2 );
-    CHECK( img.width == 2 );
-    CHECK( img.height == 2 );
-    REQUIRE( img.rgb.size() == 12 );
-    CHECK( img.rgb[0] == 0 );
-    CHECK( img.rgb[1] == 1 );
-    CHECK( img.rgb[2] == 2 ); // byte 3, the alpha, is skipped
-    CHECK( img.rgb[3] == 4 );
-    CHECK( img.rgb[11] == 14 );
+    for (int i = 0; i < 2 * 2 * 4; ++i) { rgba.push_back(static_cast<std::uint8_t>(i)); }
+    const image img = image_from_rgba(rgba, 2, 2);
+    CHECK(img.width == 2);
+    CHECK(img.height == 2);
+    REQUIRE(img.rgb.size() == 12);
+    CHECK(img.rgb[0] == 0);
+    CHECK(img.rgb[1] == 1);
+    CHECK(img.rgb[2] == 2); // byte 3, the alpha, is skipped
+    CHECK(img.rgb[3] == 4);
+    CHECK(img.rgb[11] == 14);
 
-    CHECK_THROWS_AS( image_from_rgba( rgba, 2, 3 ), std::invalid_argument );
-    CHECK_THROWS_AS( image_from_rgba( {}, 2, 2 ), std::invalid_argument );
-    CHECK_THROWS_AS( image_from_rgba( rgba, 0, 0 ), std::invalid_argument );
+    CHECK_THROWS_AS(image_from_rgba(rgba, 2, 3), std::invalid_argument);
+    CHECK_THROWS_AS(image_from_rgba({}, 2, 2), std::invalid_argument);
+    CHECK_THROWS_AS(image_from_rgba(rgba, 0, 0), std::invalid_argument);
 }
 
-TEST_CASE( "render_compare: pixels_of matches the deno region maths", "[render_compare]" ) {
-    const image a( W, H );
-    CHECK( pixels_of( a, {} ).area() == W * H );
-    const pixel_rect centre = pixels_of( a, region{ .x = 0.25, .y = 0.25, .w = 0.5, .h = 0.5 } );
-    CHECK( centre.left == 4 );
-    CHECK( centre.top == 3 );
-    CHECK( centre.right == 12 );
-    CHECK( centre.bottom == 9 );
-    CHECK( centre.area() == 48 );
+TEST_CASE("render_compare: pixels_of matches the deno region maths", "[render_compare]") {
+    const image a(W, H);
+    CHECK(pixels_of(a, {}).area() == W * H);
+    const pixel_rect centre = pixels_of(a, region{.x = 0.25, .y = 0.25, .w = 0.5, .h = 0.5});
+    CHECK(centre.left == 4);
+    CHECK(centre.top == 3);
+    CHECK(centre.right == 12);
+    CHECK(centre.bottom == 9);
+    CHECK(centre.area() == 48);
     // A zero-width region still covers one column: the original clamps with max(left+1, ...).
-    CHECK( pixels_of( a, region{ .x = 0.5, .y = 0.5, .w = 0.0, .h = 0.0 } ).area() == 6 );
+    CHECK(pixels_of(a, region{.x = 0.5, .y = 0.5, .w = 0.0, .h = 0.5}).area() == 6);
+    // And a region with no extent at all covers exactly one pixel.
+    CHECK(pixels_of(a, region{.x = 0.5, .y = 0.5, .w = 0.0, .h = 0.0}).area() == 1);
     // Clamped to the frame, never empty.
-    const pixel_rect corner = pixels_of( a, region{ .x = 0.9, .y = 0.9, .w = 1.0, .h = 1.0 } );
-    CHECK( corner.right == W );
-    CHECK( corner.bottom == H );
-    CHECK( corner.area() > 0 );
+    const pixel_rect corner = pixels_of(a, region{.x = 0.9, .y = 0.9, .w = 1.0, .h = 1.0});
+    CHECK(corner.right == W);
+    CHECK(corner.bottom == H);
+    CHECK(corner.area() > 0);
 }
