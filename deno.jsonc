@@ -54,6 +54,10 @@
       "description": "agent lane: start a tmux agent session in a fresh worktree for an issue, then status / attach / stop (see tools/lane/main.ts)",
       "command": "deno run -A tools/lane/main.ts",
     },
+    "fanout": {
+      "description": "report a header's fan-out: src/tests TUs that reach it by transitive #include, direct includers, propagating headers (see tools/fanout/main.ts)",
+      "command": "deno run --allow-read --allow-run=ninja,git tools/fanout/main.ts",
+    },
     "test:check": {
       "description": "the check and lane tools' own tests, including the ones that spawn processes and write logs",
       "command": "deno test -A tools/check tools/lane tools/repo_rules",
@@ -80,6 +84,7 @@
       "tools/repo_rules",
       "tools/format",
       "tools/sweep",
+      "tools/fanout",
     ],
   },
   "lint": {
@@ -93,6 +98,7 @@
       "tools/repo_rules",
       "tools/format",
       "tools/sweep",
+      "tools/fanout",
     ],
     "plugins": ["./tools/repo_rules/plugin.ts"],
     "rules": {
@@ -120,6 +126,7 @@
       "tools/repo_rules",
       "tools/format",
       "tools/sweep",
+      "tools/fanout",
       "doc",
       "docs",
       "*.md",
