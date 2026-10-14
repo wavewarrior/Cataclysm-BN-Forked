@@ -38,13 +38,13 @@ inline constexpr auto quarantine_entries = std::to_array<quarantine_entry>({
         .name = "vehicle_efficiency",
         .expires = "2026-10-27",
         .reason =
-            "flaky on CPU compute with pool off only: seed 1 failed 2 of 5 runs, seed 3 1 of 1, seeds 2 and 4-10 passed; default path passed all 10 seeds",
+            "flaky on CPU compute with pool off only: seed 1 failed 2 of 5 runs, seed 3 1 of 1, seeds 2 and 4-10 passed; default path passed all 10 seeds; run explicitly 16 at once, 48 runs per arm: 1 failure on the default path and 1 on CPU compute with the pool off",
     },
     {
         .name = "Items rot away",
         .expires = "2026-10-27",
         .reason =
-            "unexplained: failed in the runner's forked run and its fresh CPU re-run while the box ran 32 children (seed 3); passed alone on seeds 1-10 on default and CPU/pool-off paths; not yet run under load again (the runner skips quarantined cases, so seeds 4-8 did not exercise it)",
+            "unexplained: failed in the runner's forked run and its fresh CPU re-run while the box ran 32 children (seed 3); passed alone on seeds 1-10 on default and CPU/pool-off paths; run explicitly 16 at once, 48 runs per arm: 1 failure (a segfault) on the default path and 1 on CPU compute with the pool off",
     },
     {
         .name = "box2d_authority_vehicle_hits_vehicle",
