@@ -103,6 +103,17 @@ void gpu_device::init(SDL_Window* window, bool debug, bool vsync) {
         << "SDL_GPU device created. driver=" << (driver ? driver : "?") << " swapchain_format="
         << static_cast<int>(swap_format) << " vsync=" << (vsync ? "on" : "off")
         << " present=" << present_name << " ret=" << (present_ok ? 1 : 0);
+#if defined(SDL_PROP_GPU_DEVICE_NAME_STRING)
+    // Which physical device the render path got matters: Windows builds ship a software Vulkan
+    // ICD (lavapipe) next to the exe, and a render check on it proves nothing about a real GPU.
+    if (const auto props = SDL_GetGPUDeviceProperties(device.get()); props != 0) {
+        DebugLogFL(DL::Info, DC::Main)
+            << "SDL_GPU render device: "
+            << SDL_GetStringProperty(props, SDL_PROP_GPU_DEVICE_NAME_STRING, "?") << " driver="
+            << SDL_GetStringProperty(props, SDL_PROP_GPU_DEVICE_DRIVER_NAME_STRING, "?") << " "
+            << SDL_GetStringProperty(props, SDL_PROP_GPU_DEVICE_DRIVER_VERSION_STRING, "?");
+    }
+#endif
 }
 
 void gpu_device::shutdown() noexcept {
