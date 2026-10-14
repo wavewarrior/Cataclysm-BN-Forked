@@ -583,23 +583,21 @@ auto init() -> void {
     s_device = device;
 }
 
-// D2 — prefer the renderer's device, fall back to our own only in the headless case.
+// D2 — the device cata_gpu owns wins, then the renderer's, then nullptr.
 //
-// In the game binary lighting::gpu_device owns the single SDL_GPUDevice, so this returns that and
-// cata_gpu owns nothing. In the headless test binary there is no renderer, so s_device holds
-// whatever init() created and we return that instead.
+// A device cata_gpu created itself owns the pipelines and buffers built on it, so every later
+// dispatch and the shutdown paths must use that same device. In the windowless test process
+// cata_gpu creates its device first and the render tier brings up the renderer's later; returning
+// the renderer's device once it was ready handed D3D12 objects to the Vulkan device and crashed
+// at exit (0xC0000005 / 0xC0000374, 7 of 10 runs). In the game binary lighting::gpu_device owns
+// the single SDL_GPUDevice and cata_gpu adopts it (init() creates none), so s_device stays null
+// and this returns the renderer's device.
 //
 // Returning nullptr is upstream's own documented "device creation failed" contract
 // (src/compute/gpu_platform.h), and compute_backend.h::selected_backend() already degrades to
-// backend::cpu_compute on nullptr. That is exactly the behaviour wanted for the window between
-// process start and the renderer becoming ready: a not-yet-ready renderer falls back to the CPU
-// lightmap rather than dispatching against a null device.
+// backend::cpu_compute on nullptr: a not-yet-ready renderer falls back to the CPU lightmap rather
+// than dispatching against a null device.
 auto get_device() -> SDL_GPUDevice* {
-    // A device cata_gpu created itself owns the pipelines and buffers built on it, so every later
-    // dispatch and the shutdown paths must use that same device. Returning the renderer's device
-    // as soon as it became ready (the windowless test process creates cata_gpu's device first and
-    // the renderer's later) handed objects of one device to another. In the game cata_gpu adopts
-    // the renderer's device and owns none, so this falls through to the renderer as before.
     if (s_device != nullptr) { return s_device; }
     auto& renderer_device = lighting::get_render_state().device();
     if (renderer_device.ready()) { return renderer_device.raw(); }
