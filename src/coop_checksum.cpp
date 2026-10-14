@@ -10,7 +10,6 @@
 #include "mapdata.h"
 #include "npc.h"
 #include "submap.h"
-#include "vehicle.h"
 
 auto coop_world_checksum(int radius) -> uint64_t {
     auto h = COOP_FNV_OFFSET;

@@ -76,7 +76,6 @@
 #include "ui.h"
 #include "uistate.h"
 #include "veh_interact.h"
-#include "vehicle.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 

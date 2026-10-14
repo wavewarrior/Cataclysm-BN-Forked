@@ -16,7 +16,6 @@
 #include "projectile.h"
 #include "state_helpers.h"
 #include "type_id.h"
-#include "vehicle.h"
 #include "vpart_position.h"
 
 #include <algorithm>

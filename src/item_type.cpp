@@ -95,7 +95,6 @@
 #include "units_energy.h"
 #include "units_utility.h"
 #include "value_ptr.h"
-#include "vehicle.h"
 #include "vehicle_part.h"
 #include "vitamin.h"
 #include "vpart_position.h"

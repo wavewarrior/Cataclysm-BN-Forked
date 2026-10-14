@@ -12,7 +12,6 @@
 #include "mapbuffer.h"
 #include "rng.h"
 #include "submap_load_manager.h"
-#include "vehicle.h"
 #include "vehicle_part.h"
 #include "vpart_range.h"
 #include "weather.h"

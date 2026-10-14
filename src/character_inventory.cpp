@@ -26,7 +26,6 @@
 #include "translations.h"
 #include "type_id.h"
 #include "units.h"
-#include "vehicle.h"
 #include "vehicle_selector.h"
 #include "vpart_position.h"
 

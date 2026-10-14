@@ -15,7 +15,6 @@
 #include "type_id.h"
 #include "type_id_implement.h"
 #include "units_angle.h"
-#include "vehicle.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 
