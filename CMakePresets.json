@@ -35,17 +35,6 @@
       }
     },
     {
-      "name": "windows-fast",
-      "inherits": ["windows-tiles-sounds-x64-msvc"],
-      "displayName": "Windows Fast Build (MSVC, no LTO)",
-      "description": "The Windows edit-loop preset: the MSVC preset with link-time optimisation off, so a relink takes seconds to minutes instead of the full whole-program link.",
-      "cacheVariables": {
-        "CMAKE_PROJECT_INCLUDE_BEFORE": "${sourceDir}/build-scripts/windows-tiles-sounds-x64-msvc.cmake",
-        "CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE": "OFF",
-        "CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO": "OFF"
-      }
-    },
-    {
       "name": "linux-slim",
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "displayName": "Linux Slim Build (Tiles, Sounds)",
@@ -451,13 +440,6 @@
       "configuration": "RelWithDebInfo",
       "targets": ["cataclysm-bn-tiles", "cata_test-tiles", "json_formatter", "translations"],
       "description": "Release build with debug symbols for Windows with tiles and sounds using MSVC."
-    },
-    {
-      "name": "windows-fast",
-      "configurePreset": "windows-fast",
-      "configuration": "RelWithDebInfo",
-      "targets": ["cataclysm-bn-tiles", "cata_test-tiles"],
-      "description": "The Windows edit-loop build: RelWithDebInfo without link-time optimisation."
     },
     {
       "name": "linux-slim",
