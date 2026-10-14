@@ -2,7 +2,7 @@ import { assertEquals, assertThrows } from "@std/assert"
 import { parseArgs } from "./args.ts"
 import { DEFAULT_BASE } from "./base.ts"
 
-const PLAIN = { noFix: false, dryRun: false, help: false }
+const PLAIN = { noFix: false, dryRun: false, macos: false, help: false }
 
 Deno.test("no arguments means the defaults: fix on, base unset, help off", () => {
   assertEquals(parseArgs([]), PLAIN)
@@ -21,6 +21,7 @@ Deno.test("flags parse independently of order and a value flag consumes its valu
     dryRun: true,
   })
   assertEquals(parseArgs(["-h"]).help, true)
+  assertEquals(parseArgs(["--macos"]), { ...PLAIN, macos: true })
 })
 
 Deno.test("a value flag without a usable value is rejected", () => {

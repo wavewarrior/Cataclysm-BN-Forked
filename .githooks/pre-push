@@ -3,29 +3,65 @@
 # the commit it tested to <CHECK_LOG_DIR or .check>/passed, and every pushed branch tip must match.
 # The stamp is written where `check` ran (the Linux box); a push from another clone needs the stamp
 # copied there, or the override below.
-# A deliberate override, visible in the command line:  CHECK_SKIP=1 git push
+#
+# Override, deliberate and recorded:  CHECK_SKIP='why' git push
+# Every skip is appended to <CHECK_LOG_DIR or .check>/skips.log (time, user, ref, commit, reason) and
+# printed on stderr. The log is local to this clone: it is an audit trail, not an enforcement.
+#
+# Advisory only, never blocks: a push that changes a header under src/ without a `macos-passed`
+# stamp for its tip says so, because the Linux build never compiles TILES or __APPLE__ branches.
+# Get the stamp on a Mac with `deno task check --macos`.
+#
 # Enable once per clone: git config core.hooksPath .githooks
 set -euo pipefail
 
-[[ "${CHECK_SKIP:-}" == "1" ]] && exit 0
-
 repo_root="$(git rev-parse --show-toplevel)"
-stamp="${CHECK_LOG_DIR:-$repo_root/.check}/passed"
-passed=""
-[[ -f "$stamp" ]] && passed="$(<"$stamp")"
+log_dir="${CHECK_LOG_DIR:-$repo_root/.check}"
 zero="0000000000000000000000000000000000000000"
 
-blocked=0
-while read -r local_ref local_sha _remote_ref _remote_sha; do
+read_stamp() { [[ -f "$log_dir/$1" ]] && cat "$log_dir/$1" || true; }
+passed="$(read_stamp passed)"
+macos_passed="$(read_stamp macos-passed)"
+
+refs=()
+while read -r local_ref local_sha remote_ref remote_sha; do
     [[ "$local_sha" == "$zero" ]] && continue # a branch deletion
     [[ "$local_ref" == refs/tags/* ]] && continue
-    if [[ "$local_sha" != "$passed" ]]; then
-        echo "pre-push: $local_ref at ${local_sha:0:10} has not passed \`deno task check\` on this clone (stamp: ${passed:0:10})." >&2
+    refs+=("$local_ref $local_sha $remote_sha")
+done
+
+if [[ -n "${CHECK_SKIP:-}" ]]; then
+    mkdir -p "$log_dir"
+    who="$(git config user.name || echo unknown)"
+    reason="$CHECK_SKIP"
+    [[ "$reason" == "1" ]] && reason="(no reason given; use CHECK_SKIP='why')"
+    for entry in ${refs[@]+"${refs[@]}"}; do
+        read -r ref sha _ <<<"$entry"
+        printf '%s user=%s ref=%s commit=%s reason=%s\n' \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$who" "$ref" "${sha:0:10}" "$reason" >>"$log_dir/skips.log"
+        echo "pre-push: CHECK SKIPPED for $ref at ${sha:0:10}: $reason (logged in $log_dir/skips.log)" >&2
+    done
+    exit 0
+fi
+
+blocked=0
+for entry in ${refs[@]+"${refs[@]}"}; do
+    read -r ref sha remote_sha <<<"$entry"
+    if [[ "$sha" != "$passed" ]]; then
+        echo "pre-push: $ref at ${sha:0:10} has not passed \`deno task check\` on this clone (stamp: ${passed:0:10})." >&2
         blocked=1
+        continue
+    fi
+    # Advisory: header changes want a macOS compile.
+    base="$remote_sha"
+    [[ "$base" == "$zero" ]] && base="$(git merge-base origin/feature/improvements "$sha" 2>/dev/null || true)"
+    if [[ -n "$base" ]] && [[ "$sha" != "$macos_passed" ]] &&
+        git diff --name-only "$base" "$sha" -- 'src/*.h' 'src/*.hpp' 2>/dev/null | grep -q .; then
+        echo "pre-push: note: $ref changes a header under src/ and has no macOS stamp for ${sha:0:10}; run \`deno task check --macos\` on a Mac (the Linux build never compiles TILES or __APPLE__ branches)." >&2
     fi
 done
 
 if ((blocked)); then
-    echo "pre-push: run \`deno task check\` on the Linux executor and push from there, or override with CHECK_SKIP=1." >&2
+    echo "pre-push: run \`deno task check\` on the Linux executor and copy its stamp here, or override with CHECK_SKIP='why'." >&2
     exit 1
 fi

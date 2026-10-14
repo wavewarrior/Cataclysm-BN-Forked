@@ -4,7 +4,7 @@ import { DEFAULT_BASE } from "./base.ts"
 import { isFormattableCpp } from "../format/cpp_common.ts"
 import type { CheckOptions } from "./args.ts"
 
-export type StepId = "guard" | "autofix" | "tools" | "build" | "tests" | "tidy" | "coop"
+export type StepId = "guard" | "autofix" | "tools" | "build" | "tests" | "tidy" | "coop" | "macos"
 
 /// The order `check` runs the steps in. A step may be planned away (nothing to fix, a co-op-free
 /// change) but never reordered: everything after `build` needs the binaries `build` produced.
@@ -16,6 +16,7 @@ export const STEP_ORDER: readonly StepId[] = [
   "tests",
   "tidy",
   "coop",
+  "macos",
 ]
 
 /// A step that cannot run because something before it failed is reported skipped, never passed.
@@ -63,6 +64,13 @@ export function classifyFiles(files: readonly string[]): ChangedFiles {
 /// change that touches no `src/coop*` or `src/net*` file drops the co-op run.
 export function planSteps(options: CheckOptions, diff: ChangedFiles): StepId[] {
   const planned: StepId[] = ["guard"]
+  if (options.macos) {
+    // The compile gate only: no autofix, no Linux build, no suite, no tidy.
+    if (options.dryRun) return planned
+    if (diff.all.some((f) => TOOLING_TS.test(f))) planned.push("tools")
+    planned.push("macos")
+    return planned
+  }
   if (!options.noFix && !options.dryRun && (diff.cpp.length > 0 || diff.json.length > 0)) {
     planned.push("autofix")
   }

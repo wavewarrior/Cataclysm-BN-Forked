@@ -33,6 +33,7 @@ import {
 const PRESET = "linux-fast"
 const TEST_BIN = `out/build/${PRESET}/tests/cata_test-tiles`
 const GAME_BIN = `out/build/${PRESET}/src/cataclysm-bn-tiles`
+const MAC_PRESET = "osx-arm-slim"
 
 const flag = (name: string): string | undefined => Deno.env.get(name) || undefined
 
@@ -106,14 +107,21 @@ async function main(): Promise<number> {
     console.log(USAGE)
     return 0
   }
+  if (options.macos && Deno.build.os !== "darwin") {
+    console.error("check: --macos builds osx-arm-slim and runs on a Mac only")
+    return 2
+  }
   const base = options.baseFlag ?? flag("CHECK_BASE") ?? DEFAULT_BASE
   const logDir = flag("CHECK_LOG_DIR") ?? ".check"
   const jobs = options.jobs ?? navigator.hardwareConcurrency ?? 4
   const events: StepEvent[] = []
   const logPath = join(logDir, "events.jsonl")
   await Deno.mkdir(logDir, { recursive: true })
+  // The macOS gate stamps `macos-passed`; the box's run stamps `passed`. Neither may vouch for the
+  // other, and a stale one must not outlive the run that replaces it.
+  const stampName = options.macos ? "macos-passed" : "passed"
   // A stale stamp from an earlier run must not outlive this one.
-  await Deno.remove(join(logDir, "passed")).catch(() => {})
+  await Deno.remove(join(logDir, stampName)).catch(() => {})
   const stampStart = await stampSnapshot(logDir)
 
   const record = async (step: StepId, status: StepStatus, started: number, detail: string) => {
@@ -214,6 +222,49 @@ async function main(): Promise<number> {
     }
   }
 
+  // (m) The opt-in macOS compile gate: the Linux build never compiles TILES or __APPLE__ branches,
+  // which is where an include or header change breaks first. Builds both binaries, runs no tests.
+  if (planned.includes("macos")) {
+    started = Date.now()
+    const buildDir = `out/build/${MAC_PRESET}`
+    const configured = await Deno.stat(join(buildDir, "CMakeCache.txt")).then(() =>
+        true, () => false)
+      ? { code: 0 }
+      : await runTee(["cmake", "--preset", MAC_PRESET], join(logDir, "macos-configure.log"))
+    const built = configured.code === 0
+      ? await runTee(
+        [
+          "cmake",
+          "--build",
+          "--preset",
+          MAC_PRESET,
+          "--target",
+          "cataclysm-bn-tiles",
+          "cata_test-tiles",
+        ],
+        join(logDir, "macos-build.log"),
+      )
+      : configured
+    const ok = configured.code === 0 && built.code === 0
+    await record(
+      "macos",
+      ok ? "pass" : "fail",
+      started,
+      ok ? `preset ${MAC_PRESET}: both binaries built, no tests run` : `exit ${built.code}`,
+    )
+    const code = exitCode(events)
+    const end = await stampSnapshot(logDir)
+    const stamped = stampedCommit({
+      code,
+      headAtStart: stampStart.head,
+      headAtEnd: end.head,
+      dirtyAtStart: stampStart.dirty,
+      dirtyAtEnd: end.dirty,
+    })
+    if (stamped !== null) await Deno.writeTextFile(join(logDir, stampName), stamped + "\n")
+    return code
+  }
+
   // (c) Configure (offline when a seed dir is given) and build both shipping binaries.
   started = Date.now()
   const seedDir = flag("CHECK_SEED_DIR")
@@ -281,7 +332,7 @@ async function main(): Promise<number> {
     dirtyAtStart: stampStart.dirty,
     dirtyAtEnd: stampEnd.dirty,
   })
-  if (stamped !== null) await Deno.writeTextFile(join(logDir, "passed"), stamped + "\n")
+  if (stamped !== null) await Deno.writeTextFile(join(logDir, stampName), stamped + "\n")
   return code
 }
 

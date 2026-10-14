@@ -12,8 +12,20 @@ import {
 const options = (over: Partial<CheckOptions> = {}): CheckOptions => ({
   noFix: false,
   dryRun: false,
+  macos: false,
   help: false,
   ...over,
+})
+
+Deno.test("the macOS gate plans guard, tools only for tooling changes, then the macos build", () => {
+  const mac = options({ macos: true })
+  assertEquals(planSteps(mac, classifyFiles(["src/map.h"])), ["guard", "macos"])
+  assertEquals(planSteps(mac, classifyFiles(["src/map.h", "tools/check/main.ts"])), [
+    "guard",
+    "tools",
+    "macos",
+  ])
+  assertEquals(planSteps({ ...mac, dryRun: true }, classifyFiles(["src/map.h"])), ["guard"])
 })
 
 Deno.test("classification takes project C++ under src and tests, not vendored C++, JSON or the rest", () => {
