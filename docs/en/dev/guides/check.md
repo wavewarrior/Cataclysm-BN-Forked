@@ -63,8 +63,8 @@ post-build `deno task docs:gen` runs `deno fmt` over the whole tree. Regenerate 
 A passing run writes the commit it tested to `.check/passed` (only when every step passed and the
 tracked tree matched that commit). `.githooks/pre-push` refuses a push whose branch tip is not that
 commit, so a push without a passing `check` fails locally. The stamp is written where `check` ran, on
-the Linux executor; the flow is to copy it back to the clone you push from (`scp` the file, or let
-the `deno task box` command do it) and push there. Compare the stamp with `git rev-parse HEAD`
+the Linux executor; the flow is to copy it back to the clone you push from (`scp` the file; there is
+no command for it yet) and push there. Compare the stamp with `git rev-parse HEAD`
 first: they must match.
 
 Skipping is deliberate and recorded: `CHECK_SKIP='why' git push` pushes anyway, prints the skip on
