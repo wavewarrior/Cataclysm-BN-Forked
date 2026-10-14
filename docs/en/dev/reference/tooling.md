@@ -94,7 +94,7 @@ sudo apt-get install \
   clang-22 libclang-22-dev llvm-22 llvm-22-dev clang-tidy-22
 ```
 
-add `CATA_CLANG_TIDY_PLUGIN=ON` to cmake flags when configuring the build.
+build it standalone: `cmake -S tools/clang-tidy-plugin -B out/build/linux-fast/tools/clang-tidy-plugin -G Ninja`.
 
 ### Build plugin on Fedora 40
 
@@ -107,7 +107,7 @@ Also install these additional dependencies:
 sudo dnf install clang-devel llvm-devel clang-tools-extra-devel
 ```
 
-add `CATA_CLANG_TIDY_PLUGIN=ON` to cmake flags when configuring the build.
+build it standalone: `cmake -S tools/clang-tidy-plugin -B out/build/linux-fast/tools/clang-tidy-plugin -G Ninja`.
 
 ### Using the plugin
 

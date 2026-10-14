@@ -89,6 +89,7 @@ Release*/
 CMakeUserPresets.json
 out/
 .sweep/
+.check/
 RelWithDebInfo*/
 
 # Legacy bnplay fixture library (world saves cloned by the deleted `fixture` verb)
