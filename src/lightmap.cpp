@@ -442,6 +442,312 @@ auto apply_cpu_colored_light_3d(map& here, const cpu_colored_light_opt& opt) -> 
 
 } // namespace
 
+// Schraudolph's algorithm with John's constants
+static inline float fastexp(float x) {
+    union {
+        float f;
+        int i;
+    } u, v;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunknown-pragmas"
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic ignored "-Wimplicit-int-float-conversion"
+    u.i = static_cast<long long>(6051102 * x + 1056478197);
+    v.i = static_cast<long long>(1056478197 - 6051102 * x);
+#pragma GCC diagnostic pop
+    return u.f / v.f;
+}
+
+static float light_calc(const float& numerator, const float& transparency, const int& distance) {
+    // Light uses exponential attenuation divided by linear distance.
+    return numerator / (fastexp(transparency * distance) * distance);
+}
+
+static bool light_check(const float& transparency, const float& intensity) {
+    return transparency > LIGHT_TRANSPARENCY_SOLID && intensity > LIGHT_AMBIENT_LOW;
+}
+
+static float light_from_lookup(
+    const float& numerator, const float& transparency, const int& distance) {
+    return numerator * transparency / distance;
+}
+
+// Light model for apply_light_source / apply_directional_light.
+// Uses fastexp plus linear distance falloff; lookup_calc provides the matching fast
+// path for the common open-air / weather transparency cases.
+static const light_model k_light_model =
+    {light_calc, light_check, update_light, nullptr, light_from_lookup, accumulate_transparency};
+
+namespace {
+
+struct apply_directional_light_options {
+    tripoint_bub_ms p;
+    int direction = 0;
+    float luminance = 0.0f;
+    uint32_t color_rgb = 0u;
+};
+struct apply_light_arc_options {
+    tripoint_bub_ms p;
+    units::angle angle = 0_degrees;
+    float luminance = 0.0f;
+    units::angle wideangle = 30_degrees;
+    uint32_t color_rgb = 0u;
+};
+struct apply_light_ray_options {
+    std::vector<bool>& lit;
+    tripoint_bub_ms s;
+    tripoint_bub_ms e;
+    float luminance = 0.0f;
+    uint32_t color_rgb = 0u;
+};
+
+// Queue a light for the end of generate_lightmap, so redundant rays are skipped.
+auto add_light_source(
+    level_cache& cache, const tripoint_bub_ms& p, const float luminance, const uint32_t color_rgb = 0u)
+    -> void {
+    auto& light_source_buffer = cache.light_source_buffer;
+    const auto idx = cache.idx(p.x(), p.y());
+    if (light_source_buffer[idx] <= 0.0f && cache.colored_light_source_buffer[idx] <= 0.0f) {
+        cache.light_source_points.push_back(p.xy());
+    }
+    light_source_buffer[idx] = std::max(luminance, light_source_buffer[idx]);
+    if (colored_lighting && color_rgb != 0u
+        && luminance >= cache.colored_light_source_buffer[idx]) {
+        cache.colored_light_source_buffer[idx] = luminance;
+        cache.light_source_color_buffer[idx] = color_rgb;
+    }
+}
+
+// Handle just cardinal directions. `weather` is the map's transparency lookup.
+auto apply_directional_light(
+    level_cache& cache, const exp_lookup* weather, const apply_directional_light_options& opt)
+    -> void {
+    const auto p2 = opt.p.xy();
+    auto* lm_data = cache.lm.data();
+    auto* trans_data = cache.transparency_cache.data();
+    auto* blocked_data = cache.vehicle_obscured_cache.data();
+    const int sx = cache.cache_x;
+    const int sy = cache.cache_y;
+
+    // direction convention: the value names the half-space this cast WRITES,
+    // via the octant masks below (90=OCTANT_NORTH covers the yy=-1 half, i.e.
+    // light travelling north from p; 0=EAST, 270=SOUTH, 180=WEST).  It is not a
+    // bearing the light comes from.  Each maps to the two octants covering the
+    // half-space in k_octant_xforms.
+    auto mask = uint8_t{};
+    if (opt.direction == 90) {
+        mask = OCTANT_NORTH;
+    } else if (opt.direction == 0) {
+        mask = OCTANT_EAST;
+    } else if (opt.direction == 270) {
+        mask = OCTANT_SOUTH;
+    } else if (opt.direction == 180) {
+        mask = OCTANT_WEST;
+    }
+
+    if (mask != 0) {
+        auto colored_context = cpu_colored_light_cache_context{};
+        castLightOctants(
+            lm_data, trans_data, blocked_data, sx, sy, p2, 0, opt.luminance, k_light_model, mask,
+            weather, make_colored_light_callback(cache, opt.color_rgb, colored_context));
+    }
+}
+
+auto apply_light_ray(level_cache& cache_ref, const apply_light_ray_options& opt) -> void {
+    auto a = point_bub_ms(std::abs(opt.e.x() - opt.s.x()) * 2, std::abs(opt.e.y() - opt.s.y()) * 2);
+    auto d = point_bub_ms((opt.s.x() < opt.e.x()) ? 1 : -1, (opt.s.y() < opt.e.y()) ? 1 : -1);
+    auto p = opt.s.xy();
+
+    // TODO: Invert that z comparison when it's sane
+    if (opt.s.z() != opt.e.z() || (opt.s.x() == opt.e.x() && opt.s.y() == opt.e.y())) { return; }
+
+    auto* lm_data = cache_ref.lm.data();
+    auto* trans_data = cache_ref.transparency_cache.data();
+    const int sx = cache_ref.cache_x;
+    const int sy = cache_ref.cache_y;
+
+    auto distance = 1.0f;
+    auto transparency = LIGHT_TRANSPARENCY_OPEN_AIR;
+    const float scaling_factor =
+        static_cast<float>(rl_dist(opt.s, opt.e)) / static_cast<float>(square_dist(opt.s, opt.e));
+    // TODO: [lightmap] Pull out the common code here rather than duplication
+    if (a.x() > a.y()) {
+        int t = a.y() - (a.x() / 2);
+        do {
+            if (t >= 0) {
+                p.y() += d.y();
+                t -= a.x();
+            }
+
+            p.x() += d.x();
+            t += a.y();
+
+            // TODO: clamp coordinates to map bounds before this method is called.
+            if (p.x() >= 0 && p.y() >= 0 && p.x() < sx && p.y() < sy) {
+                const int idx = p.x() * sy + p.y();
+                auto current_transparency = trans_data[idx];
+                auto is_opaque = current_transparency == LIGHT_TRANSPARENCY_SOLID;
+                if (!opt.lit[idx]) {
+                    // Multiple rays will pass through the same squares so we need to record that
+                    opt.lit[idx] = true;
+                    auto lm_val = opt.luminance / (fastexp(transparency * distance) * distance);
+                    lm_data[idx] = std::max(lm_data[idx], lm_val);
+                    if (colored_lighting && opt.color_rgb != 0u) {
+                        write_colored_light_cache(cache_ref, idx, lm_val, opt.color_rgb);
+                    }
+                }
+                if (is_opaque) { break; }
+                // Cumulative average of the transparency values encountered.
+                transparency = ((distance - 1.0) * transparency + current_transparency) / distance;
+            } else {
+                break;
+            }
+
+            distance += scaling_factor;
+        } while (!(p.x() == opt.e.x() && p.y() == opt.e.y()));
+    } else {
+        int t = a.x() - (a.y() / 2);
+        do {
+            if (t >= 0) {
+                p.x() += d.x();
+                t -= a.y();
+            }
+
+            p.y() += d.y();
+            t += a.x();
+
+            if (p.x() >= 0 && p.y() >= 0 && p.x() < sx && p.y() < sy) {
+                const int idx = p.x() * sy + p.y();
+                auto current_transparency = trans_data[idx];
+                auto is_opaque = current_transparency == LIGHT_TRANSPARENCY_SOLID;
+                if (!opt.lit[idx]) {
+                    // Multiple rays will pass through the same squares so we need to record that
+                    opt.lit[idx] = true;
+                    auto lm_val = opt.luminance / (fastexp(transparency * distance) * distance);
+                    lm_data[idx] = std::max(lm_data[idx], lm_val);
+                    if (colored_lighting && opt.color_rgb != 0u) {
+                        write_colored_light_cache(cache_ref, idx, lm_val, opt.color_rgb);
+                    }
+                }
+                if (is_opaque) { break; }
+                // Cumulative average of the transparency values encountered.
+                transparency = ((distance - 1.0) * transparency + current_transparency) / distance;
+            } else {
+                break;
+            }
+
+            distance += scaling_factor;
+        } while (!(p.x() == opt.e.x() && p.y() == opt.e.y()));
+    }
+}
+
+// `apply_source(p, luminance)` applies a circular light immediately; it stays a map member
+// because map_cache.cpp uses it too.
+template <typename ApplySource>
+auto apply_light_arc(map& here, ApplySource&& apply_source, const apply_light_arc_options& opt)
+    -> void {
+    if (opt.luminance <= LIGHT_SOURCE_LOCAL) { return; }
+
+    auto& arc_cache = here.access_cache(opt.p.z());
+    auto lit = std::vector<bool>(static_cast<size_t>(arc_cache.cache_x) * arc_cache.cache_y, false);
+
+    apply_source(opt.p, LIGHT_SOURCE_LOCAL);
+
+    // Normalize (should work with negative values too)
+    const units::angle wangle = opt.wideangle / 2.0;
+
+    units::angle nangle = fmod(opt.angle, 360_degrees);
+
+    const auto ray = [&](const tripoint_bub_ms& to) {
+        apply_light_ray(
+            arc_cache, {
+                           .lit = lit,
+                           .s = opt.p,
+                           .e = to,
+                           .luminance = opt.luminance,
+                           .color_rgb = opt.color_rgb,
+                       });
+    };
+
+    tripoint_bub_ms end;
+    auto range = LIGHT_RANGE(opt.luminance);
+    calc_ray_end(nangle, range, opt.p, end);
+    ray(end);
+
+    tripoint_bub_ms test;
+    calc_ray_end(wangle + nangle, range, opt.p, test);
+
+    const float wdist = hypot(end.x() - test.x(), end.y() - test.y());
+    if (wdist <= 0.5) { return; }
+
+    // attempt to determine beam intensity required to cover all squares
+    const units::angle wstep = (wangle / (wdist * M_SQRT2));
+
+    // NOLINTNEXTLINE(clang-analyzer-security.FloatLoopCounter)
+    for (units::angle ao = wstep; ao <= wangle; ao += wstep) {
+        if (trigdist) {
+            auto fdist = (ao * M_PI_2) / wangle;
+            end.x() = static_cast<int>(
+                opt.p.x() + (static_cast<double>(range) - fdist * 2.0) * cos(nangle + ao));
+            end.y() = static_cast<int>(
+                opt.p.y() + (static_cast<double>(range) - fdist * 2.0) * sin(nangle + ao));
+            ray(end);
+
+            end.x() = static_cast<int>(
+                opt.p.x() + (static_cast<double>(range) - fdist * 2.0) * cos(nangle - ao));
+            end.y() = static_cast<int>(
+                opt.p.y() + (static_cast<double>(range) - fdist * 2.0) * sin(nangle - ao));
+            ray(end);
+        } else {
+            calc_ray_end(nangle + ao, range, opt.p, end);
+            ray(end);
+            calc_ray_end(nangle - ao, range, opt.p, end);
+            ray(end);
+        }
+    }
+    if (opt.color_rgb != 0u) {
+        apply_cpu_colored_light_3d(
+            here,
+            {
+                .source = opt.p,
+                .luminance = opt.luminance,
+                .color_rgb = opt.color_rgb,
+                .dir_x = static_cast<float>(units::cos(opt.angle)),
+                .dir_y = static_cast<float>(units::sin(opt.angle)),
+                .cone_cos = static_cast<float>(units::cos(opt.wideangle / 2.0)),
+                .directional = true,
+                .skip_zlev = opt.p.z(),
+            });
+    }
+}
+
+template <typename ApplySource>
+auto add_light_from_items(
+    map& here, ApplySource&& apply_source, const tripoint_bub_ms& p,
+    const item_stack::iterator& begin, const item_stack::iterator& end) -> void {
+    for (auto itm_it = begin; itm_it != end; ++itm_it) {
+        float ilum = 0.0f;               // brightness
+        units::angle iwidth = 0_degrees; // 0-360 degrees. 0 is a circular light_source
+        units::angle idir = 0_degrees;   // otherwise, it's a light_arc pointed in this direction
+        if ((*itm_it)->getlight(ilum, iwidth, idir)) {
+            const auto color_rgb = item_light_color(**itm_it).value_or(0u);
+            if (iwidth > 0_degrees) {
+                apply_light_arc(here, apply_source, {
+                    .p = p,
+                    .angle = idir,
+                    .luminance = ilum,
+                    .wideangle = iwidth,
+                    .color_rgb = color_rgb,
+                });
+            } else {
+                add_light_source(here.access_cache(p.z()), p, ilum, color_rgb);
+            }
+        }
+    }
+}
+
+} // namespace
+
 static const efftype_id effect_haslight("haslight");
 static const efftype_id effect_boomered("boomered");
 static const efftype_id effect_onfire("onfire");
@@ -513,29 +819,6 @@ auto light_color_from_json(const std::optional<RGBColor>& color) -> light_color_
     if (!color || color->a == 0 || (color->r == 0 && color->g == 0 && color->b == 0)) { return {}; }
     return {static_cast<float>(color->r) / 255.0f, static_cast<float>(color->g) / 255.0f,
             static_cast<float>(color->b) / 255.0f};
-}
-
-void map::add_light_from_items(
-    const tripoint_bub_ms& p, const item_stack::iterator& begin, const item_stack::iterator& end) {
-    for (auto itm_it = begin; itm_it != end; ++itm_it) {
-        float ilum = 0.0f;               // brightness
-        units::angle iwidth = 0_degrees; // 0-360 degrees. 0 is a circular light_source
-        units::angle idir = 0_degrees;   // otherwise, it's a light_arc pointed in this direction
-        if ((*itm_it)->getlight(ilum, iwidth, idir)) {
-            const auto color_rgb = item_light_color(**itm_it).value_or(0u);
-            if (iwidth > 0_degrees) {
-                apply_light_arc({
-                    .p = p,
-                    .angle = idir,
-                    .luminance = ilum,
-                    .wideangle = iwidth,
-                    .color_rgb = color_rgb,
-                });
-            } else {
-                add_light_source(p, ilum, color_rgb);
-            }
-        }
-    }
 }
 
 // Refresh the weather-transparency lookup table to match the current sight
@@ -1465,9 +1748,12 @@ void map::generate_lightmap_worker(const int zlev) {
      * Step 4: Profit!
     */
     auto& light_source_buffer = map_cache.light_source_buffer;
+    auto apply_src = [this](const tripoint_bub_ms& src, const float lum) {
+        apply_light_source(src, lum);
+    };
     auto add_deferred_point_light =
         [&](const tripoint_bub_ms& source, const float luminance, const uint32_t color_rgb = 0u) {
-            add_light_source(source, luminance, color_rgb);
+            add_light_source(access_cache(source.z()), source, luminance, color_rgb);
         };
 
     constexpr std::array<int, 4> dir_x = {{0, -1, 1, 0}}; //    [0]
@@ -1695,7 +1981,7 @@ void map::generate_lightmap_worker(const int zlev) {
             lm_override
                 .insert(lm_override.end(), local.lm_override.begin(), local.lm_override.end());
             std::ranges::for_each(local.dir_lights, [&](auto& dl) {
-                apply_directional_light({
+                apply_directional_light(access_cache(dl.p.z()), &weather_lookup_, {
                     .p = dl.p,
                     .direction = dl.direction,
                     .luminance = dl.luminance,
@@ -1703,7 +1989,7 @@ void map::generate_lightmap_worker(const int zlev) {
                 });
             });
             std::ranges::for_each(local.arc_lights, [&](auto& al) {
-                apply_light_arc({
+                apply_light_arc(*this, apply_src, {
                     .p = al.p,
                     .angle = al.dir,
                     .luminance = al.luminance,
@@ -1756,7 +2042,7 @@ void map::generate_lightmap_worker(const int zlev) {
             auto apply_vehicle_arc = [&](const vehicle_arc_light_def& def) {
                 if (def.external) {
                     apply_external_light([&]() {
-                        apply_light_arc({
+                        apply_light_arc(*this, apply_src, {
                             .p = def.src,
                             .angle = def.direction,
                             .luminance = def.luminance,
@@ -1765,7 +2051,7 @@ void map::generate_lightmap_worker(const int zlev) {
                         });
                     });
                 } else {
-                    apply_light_arc({
+                    apply_light_arc(*this, apply_src, {
                         .p = def.src,
                         .angle = def.direction,
                         .luminance = def.luminance,
@@ -1875,7 +2161,7 @@ void map::generate_lightmap_worker(const int zlev) {
                 if (pp.z() != zlev) { continue; }
                 if (vp.has_feature(VPFLAG_CARGO) && !vp.has_feature("COVERED")) {
                     add_light_from_items(
-                        pp, v->get_items(static_cast<int>(p)).begin(),
+                        *this, apply_src, pp, v->get_items(static_cast<int>(p)).begin(),
                         v->get_items(static_cast<int>(p)).end());
                 }
             }
@@ -1914,21 +2200,6 @@ void map::generate_lightmap_worker(const int zlev) {
     // Single exit: the only `return`s inside this function are in nested lambdas, so
     // reaching here always means `lm` was populated for this z-level.
     mark_lightmap_generated();
-}
-
-void map::add_light_source(const tripoint_bub_ms& p, float luminance, uint32_t color_rgb) {
-    auto& cache = get_cache(p.z());
-    auto& light_source_buffer = cache.light_source_buffer;
-    const auto idx = cache.idx(p.x(), p.y());
-    if (light_source_buffer[idx] <= 0.0f && cache.colored_light_source_buffer[idx] <= 0.0f) {
-        cache.light_source_points.push_back(p.xy());
-    }
-    light_source_buffer[idx] = std::max(luminance, light_source_buffer[idx]);
-    if (colored_lighting && color_rgb != 0u
-        && luminance >= cache.colored_light_source_buffer[idx]) {
-        cache.colored_light_source_buffer[idx] = luminance;
-        cache.light_source_color_buffer[idx] = color_rgb;
-    }
 }
 
 // Tile light/transparency: 3D
@@ -2871,42 +3142,6 @@ void map::apply_vehicle_optics(const tripoint_bub_ms& origin, const int target_z
     }
 }
 
-// Schraudolph's algorithm with John's constants
-static inline float fastexp(float x) {
-    union {
-        float f;
-        int i;
-    } u, v;
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunknown-pragmas"
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC diagnostic ignored "-Wimplicit-int-float-conversion"
-    u.i = static_cast<long long>(6051102 * x + 1056478197);
-    v.i = static_cast<long long>(1056478197 - 6051102 * x);
-#pragma GCC diagnostic pop
-    return u.f / v.f;
-}
-
-static float light_calc(const float& numerator, const float& transparency, const int& distance) {
-    // Light uses exponential attenuation divided by linear distance.
-    return numerator / (fastexp(transparency * distance) * distance);
-}
-
-static bool light_check(const float& transparency, const float& intensity) {
-    return transparency > LIGHT_TRANSPARENCY_SOLID && intensity > LIGHT_AMBIENT_LOW;
-}
-
-static float light_from_lookup(
-    const float& numerator, const float& transparency, const int& distance) {
-    return numerator * transparency / distance;
-}
-
-// Light model for apply_light_source / apply_directional_light.
-// Uses fastexp plus linear distance falloff; lookup_calc provides the matching fast
-// path for the common open-air / weather transparency cases.
-static const light_model k_light_model =
-    {light_calc, light_check, update_light, nullptr, light_from_lookup, accumulate_transparency};
-
 namespace {
 
 auto apply_cpu_colored_light_3d(map& here, const cpu_colored_light_opt& opt) -> void {
@@ -3040,252 +3275,5 @@ void map::apply_light_source(const tripoint_bub_ms& p, float luminance, uint32_t
                 .color_rgb = color_rgb,
                 .skip_zlev = p.z(),
             });
-    }
-}
-
-void map::apply_directional_light(const tripoint_bub_ms& p, int direction, float luminance) {
-    apply_directional_light({
-        .p = p,
-        .direction = direction,
-        .luminance = luminance,
-    });
-}
-
-auto map::apply_directional_light(const apply_directional_light_options& opt) -> void {
-    const auto p2 = opt.p.xy();
-
-    auto& cache = get_cache(opt.p.z());
-    auto* lm_data = cache.lm.data();
-    auto* trans_data = cache.transparency_cache.data();
-    auto* blocked_data = cache.vehicle_obscured_cache.data();
-    const int sx = cache.cache_x;
-    const int sy = cache.cache_y;
-
-    // direction convention: the value names the half-space this cast WRITES,
-    // via the octant masks below (90=OCTANT_NORTH covers the yy=-1 half, i.e.
-    // light travelling north from p; 0=EAST, 270=SOUTH, 180=WEST).  It is not a
-    // bearing the light comes from.  Each maps to the two octants covering the
-    // half-space in k_octant_xforms.
-    auto mask = uint8_t{};
-    if (opt.direction == 90) {
-        mask = OCTANT_NORTH;
-    } else if (opt.direction == 0) {
-        mask = OCTANT_EAST;
-    } else if (opt.direction == 270) {
-        mask = OCTANT_SOUTH;
-    } else if (opt.direction == 180) {
-        mask = OCTANT_WEST;
-    }
-
-    if (mask != 0) {
-        auto colored_context = cpu_colored_light_cache_context{};
-        castLightOctants(
-            lm_data, trans_data, blocked_data, sx, sy, p2, 0, opt.luminance, k_light_model, mask,
-            &weather_lookup_, make_colored_light_callback(cache, opt.color_rgb, colored_context));
-    }
-}
-
-void map::apply_light_arc(
-    const tripoint_bub_ms& p, units::angle angle, float luminance, units::angle wideangle) {
-    apply_light_arc({
-        .p = p,
-        .angle = angle,
-        .luminance = luminance,
-        .wideangle = wideangle,
-    });
-}
-
-auto map::apply_light_arc(const apply_light_arc_options& opt) -> void {
-    if (opt.luminance <= LIGHT_SOURCE_LOCAL) { return; }
-
-    const auto& arc_cache = get_cache(opt.p.z());
-    auto lit = std::vector<bool>(static_cast<size_t>(arc_cache.cache_x) * arc_cache.cache_y, false);
-
-    apply_light_source(opt.p, LIGHT_SOURCE_LOCAL);
-
-    // Normalize (should work with negative values too)
-    const units::angle wangle = opt.wideangle / 2.0;
-
-    units::angle nangle = fmod(opt.angle, 360_degrees);
-
-    tripoint_bub_ms end;
-    auto range = LIGHT_RANGE(opt.luminance);
-    calc_ray_end(nangle, range, opt.p, end);
-    apply_light_ray({
-        .lit = lit,
-        .s = opt.p,
-        .e = end,
-        .luminance = opt.luminance,
-        .color_rgb = opt.color_rgb,
-    });
-
-    tripoint_bub_ms test;
-    calc_ray_end(wangle + nangle, range, opt.p, test);
-
-    const float wdist = hypot(end.x() - test.x(), end.y() - test.y());
-    if (wdist <= 0.5) { return; }
-
-    // attempt to determine beam intensity required to cover all squares
-    const units::angle wstep = (wangle / (wdist * M_SQRT2));
-
-    // NOLINTNEXTLINE(clang-analyzer-security.FloatLoopCounter)
-    for (units::angle ao = wstep; ao <= wangle; ao += wstep) {
-        if (trigdist) {
-            auto fdist = (ao * M_PI_2) / wangle;
-            end.x() = static_cast<int>(
-                opt.p.x() + (static_cast<double>(range) - fdist * 2.0) * cos(nangle + ao));
-            end.y() = static_cast<int>(
-                opt.p.y() + (static_cast<double>(range) - fdist * 2.0) * sin(nangle + ao));
-            apply_light_ray({
-                .lit = lit,
-                .s = opt.p,
-                .e = end,
-                .luminance = opt.luminance,
-                .color_rgb = opt.color_rgb,
-            });
-
-            end.x() = static_cast<int>(
-                opt.p.x() + (static_cast<double>(range) - fdist * 2.0) * cos(nangle - ao));
-            end.y() = static_cast<int>(
-                opt.p.y() + (static_cast<double>(range) - fdist * 2.0) * sin(nangle - ao));
-            apply_light_ray({
-                .lit = lit,
-                .s = opt.p,
-                .e = end,
-                .luminance = opt.luminance,
-                .color_rgb = opt.color_rgb,
-            });
-        } else {
-            calc_ray_end(nangle + ao, range, opt.p, end);
-            apply_light_ray({
-                .lit = lit,
-                .s = opt.p,
-                .e = end,
-                .luminance = opt.luminance,
-                .color_rgb = opt.color_rgb,
-            });
-            calc_ray_end(nangle - ao, range, opt.p, end);
-            apply_light_ray({
-                .lit = lit,
-                .s = opt.p,
-                .e = end,
-                .luminance = opt.luminance,
-                .color_rgb = opt.color_rgb,
-            });
-        }
-    }
-    if (opt.color_rgb != 0u) {
-        apply_cpu_colored_light_3d(
-            *this,
-            {
-                .source = opt.p,
-                .luminance = opt.luminance,
-                .color_rgb = opt.color_rgb,
-                .dir_x = static_cast<float>(units::cos(opt.angle)),
-                .dir_y = static_cast<float>(units::sin(opt.angle)),
-                .cone_cos = static_cast<float>(units::cos(opt.wideangle / 2.0)),
-                .directional = true,
-                .skip_zlev = opt.p.z(),
-            });
-    }
-}
-
-void map::apply_light_ray(
-    std::vector<bool>& lit, const tripoint_bub_ms& s, const tripoint_bub_ms& e, float luminance,
-    light_color_rgb* color_cache) {
-    apply_light_ray({
-        .lit = lit,
-        .s = s,
-        .e = e,
-        .luminance = luminance,
-    });
-}
-
-auto map::apply_light_ray(const apply_light_ray_options& opt) -> void {
-    auto a = point_bub_ms(std::abs(opt.e.x() - opt.s.x()) * 2, std::abs(opt.e.y() - opt.s.y()) * 2);
-    auto d = point_bub_ms((opt.s.x() < opt.e.x()) ? 1 : -1, (opt.s.y() < opt.e.y()) ? 1 : -1);
-    auto p = opt.s.xy();
-
-    // TODO: Invert that z comparison when it's sane
-    if (opt.s.z() != opt.e.z() || (opt.s.x() == opt.e.x() && opt.s.y() == opt.e.y())) { return; }
-
-    auto& cache_ref = get_cache(opt.s.z());
-    auto* lm_data = cache_ref.lm.data();
-    auto* trans_data = cache_ref.transparency_cache.data();
-    const int sx = cache_ref.cache_x;
-    const int sy = cache_ref.cache_y;
-
-    auto distance = 1.0f;
-    auto transparency = LIGHT_TRANSPARENCY_OPEN_AIR;
-    const float scaling_factor =
-        static_cast<float>(rl_dist(opt.s, opt.e)) / static_cast<float>(square_dist(opt.s, opt.e));
-    // TODO: [lightmap] Pull out the common code here rather than duplication
-    if (a.x() > a.y()) {
-        int t = a.y() - (a.x() / 2);
-        do {
-            if (t >= 0) {
-                p.y() += d.y();
-                t -= a.x();
-            }
-
-            p.x() += d.x();
-            t += a.y();
-
-            // TODO: clamp coordinates to map bounds before this method is called.
-            if (p.x() >= 0 && p.y() >= 0 && p.x() < sx && p.y() < sy) {
-                const int idx = p.x() * sy + p.y();
-                auto current_transparency = trans_data[idx];
-                auto is_opaque = current_transparency == LIGHT_TRANSPARENCY_SOLID;
-                if (!opt.lit[idx]) {
-                    // Multiple rays will pass through the same squares so we need to record that
-                    opt.lit[idx] = true;
-                    auto lm_val = opt.luminance / (fastexp(transparency * distance) * distance);
-                    lm_data[idx] = std::max(lm_data[idx], lm_val);
-                    if (colored_lighting && opt.color_rgb != 0u) {
-                        write_colored_light_cache(cache_ref, idx, lm_val, opt.color_rgb);
-                    }
-                }
-                if (is_opaque) { break; }
-                // Cumulative average of the transparency values encountered.
-                transparency = ((distance - 1.0) * transparency + current_transparency) / distance;
-            } else {
-                break;
-            }
-
-            distance += scaling_factor;
-        } while (!(p.x() == opt.e.x() && p.y() == opt.e.y()));
-    } else {
-        int t = a.x() - (a.y() / 2);
-        do {
-            if (t >= 0) {
-                p.x() += d.x();
-                t -= a.y();
-            }
-
-            p.y() += d.y();
-            t += a.x();
-
-            if (p.x() >= 0 && p.y() >= 0 && p.x() < sx && p.y() < sy) {
-                const int idx = p.x() * sy + p.y();
-                auto current_transparency = trans_data[idx];
-                auto is_opaque = current_transparency == LIGHT_TRANSPARENCY_SOLID;
-                if (!opt.lit[idx]) {
-                    // Multiple rays will pass through the same squares so we need to record that
-                    opt.lit[idx] = true;
-                    auto lm_val = opt.luminance / (fastexp(transparency * distance) * distance);
-                    lm_data[idx] = std::max(lm_data[idx], lm_val);
-                    if (colored_lighting && opt.color_rgb != 0u) {
-                        write_colored_light_cache(cache_ref, idx, lm_val, opt.color_rgb);
-                    }
-                }
-                if (is_opaque) { break; }
-                // Cumulative average of the transparency values encountered.
-                transparency = ((distance - 1.0) * transparency + current_transparency) / distance;
-            } else {
-                break;
-            }
-
-            distance += scaling_factor;
-        } while (!(p.x() == opt.e.x() && p.y() == opt.e.y()));
     }
 }
