@@ -1,5 +1,6 @@
 #include "coop_mutation_log.h"
 #include "level_cache.h"
+#include "level_cache_build.h"
 #include "level_cache_freshness.h"
 #include "map.h"
 // S2: the GPU lightmap dispatch and the readiness latch both live in build_map_cache below.
@@ -364,16 +365,16 @@ auto map::take_visibility_cache_updates() -> unsigned {
 }
 
 
-void map::build_outside_cache(const int zlev) {
+void cache_build::build_outside_cache(map& here, const int zlev) {
     ZoneScopedN("build_outside_cache");
-    auto& ch = get_cache(zlev);
+    auto& ch = here.get_cache(zlev);
     if (ch.outside_cache_dirty.none()) { return; }
 
     if (zlev >= OVERMAP_HEIGHT) {
         // Base case: open sky at the top — every tile is outside, nothing above.
         std::fill(ch.outside_cache.begin(), ch.outside_cache.end(), true);
-        for (const auto p : flat_bubble_submaps()) {
-            auto* sm = get_submap_at_grid(tripoint_bub_sm(p, zlev));
+        for (const auto p : here.flat_bubble_submaps()) {
+            auto* sm = here.get_submap_at_grid(tripoint_bub_sm(p, zlev));
             if (sm) {
                 std::ranges::fill(std::span(&sm->outside_cache[0][0], SEEX * SEEY), true);
                 sm->outside_dirty = false;
@@ -388,12 +389,12 @@ void map::build_outside_cache(const int zlev) {
 
     // Ensure z+1 floor and outside caches are current — they are the inputs.
     const int above_z = zlev + 1;
-    if (inbounds_z(above_z)) {
-        build_floor_cache(above_z);
-        build_outside_cache(above_z);
+    if (here.inbounds_z(above_z)) {
+        build_floor_cache(here, above_z);
+        build_outside_cache(here, above_z);
     }
 
-    const level_cache* above = inbounds_z(above_z) ? &get_cache_ref(above_z) : nullptr;
+    const level_cache* above = here.inbounds_z(above_z) ? &here.get_cache_ref(above_z) : nullptr;
     const bool rebuild_all = ch.outside_cache_dirty.all();
 
     // [shift-probe] Count dirty submaps to tell an edge-incremental shift
@@ -405,7 +406,7 @@ void map::build_outside_cache(const int zlev) {
         for (size_t _i = 0; _i < _sz; ++_i) {
             if (ch.outside_cache_dirty.test(_i)) { ++_dn; }
         }
-        if (_dn > static_cast<size_t>(my_MAPSIZE * 3)) {
+        if (_dn > static_cast<size_t>(here.getmapsize() * 3)) {
             DebugLogFL(DL::Info, DC::Main)
                 << "[shift-probe][outside] z=" << zlev << " dirty_submaps=" << _dn << "/" << _sz
                 << " rebuild_all=" << rebuild_all;
@@ -416,13 +417,13 @@ void map::build_outside_cache(const int zlev) {
     // Each smx column writes to unique flat positions; rebuild_outside_cache reads
     // only from the immutable above cache, so columns are safe to process concurrently.
     const auto process_smx = [&](int smx) {
-        for (int smy = 0; smy < my_MAPSIZE; ++smy) {
+        for (int smy = 0; smy < here.getmapsize(); ++smy) {
             if (!rebuild_all
                 && !ch.outside_cache_dirty.test(static_cast<size_t>(ch.bidx(smx, smy)))) {
                 continue;
             }
             const auto sm_pos = tripoint_bub_sm(smx, smy, zlev);
-            auto* cur_submap = get_submap_at_grid(sm_pos);
+            auto* cur_submap = here.get_submap_at_grid(sm_pos);
             if (cur_submap == nullptr) { continue; }
             cur_submap->rebuild_outside_cache(above, sm_pos);
 
@@ -435,9 +436,9 @@ void map::build_outside_cache(const int zlev) {
     };
 
     if (parallel_enabled && parallel_map_cache && !is_pool_worker_thread()) {
-        parallel_for(0, my_MAPSIZE, process_smx);
+        parallel_for(0, here.getmapsize(), process_smx);
     } else {
-        for (int smx = 0; smx < my_MAPSIZE; ++smx) { process_smx(smx); }
+        for (int smx = 0; smx < here.getmapsize(); ++smx) { process_smx(smx); }
     }
 
     // Tell the render side this cache actually changed; the lighting structure
@@ -454,9 +455,9 @@ void map::build_outside_cache(const int zlev) {
     level_cache_freshness::stamp_built(ch, {level_cache_part::outside});
 }
 
-bool map::build_floor_cache(const int zlev) {
+bool cache_build::build_floor_cache(map& here, const int zlev) {
     ZoneScopedN("build_floor_cache");
-    auto& ch = get_cache(zlev);
+    auto& ch = here.get_cache(zlev);
     if (ch.floor_cache_dirty.none()) { return false; }
 
     auto& floor_cache = ch.floor_cache;
@@ -469,18 +470,18 @@ bool map::build_floor_cache(const int zlev) {
     if (rebuild_all) { std::fill(floor_cache.begin(), floor_cache.end(), true); }
 
     // Delegate to per-submap rebuild, then copy into the flat render cache.
-    for (const auto p : flat_bubble_submaps()) {
+    for (const auto p : here.flat_bubble_submaps()) {
         if (!rebuild_all
             && !ch.floor_cache_dirty.test(static_cast<size_t>(ch.bidx(p.x(), p.y())))) {
             continue;
         }
         const auto sm_pos = tripoint_bub_sm(p, zlev);
-        submap* cur_submap = get_submap_at_grid(sm_pos);
+        submap* cur_submap = here.get_submap_at_grid(sm_pos);
         if (cur_submap == nullptr) {
             // Null expected for circle corners and bounded-dimension edges.
             continue;
         }
-        cur_submap->rebuild_floor_cache(*this, sm_pos);
+        cur_submap->rebuild_floor_cache(here, sm_pos);
 
         const auto ms_pos = project_to<coords::ms>(p);
 
@@ -503,13 +504,13 @@ bool map::build_floor_cache(const int zlev) {
     return true;
 }
 
-void map::update_suspension_cache(const int& z) {
-    level_cache& ch = get_cache(z);
+void cache_build::update_suspension_cache(map& here, const int& z) {
+    level_cache& ch = here.get_cache(z);
     if (!ch.suspension_cache_dirty) { return; }
     std::list<point_abs_ms>& suspension_cache = ch.suspension_cache;
     if (!ch.suspension_cache_initialized) {
-        for (const auto p : flat_bubble_submaps()) {
-            const submap* cur_submap = get_submap_at_grid(tripoint_bub_sm(p, z));
+        for (const auto p : here.flat_bubble_submaps()) {
+            const submap* cur_submap = here.get_submap_at_grid(tripoint_bub_sm(p, z));
 
             if (cur_submap == nullptr) {
                 // Null expected for circle corners and bounded-dimension edges.
@@ -520,7 +521,7 @@ void map::update_suspension_cache(const int& z) {
                 const ter_t& terrain = cur_submap->get_ter(sm_ms).obj();
                 if (terrain.has_flag(TFLAG_SUSPENDED)) {
                     auto loc = coords::project_combine(p, sm_ms);
-                    suspension_cache.emplace_back(map_local_to_abs(*this, loc));
+                    suspension_cache.emplace_back(map_local_to_abs(here, loc));
                 }
             }
         }
@@ -529,22 +530,22 @@ void map::update_suspension_cache(const int& z) {
 
     for (auto iter = suspension_cache.begin(); iter != suspension_cache.end();) {
         const point_abs_ms absp = *iter;
-        const tripoint_bub_ms loctp(abs_to_map_local(*this, absp), z);
-        if (!inbounds(loctp)) {
+        const tripoint_bub_ms loctp(abs_to_map_local(here, absp), z);
+        if (!here.inbounds(loctp)) {
             ++iter;
             continue;
         }
-        const submap* cur_submap = get_submap_at(loctp);
+        const submap* cur_submap = here.get_submap_at(loctp);
         if (cur_submap == nullptr) {
             debugmsg("Tried to run suspension check at (%d,%d,%d) but the submap is not loaded",
                      loctp.x(), loctp.y(), loctp.z());
             ++iter;
             continue;
         }
-        const ter_t& terrain = ter(loctp).obj();
+        const ter_t& terrain = here.ter(loctp).obj();
         if (terrain.has_flag(TFLAG_SUSPENDED)) {
-            if (!is_suspension_valid(loctp)) {
-                support_dirty(loctp);
+            if (!here.is_suspension_valid(loctp)) {
+                here.support_dirty(loctp);
                 iter = suspension_cache.erase(iter);
             } else {
                 ++iter;
@@ -660,7 +661,7 @@ void map::build_map_cache(const level_cache_freshness::rebuild_plan& plan) {
     };
     const int minz = -OVERMAP_DEPTH;
     const int maxz = OVERMAP_HEIGHT;
-    flush_lightmap_cpu_read_counters();
+    cache_build::flush_lightmap_cpu_read_counters(*this);
     const auto valid_lm_levels =
         std::ranges::count_if(std::views::iota(minz, maxz + 1), [this](const int z) {
             return get_cache_ref(z).lm_cpu_cache_valid;
@@ -695,7 +696,7 @@ void map::build_map_cache(const level_cache_freshness::rebuild_plan& plan) {
     // before the parallel block.  build_transparency_cache() reads the
     // table on every call, so updating it here guarantees all workers see a
     // consistent value without a data race.
-    update_weather_transparency_lookup();
+    cache_build::update_weather_transparency_lookup(*this);
 
     // Parallelize the expensive per-z-level cache builds across all z-levels.
     // Each build_*_cache(z) writes only to get_cache(z) — no z-level aliasing.
@@ -711,7 +712,7 @@ void map::build_map_cache(const level_cache_freshness::rebuild_plan& plan) {
         for (int z = minz; z <= maxz; ++z) {
             const _bc::time_point _zt = _bc::now();
             const bool floor_was_dirty = !get_cache_ref(z).floor_cache_dirty.none();
-            const bool _floor_dirty = build_floor_cache(z);
+            const bool _floor_dirty = cache_build::build_floor_cache(*this, z);
             _zadd(z, _zt);
             // 3D field of view is unconditional now, so every level's floor cache can
             // affect the seen cache.
@@ -731,7 +732,7 @@ void map::build_map_cache(const level_cache_freshness::rebuild_plan& plan) {
         // cannot run inside a parallel-over-z block.
         for (int z = maxz; z >= minz; --z) {
             const _bc::time_point _zt = _bc::now();
-            build_outside_cache(z);
+            cache_build::build_outside_cache(*this, z);
             _zadd(z, _zt);
         }
     }
@@ -742,7 +743,8 @@ void map::build_map_cache(const level_cache_freshness::rebuild_plan& plan) {
         // Transparency depends on outside_cache; runs after outside is complete.
         // build_transparency_caches() batches every level so the GPU transparency pass
         // uploads once, so there is no per-z split to attribute for this phase.
-        auto const transparency_dirty_levels = build_transparency_caches(minz, maxz);
+        auto const transparency_dirty_levels =
+            cache_build::build_transparency_caches(*this, minz, maxz);
         if (!transparency_dirty_levels.empty()) {
             gpu_transparency_dirty = true;
             std::ranges::
@@ -834,7 +836,7 @@ void map::build_map_cache(const level_cache_freshness::rebuild_plan& plan) {
         ZoneScopedN("Phase2_suspension");
         // update_suspension_cache calls support_dirty() which writes to the shared
         // support_cache_dirty set; must remain serial.
-        for (int z = minz; z <= maxz; z++) { update_suspension_cache(z); }
+        for (int z = minz; z <= maxz; z++) { cache_build::update_suspension_cache(*this, z); }
     }
     _lap(_ph_susp);
 
@@ -961,7 +963,7 @@ void map::build_map_cache(const level_cache_freshness::rebuild_plan& plan) {
     auto pending_gpu_lighting = cata_gpu::gpu_lighting_work{};
     if (process_lightmap && gpu_device != nullptr && !dirty_lightmap_levels.empty()) {
         ZoneScopedN("Phase4_lightmap_begin");
-        update_solar_params();
+        cache_build::update_solar_params(*this);
         // GPU path: lightmap rebuilds only run for lightmap-dirty levels.
         // Player movement and other FoV-only updates are handled by
         // update_visibility_cache(), which can rebuild resident seen data.
@@ -1002,7 +1004,7 @@ void map::build_map_cache(const level_cache_freshness::rebuild_plan& plan) {
                 .rebuild_seen_cache = true,
                 .download_seen_cache = true,
                 .download_lightmap = true,
-                .vision_block_mask = vision_transparency_block_mask(),
+                .vision_block_mask = cache_build::vision_transparency_block_mask(*this),
                 .angled_sunlight_shadows = angled_sunlight_shadows,
                 .direct_sunlight = m_solar.direct_active,
                 .sun_dx_per_z = m_solar.dx_per_z,
@@ -1022,10 +1024,10 @@ void map::build_map_cache(const level_cache_freshness::rebuild_plan& plan) {
     {
         ZoneScopedN("Phase3_sound_absorption");
         // Absorption cache relies upon the floor, outside, and vehicle caches all being completed.
-        for (int z = minz; z <= maxz; z++) { build_absorption_cache(z); }
+        for (int z = minz; z <= maxz; z++) { cache_build::build_absorption_cache(*this, z); }
     }
 
-    seen_cache_dirty |= build_vision_transparency_cache(get_player_character());
+    seen_cache_dirty |= cache_build::build_vision_transparency_cache(*this, get_player_character());
 
     if (seen_cache_dirty) { skew_vision_cache.assign(vision_cache_slots, vision_cache_slot{}); }
     const auto need_seen_rebuild =
@@ -1078,7 +1080,7 @@ void map::build_map_cache(const level_cache_freshness::rebuild_plan& plan) {
         // branch already made unconditionally, so this is not new cost on
         // that path, only restored cost on the GPU path where it was wrongly
         // skipped.
-        build_seen_cache(p, zlev);
+        cache_build::build_seen_cache(*this, p, zlev);
         log_seen_field("after_cpu_build_seen_cache");
         level_cache_freshness::stamp_seen_origin(*this, p);
         // seen_cache changed; mark visibility stale.
@@ -1135,18 +1137,20 @@ void map::build_map_cache(const level_cache_freshness::rebuild_plan& plan) {
                         std::ranges::fill(c.lm, 0.0f);
                     }
                     // Build sunlight (all z-levels, top-to-bottom; serial).
-                    build_sunlight_cache(zlev);
+                    cache_build::build_sunlight_cache(*this, zlev);
                     // Generate per-level dynamic lighting in parallel.
                     // skip_shared_init=true: workers only process entities on their own z-level.
                     // Pre-warm the vehicle list cache serially to avoid heap corruption
                     // from concurrent writes to last_full_vehicle_list.
                     get_vehicles();
                     parallel_for(0, static_cast<int>(dirty_lightmap_levels.size()), [&](int i) {
-                        generate_lightmap_worker(dirty_lightmap_levels[i]);
+                        cache_build::generate_lightmap_worker(*this, dirty_lightmap_levels[i]);
                     });
                 } else {
                     // Single dirty level: run serially using the standard full path.
-                    for (const int level : dirty_lightmap_levels) { generate_lightmap(level); }
+                    for (const int level : dirty_lightmap_levels) {
+                        cache_build::generate_lightmap(*this, level);
+                    }
                 }
 
                 // Diagnostic: log dirty-submap fraction for each regenerated level so the
@@ -1181,8 +1185,8 @@ void map::build_map_cache(const level_cache_freshness::rebuild_plan& plan) {
             // path collects the same character/NPC/monster lights itself (see
             // compute/gpu_lm.cpp), so doing this on that path would double-apply them
             // on top of the downloaded lm.
-            apply_character_light(get_player_character());
-            for (npc& guy : g->all_npcs()) { apply_character_light(guy); }
+            cache_build::apply_character_light(*this, get_player_character());
+            for (npc& guy : g->all_npcs()) { cache_build::apply_character_light(*this, guy); }
             for (monster& critter : g->all_monsters()) {
                 if (critter.is_hallucination()) { continue; }
                 const auto& mp = critter.bub_pos();

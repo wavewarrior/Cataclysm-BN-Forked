@@ -16,6 +16,7 @@
 #include "item.h"
 #include "itype.h"
 #include "level_cache.h"
+#include "level_cache_build.h"
 #include "level_cache_freshness.h"
 #include "line.h"
 #include "map.h"
@@ -471,26 +472,26 @@ static short terrain_sound_attenuation(
     }
 }
 
-void map::cull_heard_sounds() {
+void cache_build::cull_heard_sounds(map& here) {
     // If we dont clear our filtered sounds list map, there *will* be errors.
-    const int soundnumbefore = m_sound_cache.sound_instances.size();
-    const int soundlistnum = m_sound_cache.sound_list_filtered.size();
-    m_sound_cache.sound_list_filtered.clear();
+    const int soundnumbefore = here.m_sound_cache.sound_instances.size();
+    const int soundlistnum = here.m_sound_cache.sound_list_filtered.size();
+    here.m_sound_cache.sound_list_filtered.clear();
     // Now we can safely cull sounds.
-    std::erase_if(m_sound_cache.sound_instances, [](const auto& sound) {
+    std::erase_if(here.m_sound_cache.sound_instances, [](const auto& sound) {
         return sound.heard_by_monsters && sound.heard_by_player && sound.heard_by_npcs;
     });
-    const int soundnumafter = m_sound_cache.sound_instances.size();
-    m_sound_cache.sounds_culled_this_turn += (std::max(0, soundnumbefore - soundnumafter));
-    m_sound_cache.filtered_sound_lists_cleared += soundlistnum;
+    const int soundnumafter = here.m_sound_cache.sound_instances.size();
+    here.m_sound_cache.sounds_culled_this_turn += (std::max(0, soundnumbefore - soundnumafter));
+    here.m_sound_cache.filtered_sound_lists_cleared += soundlistnum;
 }
 // TODO: method for getting the escaped sounds per fascing side
 // Creates a sound_instance_cache by "flood filling" a given sound event through the absorption map
 // of the given z-level. This sound_instance_cache is then added to the sound_instance_caches vector
 // in map. This version is usually only used by the player and a few other unique sound sources.
 // Most sounds are batch flooded. Fear nothing but the consequences of your own poor decisions.
-void map::flood_fill_sound(const sound_event soundevent, const int zlev) {
-    const auto& map_cache = get_cache(zlev);
+void cache_build::flood_fill_sound(map& here, const sound_event soundevent, const int zlev) {
+    const auto& map_cache = here.get_cache(zlev);
     const auto& absorption_cache = map_cache.absorption_cache;
     const auto& outside_cache = map_cache.outside_cache;
     const auto& wall_present = map_cache.sound_wall_cache;
@@ -501,7 +502,7 @@ void map::flood_fill_sound(const sound_event soundevent, const int zlev) {
     const bool check_up_valid = zlev < OVERMAP_HEIGHT;
     // Make sure that there is a valid reference to A mapcache, even if we dont call it if we are
     // too high up.
-    const auto& up_map_cache = (check_up_valid) ? get_cache(zlev + 1) : map_cache;
+    const auto& up_map_cache = (check_up_valid) ? here.get_cache(zlev + 1) : map_cache;
     const bool is_winter = season_of_year(calendar::turn) == WINTER;
     const auto& snowbonus = (is_winter) ? SOUND_ABSORPTION_SNOW_BONUS : SOUND_ABSORPTION_OPEN_FIELD;
 
@@ -592,7 +593,7 @@ void map::flood_fill_sound(const sound_event soundevent, const int zlev) {
             for (uint8_t y = startxy; y < endxy; y++) {
                 const auto env_tile = checkvar_index_p + point{x, y};
                 auto& env_tile_vars = checkvars[x][y];
-                if (!inbounds(env_tile)) {
+                if (!here.inbounds(env_tile)) {
                     // If we are out of bounds, set all bits to true to indicate this.
                     env_tile_vars.set();
                     continue;
@@ -950,13 +951,13 @@ void map::flood_fill_sound(const sound_event soundevent, const int zlev) {
         // volume %i to sound_caches vector .", temp_sound_cache.sound.origin.x,
         // temp_sound_cache.sound.origin.y, temp_sound_cache.sound.origin.z,
         // temp_sound_cache.sound.volume );
-        m_sound_cache.sound_instances.push_back(temp_sound_cache);
+        here.m_sound_cache.sound_instances.push_back(temp_sound_cache);
     }
 }
 
 // Batch flood fills a given vector of sound events, stepping through all z levels.
 // New sound_cache are then added to the sound_caches vector in map.
-void map::batch_flood_fill_sounds() {
+void cache_build::batch_flood_fill_sounds(map& here) {
     ZoneScoped;
     // Our que of sound events to flood fill
     auto& batch_que = sound_batch_floodfill_que;
@@ -964,9 +965,9 @@ void map::batch_flood_fill_sounds() {
     const auto& snowbonus = (is_winter) ? SOUND_ABSORPTION_SNOW_BONUS : SOUND_ABSORPTION_OPEN_FIELD;
 
     // How many sounds did we actually process?
-    auto& num_processed_mon_sounds = m_sound_cache.batch_flooded_monster_sounds;
-    auto& num_processed_NPC_sounds = m_sound_cache.batch_flooded_NPC_sounds;
-    auto& num_invalidated_sounds = m_sound_cache.invalidated_batch_sounds;
+    auto& num_processed_mon_sounds = here.m_sound_cache.batch_flooded_monster_sounds;
+    auto& num_processed_NPC_sounds = here.m_sound_cache.batch_flooded_NPC_sounds;
+    auto& num_invalidated_sounds = here.m_sound_cache.invalidated_batch_sounds;
 
     //// [-1 , 1 ] [ 0 , 1 ] [ 1 , 1 ]   [ 0 ] [ 1 ] [ 2 ]
     //// [-1 , 0 ] [ 0 , 0 ] [ 1 , 0 ] = [ 7 ] [ 8 ] [ 3 ]
@@ -1011,7 +1012,7 @@ void map::batch_flood_fill_sounds() {
     // Now we step through our zlevels
     for (int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; z++) {
 
-        const auto& map_cache = get_cache(z);
+        const auto& map_cache = here.get_cache(z);
         const auto& absorption_cache = map_cache.absorption_cache;
         const auto& outside_cache = map_cache.outside_cache;
 
@@ -1020,7 +1021,7 @@ void map::batch_flood_fill_sounds() {
         const bool check_up_valid = z < 10;
         // Make sure that there is a valid reference to *a* mapcache, even if we dont call it if we
         // are too high up.
-        const auto& up_map_cache = (check_up_valid) ? get_cache(z + 1) : map_cache;
+        const auto& up_map_cache = (check_up_valid) ? here.get_cache(z + 1) : map_cache;
 
         // We cycle through all the sounds in the batch que
         for (sound_event flooded_sound : batch_que) {
@@ -1086,7 +1087,7 @@ void map::batch_flood_fill_sounds() {
                     for (uint8_t y = startxy; y < endxy; y++) {
                         const auto env_tile = checkvar_index_p + point{x, y};
                         auto& env_tile_vars = checkvars[x][y];
-                        if (!inbounds(env_tile)) {
+                        if (!here.inbounds(env_tile)) {
                             // If we are out of bounds, set all bits to true to indicate this.
                             env_tile_vars.set();
                             continue;
@@ -1394,7 +1395,7 @@ void map::batch_flood_fill_sounds() {
                 // source volume %i to sound_caches vector .", temp_sound_cache.sound.origin.x,
                 // temp_sound_cache.sound.origin.y, temp_sound_cache.sound.origin.z,
                 // temp_sound_cache.sound.volume );
-                m_sound_cache.sound_instances.push_back(temp_sound_cache);
+                here.m_sound_cache.sound_instances.push_back(temp_sound_cache);
                 // add_msg(m_debug, "Sound cache added to vector");
                 if (temp_sound_cache.from_monster) {
                     num_processed_mon_sounds++;
@@ -1898,10 +1899,10 @@ auto submap::rebuild_absorption_cache(const map& m, const tripoint_bub_sm& grid_
 // performance, so we approximate. Terrain absorption is in addition to the logarithmic loss of
 // pressure over distance. Building the absorption cache also builds the sound_wall_cache bitset.
 // Measured in 100ths of a decibel
-bool map::build_absorption_cache(const int zlev) {
+bool cache_build::build_absorption_cache(map& here, const int zlev) {
     ZoneScoped;
 
-    auto& map_cache = get_cache(zlev);
+    auto& map_cache = here.get_cache(zlev);
     auto& absorption_cache = map_cache.absorption_cache;
     auto& sound_wall_cache = map_cache.sound_wall_cache;
 
@@ -1919,12 +1920,12 @@ bool map::build_absorption_cache(const int zlev) {
                   static_cast<short>(SOUND_ABSORPTION_OPEN_FIELD));
     }
     // Traverse the submaps in order
-    for (int smx = 0; smx < my_MAPSIZE; ++smx) {
-        for (int smy = 0; smy < my_MAPSIZE; ++smy) {
+    for (int smx = 0; smx < here.getmapsize(); ++smx) {
+        for (int smy = 0; smy < here.getmapsize(); ++smy) {
 
             const auto sm_pos = tripoint_bub_sm(smx, smy, zlev);
-            auto* cur_submap = get_mapbuffer().lookup_submap_in_memory(
-                map_local_to_abs(*this, sm_pos));
+            auto* cur_submap = here.get_mapbuffer().lookup_submap_in_memory(
+                map_local_to_abs(here, sm_pos));
             const auto sm_offset = project_to<coords::ms>(sm_pos);
 
             if (cur_submap == nullptr) {
@@ -1947,7 +1948,7 @@ bool map::build_absorption_cache(const int zlev) {
                 continue;
             }
             cur_submap->absorption_dirty = true;
-            cur_submap->rebuild_absorption_cache(*this, tripoint_bub_sm(smx, smy, zlev));
+            cur_submap->rebuild_absorption_cache(here, tripoint_bub_sm(smx, smy, zlev));
 
 
             if (cur_submap->is_uniform) {
@@ -2333,7 +2334,7 @@ void sounds::sound(const sound_event& soundevent) {
         sound_batch_floodfill_que.push_back(temp_se);
 
     } else {
-        map.flood_fill_sound(temp_se, temp_se.origin.z());
+        cache_build::flood_fill_sound(map, temp_se, temp_se.origin.z());
         map.m_sound_cache.attempted_non_batch_floodfills++;
     }
 }

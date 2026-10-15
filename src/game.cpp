@@ -91,6 +91,7 @@
 #include "iuse_actor.h"
 #include "json.h"
 #include "kill_tracker.h"
+#include "level_cache_build.h"
 #include "level_cache_freshness.h"
 #include "lighting/rmlui_layer.h"
 #include "lightmap.h"
@@ -947,7 +948,7 @@ bool game::do_turn() {
         // said AI. Cull stale sounds that have been heard by all parties, we need to do this three
         // times per cycle. We do this before each respective party's turn to hear noise. This block
         // should catch stale sounds from NPCs.
-        m.cull_heard_sounds();
+        cache_build::cull_heard_sounds(m);
         // Process sound events into sound markers for display to the player.
         sounds::process_sound_markers(&u);
 
@@ -1033,7 +1034,7 @@ bool game::do_turn() {
     // We need floor cache before checking falling 'n stuff
     {
         ZoneScopedN("do_turn_build_floor_caches");
-        m.build_floor_caches();
+        cache_build::build_floor_caches(m);
     }
 
     if (!vehperf) {
@@ -1090,7 +1091,7 @@ bool game::do_turn() {
         ZoneScopedN("do_turn_sound_before_monsters");
         // Cull stale sounds that have been heard by everyone. Should nominally catch all stale
         // sounds made by the player on the prior turn.
-        m.cull_heard_sounds();
+        cache_build::cull_heard_sounds(m);
         // Apply sounds from previous turn to monster AI.
         // Process sounds marks all sounds in the sound_caches vector as heard by monsters.
         sounds::process_sounds();
@@ -1107,9 +1108,9 @@ bool game::do_turn() {
         ZoneScopedN("do_turn_sound_before_npcs");
         // Cull any noises that have already been heard by everyone. This should generally cull all
         // stale sounds made by monsters on the prior turn.
-        m.cull_heard_sounds();
+        cache_build::cull_heard_sounds(m);
         // Batch floodfill sounds made by monsters or other qued sources.
-        m.batch_flood_fill_sounds();
+        cache_build::batch_flood_fill_sounds(m);
         // Apply remaining sounds to NPC AI here so that they are reacting to the most recent
         // monster noises and player noises, not recent player noises and prior turn monster noises.
         // process_sounds_npc also marks all sounds present in the vector as heard by npcs.
@@ -1131,7 +1132,7 @@ bool game::do_turn() {
     if (!soundperf) {
         ZoneScopedN("do_turn_sound_after_npcs");
         // Floodfill any sounds cued up by NPCs during their respective turns or from other sources.
-        m.batch_flood_fill_sounds();
+        cache_build::batch_flood_fill_sounds(m);
     }
     // We want to clear our floodfill que anyways, so that sounds dont accumulate in the que if
     // soundperf is on. This function will also print a debug sound diagnostic to the log if

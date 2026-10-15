@@ -1718,8 +1718,6 @@ public:
 private:
     // Tiles whose ability to support things was removed in the last turn
     std::set<tripoint_bub_ms> support_cache_dirty;
-    // Checks if the tile is supported and adds it to support_cache_dirty if it isn't
-    void support_dirty(const tripoint_bub_ms& p);
 
 public:
     // Returns true if there is a physical floor at p (tile has no TFLAG_NO_FLOOR).
@@ -1900,79 +1898,7 @@ protected:
     void player_in_field(player& u);
     void monster_in_field(monster& z);
 
-    // Builds a transparency cache and returns true if the cache was invalidated.
-    // Used to determine if seen cache should be rebuilt.
-    bool build_transparency_cache(int zlev);
-    auto build_transparency_caches(int minz, int maxz) -> std::vector<int>;
-    // Refreshes the weather-transparency lookup table if the sight penalty
-    // has changed.  Must be called once serially before any parallel call to
-    // build_transparency_cache() to avoid a data race on the shared table.
-    void update_weather_transparency_lookup();
-    bool build_vision_transparency_cache(const Character& player);
-    // fills lm with sunlight. pzlev is current player's zlevel
-    void build_sunlight_cache(int pzlev);
-    // Recomputes sun direction and scatter factor from the current game time.
-    void update_solar_params();
-    enum class direct_sunlight_state : int { none, shadow, direct };
-    // Distinguishes roofed tiles, angled-sun shadow, and full direct sun.
-    auto direct_sunlight_state_at(point_bub_ms p, int zlev) const -> direct_sunlight_state;
-    auto has_direct_sunlight_at(point_bub_ms p, int zlev) const -> bool;
-    auto current_lightmap_source_signature() -> std::size_t;
-
-public:
-    // Rebuilds outside_caches for zlev top-down:
-    // A tile is outside if any neighbour in the 3×3 at z+1
-    // is (outside AND has no floor).
-    // A tile is sheltered if any neighbour in the 3×3 at z+1
-    // has a floor or is itself sheltered.
-    // Recursively ensures zlev+1 is current before proceeding.
-    void build_outside_cache(int zlev);
-    // Builds a floor cache and returns true if the cache was invalidated.
-    // Used to determine if seen cache should be rebuilt.
-    bool build_floor_cache(int zlev);
-    // We want this visible in `game`, because we want it built earlier in the turn than the rest
-    void build_floor_caches();
-    // Checks all suspended tiles on a z level and adds those that are invalid to the
-    // support_dirty_cache */
-    void update_suspension_cache(const int& z);
-    // Builds a sound absorption cache and returns true if the cache was invalidated.
-    // If true, update the absorption cache. We want this built after the other caches, but before
-    // sounds are calced. Function logic located in sounds.cpp
-    bool build_absorption_cache(const int zlev);
-    // Builds a sound_instance_cache by flood filling from a given sound event.
-    // Function logic located in sounds.cpp
-    void flood_fill_sound(const sound_event soundevent, int zlev);
-    // Batch builds a set of sound caches from std::vector<sound_event> sound_batch_floodfill_que
-    // Similar to flood_fill_sound, used for monster sounds for performance.
-    void batch_flood_fill_sounds();
-    // Checks and culls sound_instance_caches from the sound_instance_caches vector.
-    // Sounds that have been heard by monsters and by the player are culled so they are not
-    // re-heard.
-    void cull_heard_sounds();
-
 protected:
-    // When skip_shared_init is true the caller has already: cleared sm/lsb for
-    // this level, called build_sunlight_cache() once, and applied character
-    // lights.  The function then processes only entities whose position z
-    // matches zlev, avoiding cross-level cache writes for parallel safety.
-    void generate_lightmap(int zlev);
-    void generate_lightmap_worker(int zlev);
-    void flush_lightmap_cpu_read_counters() const;
-    void build_seen_cache(const tripoint_bub_ms& origin, int target_z);
-    auto vision_transparency_block_mask() const -> uint32_t;
-    // Applies vehicle mirror/camera FOV from @p origin's vehicle.
-    // Separated from build_seen_cache for readability and Tracy granularity.
-    void apply_vehicle_optics(const tripoint_bub_ms& origin, int target_z);
-    void apply_character_light(Character& who);
-
-    // Adds/removes player specific transparencies
-    void apply_vision_transparency_cache(
-        const tripoint_bub_ms& center, int target_z, float (&vision_restore_cache)[9],
-        bool (&blocked_restore_cache)[8]);
-    void restore_vision_transparency_cache(
-        const tripoint_bub_ms& center, int target_z, float (&vision_restore_cache)[9],
-        bool (&blocked_restore_cache)[8]);
-
     int my_MAPSIZE;
 
     inline auto bubble_tiles() const -> point_range<point_bub_ms> {
@@ -1993,10 +1919,6 @@ protected:
     inline auto bubble_submaps() const -> tripoint_range<tripoint_bub_sm> {
         return {tripoint_bub_sm(0, 0, -OVERMAP_DEPTH),
                 tripoint_bub_sm(my_MAPSIZE - 1, my_MAPSIZE - 1, OVERMAP_HEIGHT)};
-    }
-
-    inline auto flat_bubble_submaps() const -> point_range<point_bub_sm> {
-        return {point_bub_sm::zero(), point_bub_sm(my_MAPSIZE - 1, my_MAPSIZE - 1)};
     }
 
     // stores vision adjustment for the tiles immediately surrounding the player, the order is given
@@ -2109,11 +2031,6 @@ public:
     submap* get_submap_at(const tripoint_bub_ms& p, point_sm_ms& offset_p) const;
 
 private:
-    /** Caclulate the greatest populated zlevel in the loaded submaps and save in the level cache.
-     * fills the map::max_populated_zlev and returns it
-     * @return max_populated_zlev value
-     */
-    int calc_max_populated_zlev();
     /**
      * Conditionally invalidates max_pupulated_zlev cache if the submap uniformity change occurs
      * above current max_pupulated_zlev value
@@ -2122,9 +2039,6 @@ private:
     void invalidate_max_populated_zlev(int zlev);
 
     int determine_wall_corner(const tripoint_bub_ms& p) const;
-    // apply a circular light pattern immediately; the deferred, directional, arc and ray
-    // variants are internal to lightmap.cpp
-    void apply_light_source(const tripoint_bub_ms& p, float luminance, uint32_t color_rgb = 0u);
     std::unique_ptr<vehicle> add_vehicle_to_map(std::unique_ptr<vehicle> veh, bool merge_wrecks);
 
     // Internal methods used to bash just the selected features
@@ -2228,9 +2142,6 @@ private:
     void begin_vehicle_move_batch();
     void flush_vehicle_move_batch();
 
-    // Note: no bounds check
-    level_cache& get_cache(int zlev) const { return *caches[zlev + OVERMAP_DEPTH]; }
-
     visibility_variables visibility_variables_cache;
 
     // caches the highest zlevel above which all zlevels are uniform
@@ -2253,6 +2164,33 @@ public:
     std::pair<vehicle*, int> get_rope_at(const tripoint_bub_ms& pt) const;
 
     const level_cache& get_cache_ref(int zlev) const { return *caches[zlev + OVERMAP_DEPTH]; }
+
+    // Note: no bounds check
+    level_cache& get_cache(int zlev) const { return *caches[zlev + OVERMAP_DEPTH]; }
+
+    // State the level-cache builders (level_cache_build.h) read and write.
+    auto weather_lookup() const -> const exp_lookup& { return weather_lookup_; }
+    auto weather_lookup() -> exp_lookup& { return weather_lookup_; }
+    using vision_adjustment_array = vision_adjustment[8];
+    auto vision_adjustments() const -> const vision_adjustment_array& {
+        return vision_transparency_cache;
+    }
+    auto vision_adjustments() -> vision_adjustment_array& { return vision_transparency_cache; }
+    auto solar() const -> const solar_params& { return m_solar; }
+    auto solar() -> solar_params& { return m_solar; }
+    inline auto flat_bubble_submaps() const -> point_range<point_bub_sm> {
+        return {point_bub_sm::zero(), point_bub_sm(my_MAPSIZE - 1, my_MAPSIZE - 1)};
+    }
+    /** Caclulate the greatest populated zlevel in the loaded submaps and save in the level cache.
+     * fills the map::max_populated_zlev and returns it
+     * @return max_populated_zlev value
+     */
+    int calc_max_populated_zlev();
+    // apply a circular light pattern immediately; the deferred, directional, arc and ray
+    // variants are internal to lightmap.cpp
+    void apply_light_source(const tripoint_bub_ms& p, float luminance, uint32_t color_rgb = 0u);
+    // Checks if the tile is supported and adds it to support_cache_dirty if it isn't
+    void support_dirty(const tripoint_bub_ms& p);
 
     /**
      * Holds the individual caches for sounds. Each individual cache has a std::vector<short> that

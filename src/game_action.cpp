@@ -46,6 +46,7 @@
 #include "item_functions.h"
 #include "itype.h"
 #include "iuse_actor.h"
+#include "level_cache_build.h"
 #include "level_cache_freshness.h"
 #include "map.h"
 #include "map_spawn.h"
@@ -1909,7 +1910,7 @@ auto game::post_action_world_step() -> void {
     }
 
     // We need floor cache before checking falling 'n stuff
-    { m.build_floor_caches(); }
+    { cache_build::build_floor_caches(m); }
 
     if (!vehperf) {
         m.process_falling();
@@ -2145,7 +2146,7 @@ auto game::coop_client_frame_step() -> void {
         calc_driving_offset(veh);
     }
 
-    m.build_floor_caches();
+    cache_build::build_floor_caches(m);
     m.build_map_cache(level_cache_freshness::plan_for(
         m, level_cache_freshness::pose_of_viewer(u, get_levz()),
         level_cache_freshness::lightmap_policy::skip));

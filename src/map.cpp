@@ -56,6 +56,7 @@
 #include "iuse_actor.h"
 #include "legacy_pathfinding.h"
 #include "level_cache.h"
+#include "level_cache_build.h"
 #include "level_cache_freshness.h"
 #include "lightmap.h"
 #include "line.h"
@@ -2066,10 +2067,10 @@ void map::build_obstacle_cache(
     }
 }
 
-void map::build_floor_caches() {
+void cache_build::build_floor_caches(map& here) {
     ZoneScoped;
 
-    for (int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; z++) { build_floor_cache(z); }
+    for (int z = -OVERMAP_DEPTH; z <= OVERMAP_HEIGHT; z++) { build_floor_cache(here, z); }
 }
 
 static void vehicle_caching_internal(level_cache& zch, const vpart_reference& vp, vehicle* v) {
@@ -2776,18 +2777,18 @@ bool map::check_and_set_seen_cache(const tripoint_bub_ms& p) const {
 }
 
 
-auto map::current_lightmap_source_signature() -> std::size_t {
+auto cache_build::current_lightmap_source_signature(map& here) -> std::size_t {
     ZoneScopedN("lightmap_source_signature");
 
     auto seed = std::size_t{0};
 
     cata::hash_combine(seed, to_hours<int>(calendar::turn - calendar::turn_zero));
-    update_solar_params();
+    update_solar_params(here);
     cata::hash_combine(seed, angled_sunlight_shadows);
-    cata::hash_combine(seed, m_solar.direct_active);
-    if (angled_sunlight_shadows && m_solar.direct_active) {
-        cata::hash_combine(seed, quantized_solar_signature_value(m_solar.dx_per_z));
-        cata::hash_combine(seed, quantized_solar_signature_value(m_solar.dy_per_z));
+    cata::hash_combine(seed, here.solar().direct_active);
+    if (angled_sunlight_shadows && here.solar().direct_active) {
+        cata::hash_combine(seed, quantized_solar_signature_value(here.solar().dx_per_z));
+        cata::hash_combine(seed, quantized_solar_signature_value(here.solar().dy_per_z));
     }
     std::ranges::for_each(std::views::iota(-OVERMAP_DEPTH, OVERMAP_HEIGHT + 1), [&](const int z) {
         cata::hash_combine(seed, z);
@@ -2806,7 +2807,7 @@ auto map::current_lightmap_source_signature() -> std::size_t {
         cata::hash_combine(seed, quantized_light_signature_value(luminance));
     }
 
-    for (const auto& view : active_submaps_.submaps()) {
+    for (const auto& view : here.active_submap_views()) {
         const auto grid = abs_to_bub(view.abs_pos());
         const submap& sm = view.get_submap();
         if (sm.is_uniform) { continue; }
@@ -2829,17 +2830,18 @@ auto map::current_lightmap_source_signature() -> std::size_t {
         }
     }
 
-    const auto& luminous_item_submaps = get_mapbuffer().get_submaps_with_luminous_items();
+    const auto& luminous_item_submaps = here.get_mapbuffer().get_submaps_with_luminous_items();
     for (const tripoint_abs_sm& abs_pos : luminous_item_submaps) {
-        if (!contains_abs_sm(abs_pos) || !submap_loader.is_simulated(bound_dimension_, abs_pos)) {
+        if (!here.contains_abs_sm(abs_pos)
+            || !submap_loader.is_simulated(here.get_bound_dimension(), abs_pos)) {
             continue;
         }
-        const submap* const sm_ptr = get_mapbuffer().lookup_submap_in_memory(abs_pos);
+        const submap* const sm_ptr = here.get_mapbuffer().lookup_submap_in_memory(abs_pos);
         if (sm_ptr == nullptr) { continue; }
         const submap& sm = *sm_ptr;
         for (const auto sm_ms : submap_tiles()) {
             if (sm.get_lum(sm_ms) == 0) { continue; }
-            const auto pos = abs_to_map_local(*this, project_combine(abs_pos, sm_ms));
+            const auto pos = abs_to_map_local(here, project_combine(abs_pos, sm_ms));
             for (const item* const itm : sm.get_items(sm_ms)) {
                 if (itm != nullptr) { hash_light_item(seed, pos, *itm); }
             }
@@ -2847,7 +2849,7 @@ auto map::current_lightmap_source_signature() -> std::size_t {
     }
 
     const auto odd_turn = calendar::once_every(2_turns);
-    for (const wrapped_vehicle& wrapped : get_vehicles()) {
+    for (const wrapped_vehicle& wrapped : here.get_vehicles()) {
         vehicle* veh = wrapped.v;
         if (veh == nullptr) { continue; }
 
@@ -2865,7 +2867,7 @@ auto map::current_lightmap_source_signature() -> std::size_t {
         for (const auto pt : lights) {
             const auto& vp = pt->info();
             const auto src = veh->bub_part_location(*pt);
-            if (!inbounds(src)) { continue; }
+            if (!here.inbounds(src)) { continue; }
             cata::hash_combine(seed, src);
             cata::hash_combine(seed, quantized_light_signature_value(static_cast<float>(vp.bonus)));
             cata::hash_combine(seed, quantized_light_signature_value(veh_luminance));
@@ -2899,7 +2901,7 @@ auto map::current_lightmap_source_signature() -> std::size_t {
             if (!vp.has_feature(VPFLAG_CARGO) || vp.has_feature("COVERED")) { continue; }
             const auto part_index = static_cast<int>(vp.part_index());
             const auto pos = vp.pos();
-            if (!inbounds(pos)) { continue; }
+            if (!here.inbounds(pos)) { continue; }
             for (item* const& itm : veh->get_items(part_index)) {
                 if (itm != nullptr) { hash_light_item(seed, pos, *itm); }
             }

@@ -13,6 +13,7 @@
 #include "int_id.h"
 #include "json.h"
 #include "level_cache.h"
+#include "level_cache_build.h"
 #include "level_cache_freshness.h"
 #include "map.h"
 #include "map_extras.h"
@@ -164,7 +165,7 @@ static void board_up(map& m, const tripoint_range<tripoint_bub_ms>& range) {
 
 void start_location::prepare_map(map& m, const int& z) const {
     if (flags().contains("BOARDED")) {
-        m.build_outside_cache(z);
+        cache_build::build_outside_cache(m, z);
         board_up(m, m.points_on_zlevel(z));
     } else {
         m.translate(t_window_domestic, t_curtains);
@@ -357,7 +358,7 @@ void start_location::burn(
     map& m = get_map();
     const tripoint_bub_ms u = g->u.bub_pos();
     // Make sure the outside cache is current for the player's z (a no-op if already built).
-    m.build_outside_cache(u.z());
+    cache_build::build_outside_cache(m, u.z());
     const tripoint_bub_ms from(u.x() - SEEX, u.y() - SEEY, u.z());
     const tripoint_bub_ms to(u.x() + SEEX, u.y() + SEEY, u.z());
     std::vector<tripoint_bub_ms> valid;

@@ -5,6 +5,7 @@
 #include "coordinates.h"
 #include "game_constants.h"
 #include "level_cache.h"
+#include "level_cache_build.h"
 #include "map.h"
 #include "map_iterator.h"
 #include "mapbuffer.h"
@@ -1257,7 +1258,8 @@ auto level_cache_freshness::plan_for(
         // The only signal for an entity-light move, which raises no bit of its own
         // (issue #19): reconcile the signature, raising the lightmap bit through the
         // `light_changed` kind when the sources moved.
-        if (note_lightmap_source_signature(who, who.current_lightmap_source_signature())) {
+        if (note_lightmap_source_signature(
+                who, cache_build::current_lightmap_source_signature(who))) {
             report(who, light_changed{});
         }
         plan.lightmap =

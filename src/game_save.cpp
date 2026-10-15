@@ -89,6 +89,7 @@
 #include "iuse_actor.h"
 #include "json.h"
 #include "kill_tracker.h"
+#include "level_cache_build.h"
 #include "level_cache_freshness.h"
 #include "lightmap.h"
 #include "line.h"
@@ -609,7 +610,7 @@ bool game::load(const save_t& name) {
     }
     update_map(u);
     discard_monster_map_for_loaded_bubble(m, current_dimension_id_);
-    m.build_floor_cache(get_levz());
+    cache_build::build_floor_cache(m, get_levz());
     for (auto& e : u.inv_dump()) { e->set_owner(g->u); }
     // legacy, needs to be here as we access the map.
     if (!u.getID().is_valid()) {
