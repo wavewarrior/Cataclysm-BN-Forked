@@ -12,6 +12,7 @@
 #include "units_utility.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 
 #include <cmath>
@@ -89,13 +90,15 @@ TEST_CASE("brake hold toggles parked braking drag", "[vehicle][drag]") {
     REQUIRE(bicycle != nullptr);
     REQUIRE(shopping_cart != nullptr);
 
-    CHECK(bicycle->static_drag() < bicycle->static_drag(false));
+    CHECK(vehicle_dynamics::static_drag(*bicycle) < vehicle_dynamics::static_drag(*bicycle, false));
 
     bicycle->toggle_brake_hold();
     shopping_cart->toggle_brake_hold();
 
-    CHECK(bicycle->static_drag() == bicycle->static_drag(false));
-    CHECK(shopping_cart->static_drag() == shopping_cart->static_drag(false));
+    CHECK(
+        vehicle_dynamics::static_drag(*bicycle) == vehicle_dynamics::static_drag(*bicycle, false));
+    CHECK(vehicle_dynamics::static_drag(*shopping_cart)
+          == vehicle_dynamics::static_drag(*shopping_cart, false));
 }
 
 TEST_CASE(

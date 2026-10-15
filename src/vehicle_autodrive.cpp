@@ -17,6 +17,7 @@
 #include "type_id.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h" // IWYU pragma: associated
 #include "vpart_position.h"
 
@@ -717,13 +718,15 @@ void vehicle::autodrive_controller::precompute_data() {
         data.next_next_omt = next_next_omt;
 
         // initialize car and driver properties
-        data.land_ok = driven_veh.valid_wheel_config();
-        data.water_ok = driven_veh.can_float();
-        data.air_ok = driven_veh.is_aircraft();
-        data.max_speed_tps = std::min(MAX_SPEED_TPS, driven_veh.safe_velocity() / CMPS_PER_TPS);
+        data.land_ok = vehicle_dynamics::valid_wheel_config(driven_veh);
+        data.water_ok = vehicle_dynamics::can_float(driven_veh);
+        data.air_ok = vehicle_dynamics::is_aircraft(driven_veh);
+        data.max_speed_tps =
+            std::min(MAX_SPEED_TPS, vehicle_dynamics::safe_velocity(driven_veh) / CMPS_PER_TPS);
         data.acceleration.resize(data.max_speed_tps);
         for (int speed_tps = 0; speed_tps < data.max_speed_tps; speed_tps++) {
-            data.acceleration[speed_tps] = driven_veh.acceleration(true, speed_tps * CMPS_PER_TPS);
+            data.acceleration[speed_tps] =
+                vehicle_dynamics::acceleration(driven_veh, true, speed_tps * CMPS_PER_TPS);
         }
         // TODO: compute from driver's skill and speed stat
         // TODO: change it during simulation based on vehicle speed and terrain
@@ -907,7 +910,7 @@ void vehicle::autodrive_controller::check_safe_speed() {
     // taking damage). We normally determine this at the beginning of path planning and cache it.
     // However, sometimes the vehicle's safe speed may drop (e.g. amphibious vehicle entering
     // water), so this extra check is needed to adjust our max speed.
-    int safe_speed_tps = driven_veh.safe_velocity() / CMPS_PER_TPS;
+    int safe_speed_tps = vehicle_dynamics::safe_velocity(driven_veh) / CMPS_PER_TPS;
     if (data.max_speed_tps > safe_speed_tps) { data.max_speed_tps = safe_speed_tps; }
 }
 
@@ -930,7 +933,8 @@ collision_check_result vehicle::autodrive_controller::check_collision_zone(orien
     tileray tdir = driven_veh.face;
     if (turn_dir != to_orientation(tdir.dir())) { tdir = profile.tdir; }
     const int speed = std::
-        min(driven_veh.velocity + driven_veh.current_acceleration(), driven_veh.cruise_velocity);
+        min(driven_veh.velocity + vehicle_dynamics::current_acceleration(driven_veh),
+            driven_veh.cruise_velocity);
     const int speed_tps = speed / CMPS_PER_TPS;
     std::unordered_set<point> collision_zone;
     tdir.advance();

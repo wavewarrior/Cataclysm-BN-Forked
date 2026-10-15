@@ -72,6 +72,7 @@
 #include "value_ptr.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "visitable.h"
 #include "vpart_position.h"
@@ -1235,7 +1236,7 @@ void npc::move_to(const tripoint_bub_ms& pt, bool no_bashing, std::set<tripoint_
     bool moved = false;
     if (const optional_vpart_position vp = here.veh_at(bub_pos())) {
         const optional_vpart_position ovp = here.veh_at(p);
-        if (vp->vehicle().is_moving()
+        if (vehicle_dynamics::is_moving(vp->vehicle())
             && (veh_pointer_or_null(ovp) != veh_pointer_or_null(vp)
                 || !ovp.part_with_feature(VPFLAG_BOARDABLE, true))) {
             move_pause();

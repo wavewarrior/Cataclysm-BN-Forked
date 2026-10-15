@@ -99,6 +99,7 @@
 #include "veh_type.h"
 #include "vehicle.h"
 #include "vehicle_display.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "visitable.h"
 #include "vpart_position.h"
@@ -543,7 +544,8 @@ void map::vehmove() {
                 if (veh == nullptr) { continue; }
                 const bool on_player_z = z == get_avatar().abs_pos().z();
                 const bool parked_off_z =
-                    !veh->is_moving() && !veh->engine_on && !veh->is_falling && !on_player_z;
+                    !vehicle_dynamics::is_moving(*veh) && !veh->engine_on && !veh->is_falling
+                    && !on_player_z;
                 const bool skip_outer = parked_off_z && !outer_stride_hit;
                 if (!skip_outer) {
                     veh->gain_moves();
@@ -588,7 +590,9 @@ void map::vehmove() {
             // non-autopilot vehicles.  Moving and falling vehicles receive
             // of_turn = 1 + carry >= 1.0, so this threshold is unambiguous.
             if (w.v->of_turn >= 1.0f) { pq.push(&w); }
-            if (w.v->is_falling || (w.v->is_aircraft() && w.v->get_z_change() != 0)) {
+            if (w.v->is_falling
+                || (vehicle_dynamics::is_aircraft(*w.v)
+                    && vehicle_dynamics::get_z_change(*w.v) != 0)) {
                 falling_vehicles.push_back(&w);
             }
         }
@@ -622,7 +626,9 @@ void map::vehmove() {
         if (cur_veh == nullptr) {
             for (wrapped_vehicle* w : falling_vehicles) {
                 if (w->v != nullptr
-                    && (w->v->is_falling || (w->v->is_aircraft() && w->v->get_z_change() != 0))) {
+                    && (w->v->is_falling
+                        || (vehicle_dynamics::is_aircraft(*w->v)
+                            && vehicle_dynamics::get_z_change(*w->v) != 0))) {
                     cur_veh = w;
                     break;
                 }
@@ -693,7 +699,10 @@ void map::vehmove() {
         for (wrapped_vehicle& wv : vehicle_list) {
             vehicle& v = *wv.v;
             if (!v.box2d_position_authority) { continue; }
-            if (v.is_falling || (v.is_aircraft() && v.get_z_change() != 0)) { continue; }
+            if (v.is_falling
+                || (vehicle_dynamics::is_aircraft(v) && vehicle_dynamics::get_z_change(v) != 0)) {
+                continue;
+            }
             targets.push_back(
                 {&v, static_cast<int>(std::lround(v.physics_pos.x)),
                  static_cast<int>(std::lround(v.physics_pos.y))});
@@ -864,7 +873,8 @@ void map::vehmove() {
             // holds its steer target.
             const auto steer_target = veh.turn_dir;
             veh.set_facing_and_pivot(
-                veh.is_moving() ? steer_target : veh.face.dir(), veh.pivot_point(), false);
+                vehicle_dynamics::is_moving(veh) ? steer_target : veh.face.dir(), veh.pivot_point(),
+                false);
             veh.turn_dir = steer_target; // set_facing() overwrites turn_dir; keep the pre-steer
             veh.render_offset_x = static_cast<float>(
                 veh.physics_pos.x - std::lround(veh.physics_pos.x));
@@ -923,9 +933,11 @@ void map::vehmove() {
             vehicle& veh = *veh_pair.first;
             const bool on_map = veh_pair.second;
             const bool full_rate =
-                veh.is_moving() || veh.is_falling || veh.engine_on || veh.player_in_control(g->u)
-                || veh.is_following || veh.is_patrolling || !veh.reactors.empty()
-                || (veh.is_rotorcraft() && veh.is_flying_in_air());
+                vehicle_dynamics::is_moving(veh) || veh.is_falling || veh.engine_on
+                || veh.player_in_control(g->u) || veh.is_following || veh.is_patrolling
+                || !veh.reactors.empty()
+                || (vehicle_dynamics::is_rotorcraft(veh)
+                    && vehicle_dynamics::is_flying_in_air(veh));
             if (full_rate || stride_hit) { veh.idle(on_map); }
         });
     }
@@ -946,7 +958,8 @@ bool map::vehproceed(VehicleList& vehicle_list) {
     if (cur_veh == nullptr) {
         for (wrapped_vehicle& vehs_v : vehicle_list) {
             if (vehs_v.v->is_falling
-                || (vehs_v.v->is_aircraft() && vehs_v.v->get_z_change() != 0)) {
+                || (vehicle_dynamics::is_aircraft(*vehs_v.v)
+                    && vehicle_dynamics::get_z_change(*vehs_v.v) != 0)) {
                 cur_veh = &vehs_v;
                 break;
             }
@@ -1024,7 +1037,8 @@ vehicle* map::move_vehicle(vehicle& veh, const tripoint_rel_ms& dp, const tilera
     // Split into vertical and horizontal movement
     const int& coll_velocity = vertical ? veh.vertical_velocity : veh.velocity;
     const int velocity_before = coll_velocity;
-    if (velocity_before == 0 && !veh.is_aircraft() && !veh.is_flying_in_air()) {
+    if (velocity_before == 0 && !vehicle_dynamics::is_aircraft(veh)
+        && !vehicle_dynamics::is_flying_in_air(veh)) {
         debugmsg("%s tried to move %s with no velocity", veh.name,
                  vertical ? "vertically" : "horizontally");
         return &veh;
@@ -1134,7 +1148,7 @@ vehicle* map::move_vehicle(vehicle& veh, const tripoint_rel_ms& dp, const tilera
 
     const int velocity_after = coll_velocity;
     bool can_move = velocity_after != 0 && sgn(velocity_after) == sgn(velocity_before);
-    if (dp.z() != 0 && veh.is_aircraft()) { can_move = true; }
+    if (dp.z() != 0 && vehicle_dynamics::is_aircraft(veh)) { can_move = true; }
     units::angle coll_turn = 0_degrees;
     if (impulse > 0) {
         coll_turn = shake_vehicle(veh, velocity_before, facing.dir());
@@ -1157,8 +1171,9 @@ vehicle* map::move_vehicle(vehicle& veh, const tripoint_rel_ms& dp, const tilera
     }
 
     // If not enough wheels, mess up the ground a bit.
-    if (!vertical && !veh.valid_wheel_config() && !veh.is_in_water() && !veh.is_flying_in_air()
-        && !veh.has_sufficient_lift(true) && dp.z() == 0) {
+    if (!vertical && !vehicle_dynamics::valid_wheel_config(veh)
+        && !vehicle_dynamics::is_in_water(veh) && !vehicle_dynamics::is_flying_in_air(veh)
+        && !vehicle_dynamics::has_sufficient_lift(veh, true) && dp.z() == 0) {
         veh.velocity += veh.velocity < 0 ? 2000 : -2000;
         for (const auto& p : veh.get_points()) {
             const ter_id& pter = ter(abs_to_map_local(*this, p));
@@ -1841,7 +1856,7 @@ bool map::displace_vehicle(vehicle& veh, const tripoint_rel_ms& dp) {
         ch2.zone_vehicles.erase(veh.handle());
         veh.check_is_heli_landed();
     }
-    if (veh.is_flying_in_air()) { veh.check_is_heli_landed(); }
+    if (vehicle_dynamics::is_flying_in_air(veh)) { veh.check_is_heli_landed(); }
     if (remote) {
         // Has to be after update_map or coordinates won't be valid
         g->setremoteveh(&veh);

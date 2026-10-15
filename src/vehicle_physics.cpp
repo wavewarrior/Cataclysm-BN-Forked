@@ -51,6 +51,7 @@
 #include "units_utility.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_functions.h"
 #include "vehicle_palette.h"
 #include "vehicle_part.h"   // IWYU pragma: associated
@@ -238,24 +239,26 @@ int vehicle::consumption_per_hour(const itype_id& ftype, int fuel_rate_w) const 
     return kj_per_hour / kj_per_mL;
 }
 
-int vehicle::ideal_engine_power(bool safe) const {
+int vehicle_dynamics::ideal_engine_power(const vehicle& veh, bool safe) {
     int pwr = 0;
     int cnt = 0;
 
-    for (size_t e = 0; e < engines.size(); e++) {
-        if (is_engine_on(e)) {
-            int p = engines[e];
-            int m2c = safe ? part_info(engines[e]).engine_m2c() : 100;
-            if (parts[engines[e]].faults().contains(fault_filter_fuel)) { m2c *= 0.6; }
-            pwr += part_vpower_w(p) * m2c / 100;
-            cnt += static_cast<int>(!part_info(p).has_flag("E_NO_POWER_DECAY"));
+    for (size_t e = 0; e < veh.engines.size(); e++) {
+        if (veh.is_engine_on(e)) {
+            int p = veh.engines[e];
+            int m2c = safe ? veh.part_info(veh.engines[e]).engine_m2c() : 100;
+            if (veh.part_storage()[veh.engines[e]].faults().contains(fault_filter_fuel)) {
+                m2c *= 0.6;
+            }
+            pwr += veh.part_vpower_w(p) * m2c / 100;
+            cnt += static_cast<int>(!veh.part_info(p).has_flag("E_NO_POWER_DECAY"));
         }
     }
 
-    for (size_t a = 0; a < alternators.size(); a++) {
-        int p = alternators[a];
-        if (is_alternator_on(a)) {
-            pwr += part_vpower_w(p); // alternators have negative power
+    for (size_t a = 0; a < veh.alternators.size(); a++) {
+        int p = veh.alternators[a];
+        if (veh.is_alternator_on(a)) {
+            pwr += veh.part_vpower_w(p); // alternators have negative power
         }
     }
 
@@ -265,24 +268,26 @@ int vehicle::ideal_engine_power(bool safe) const {
     return pwr;
 }
 
-int vehicle::total_power_w(const bool fueled, const bool safe) const {
+int vehicle_dynamics::total_power_w(const vehicle& veh, const bool fueled, const bool safe) {
     int pwr = 0;
     int cnt = 0;
 
-    for (size_t e = 0; e < engines.size(); e++) {
-        int p = engines[e];
-        if (engine_on && is_engine_on(e) && (!fueled || engine_fuel_left(e))) {
-            int m2c = safe ? part_info(engines[e]).engine_m2c() : 100;
-            if (parts[engines[e]].faults().contains(fault_filter_fuel)) { m2c *= 0.6; }
-            pwr += part_vpower_w(p) * m2c / 100;
-            cnt += static_cast<int>(!part_info(p).has_flag("E_NO_POWER_DECAY"));
+    for (size_t e = 0; e < veh.engines.size(); e++) {
+        int p = veh.engines[e];
+        if (veh.engine_on && veh.is_engine_on(e) && (!fueled || veh.engine_fuel_left(e))) {
+            int m2c = safe ? veh.part_info(veh.engines[e]).engine_m2c() : 100;
+            if (veh.part_storage()[veh.engines[e]].faults().contains(fault_filter_fuel)) {
+                m2c *= 0.6;
+            }
+            pwr += veh.part_vpower_w(p) * m2c / 100;
+            cnt += static_cast<int>(!veh.part_info(p).has_flag("E_NO_POWER_DECAY"));
         }
     }
 
-    for (size_t a = 0; a < alternators.size(); a++) {
-        int p = alternators[a];
-        if (is_alternator_on(a)) {
-            pwr += part_vpower_w(p); // alternators have negative power
+    for (size_t a = 0; a < veh.alternators.size(); a++) {
+        int p = veh.alternators[a];
+        if (veh.is_alternator_on(a)) {
+            pwr += veh.part_vpower_w(p); // alternators have negative power
         }
     }
 
@@ -292,47 +297,52 @@ int vehicle::total_power_w(const bool fueled, const bool safe) const {
     return pwr;
 }
 
-bool vehicle::is_moving() const { return velocity != 0; }
+bool vehicle_dynamics::is_moving(const vehicle& veh) { return veh.velocity != 0; }
 
-bool vehicle::can_use_rails() const {
+bool vehicle_dynamics::can_use_rails(const vehicle& veh) {
     // Do not allow vehicles without rail wheels or with mixed wheels
-    return !rail_wheelcache.empty() && wheelcache.size() == rail_wheelcache.size();
+    return !veh.rail_wheelcache.empty() && veh.wheelcache.size() == veh.rail_wheelcache.size();
 }
 
-int vehicle::ground_acceleration(const bool fueled, int at_vel_in_vmi, const bool ideal) const {
-    if (!(engine_on || skidding)) { return 0; }
-    int target_cmps = std::max(at_vel_in_vmi, std::max(447, max_velocity(fueled) / 4));
-    double weight = to_kilogram(total_mass());
-    if (is_towing()) {
-        vehicle* other_veh = tow_data.get_towed();
+int vehicle_dynamics::ground_acceleration(
+    const vehicle& veh, const bool fueled, int at_vel_in_vmi, const bool ideal) {
+    if (!(veh.engine_on || veh.skidding)) { return 0; }
+    int target_cmps = std::max(at_vel_in_vmi, std::max(447, max_velocity(veh, fueled) / 4));
+    double weight = to_kilogram(veh.total_mass());
+    if (veh.is_towing()) {
+        vehicle* other_veh = veh.tow_data.get_towed();
         if (other_veh) { weight = weight + to_kilogram(other_veh->total_mass()); }
     }
-    int engine_power_ratio = (ideal ? ideal_engine_power() : total_power_w(fueled)) / weight;
+    int engine_power_ratio =
+        (ideal ? ideal_engine_power(veh) : total_power_w(veh, fueled)) / weight;
     int accel_at_vel = 100 * 100 * engine_power_ratio / target_cmps;
-    add_msg(m_debug, "%s: accel at %d cm/s is %d cm/s", name, target_cmps, accel_at_vel);
+    add_msg(m_debug, "%s: accel at %d cm/s is %d cm/s", veh.name, target_cmps, accel_at_vel);
     return accel_at_vel;
 }
 
-int vehicle::aircraft_acceleration(const bool fueled, int at_vel_in_vmi, const bool ideal) const {
+int vehicle_dynamics::aircraft_acceleration(
+    const vehicle& veh, const bool fueled, int at_vel_in_vmi, const bool ideal) {
     (void)at_vel_in_vmi;
-    if (!(engine_on || is_flying)) { return 0; }
-    const double thrust = total_thrust(fueled, ideal);
+    if (!(veh.engine_on || veh.flying_flag())) { return 0; }
+    const double thrust = total_thrust(veh, fueled, ideal);
     if (thrust == 0) { return 0; }
-    const int accel_at_vel = 100 * total_thrust(fueled, ideal) / to_kilogram(total_mass());
+    const int accel_at_vel = 100 * total_thrust(veh, fueled, ideal) / to_kilogram(veh.total_mass());
     return accel_at_vel;
 }
 
-int vehicle::water_acceleration(const bool fueled, int at_vel_in_vmi, const bool ideal) const {
-    if (!(engine_on || skidding)) { return 0; }
-    int target_cmps = std::max(at_vel_in_vmi, std::max(447, max_water_velocity(fueled) / 4));
-    double weight = to_kilogram(total_mass());
-    if (is_towing()) {
-        vehicle* other_veh = tow_data.get_towed();
+int vehicle_dynamics::water_acceleration(
+    const vehicle& veh, const bool fueled, int at_vel_in_vmi, const bool ideal) {
+    if (!(veh.engine_on || veh.skidding)) { return 0; }
+    int target_cmps = std::max(at_vel_in_vmi, std::max(447, max_water_velocity(veh, fueled) / 4));
+    double weight = to_kilogram(veh.total_mass());
+    if (veh.is_towing()) {
+        vehicle* other_veh = veh.tow_data.get_towed();
         if (other_veh) { weight = weight + to_kilogram(other_veh->total_mass()); }
     }
-    int engine_power_ratio = (ideal ? ideal_engine_power() : total_power_w(fueled)) / weight;
+    int engine_power_ratio =
+        (ideal ? ideal_engine_power(veh) : total_power_w(veh, fueled)) / weight;
     int accel_at_vel = 100 * 100 * engine_power_ratio / target_cmps;
-    add_msg(m_debug, "%s: water accel at %d cm/s is %d cm/s", name, target_cmps, accel_at_vel);
+    add_msg(m_debug, "%s: water accel at %d cm/s is %d cm/s", veh.name, target_cmps, accel_at_vel);
     return accel_at_vel;
 }
 
@@ -369,17 +379,17 @@ static double simple_cubic_solution(double a, double b, double c, double d) {
     }
 }
 
-int vehicle::acceleration(const bool fueled, int at_vel_in_vmi) const {
-    if (is_watercraft()) {
-        return water_acceleration(fueled, at_vel_in_vmi);
-    } else if (is_aircraft() && is_flying) {
-        return aircraft_acceleration(fueled, at_vel_in_vmi);
+int vehicle_dynamics::acceleration(const vehicle& veh, const bool fueled, int at_vel_in_vmi) {
+    if (is_watercraft(veh)) {
+        return water_acceleration(veh, fueled, at_vel_in_vmi);
+    } else if (is_aircraft(veh) && veh.flying_flag()) {
+        return aircraft_acceleration(veh, fueled, at_vel_in_vmi);
     }
-    return ground_acceleration(fueled, at_vel_in_vmi);
+    return ground_acceleration(veh, fueled, at_vel_in_vmi);
 }
 
-int vehicle::current_acceleration(const bool fueled) const {
-    return acceleration(fueled, std::abs(velocity));
+int vehicle_dynamics::current_acceleration(const vehicle& veh, const bool fueled) {
+    return acceleration(veh, fueled, std::abs(veh.velocity));
 }
 
 // Ugly physics below:
@@ -407,14 +417,14 @@ int vehicle::current_acceleration(const bool fueled) const {
 // c_air_drag * v^3 + c_rolling_drag * v^2 + c_rolling_drag * 33.3 * v - engine power = 0
 // solve for v with the simplified cubic equation solver
 // got it? quiz on Wednesday.
-int vehicle::max_ground_velocity(const bool fueled, const bool ideal) const {
-    int total_engine_w = (ideal ? ideal_engine_power() : total_power_w(fueled));
-    double c_rolling_drag = coeff_rolling_drag();
+int vehicle_dynamics::max_ground_velocity(const vehicle& veh, const bool fueled, const bool ideal) {
+    int total_engine_w = (ideal ? ideal_engine_power(veh) : total_power_w(veh, fueled));
+    double c_rolling_drag = veh.coeff_rolling_drag();
     double max_in_mps = simple_cubic_solution(
-        coeff_air_drag(), c_rolling_drag, c_rolling_drag * vehicles::rolling_constant_to_variable,
-        -total_engine_w);
-    add_msg(m_debug, "%s: power %d, c_air %3.2f, c_rolling %3.2f, max_in_mps %3.2f", name,
-            total_engine_w, coeff_air_drag(), c_rolling_drag, max_in_mps);
+        veh.coeff_air_drag(), c_rolling_drag,
+        c_rolling_drag * vehicles::rolling_constant_to_variable, -total_engine_w);
+    add_msg(m_debug, "%s: power %d, c_air %3.2f, c_rolling %3.2f, max_in_mps %3.2f", veh.name,
+            total_engine_w, veh.coeff_air_drag(), c_rolling_drag, max_in_mps);
     return mps_to_cmps(max_in_mps);
 }
 
@@ -428,34 +438,36 @@ int vehicle::max_ground_velocity(const bool fueled, const bool ideal) const {
 // engine_power = ( c_water_drag + c_air_drag ) * velocity^3
 // velocity^3 = engine_power / ( c_water_drag + c_air_drag )
 // velocity = cube root( engine_power / ( c_water_drag + c_air_drag ) )
-int vehicle::max_water_velocity(const bool fueled, const bool ideal) const {
-    int total_engine_w = (ideal ? ideal_engine_power() : total_power_w(fueled));
-    double total_drag = coeff_water_drag() + coeff_air_drag();
+int vehicle_dynamics::max_water_velocity(const vehicle& veh, const bool fueled, const bool ideal) {
+    int total_engine_w = (ideal ? ideal_engine_power(veh) : total_power_w(veh, fueled));
+    double total_drag = veh.coeff_water_drag() + veh.coeff_air_drag();
     double max_in_mps = std::cbrt(total_engine_w / total_drag);
-    add_msg(m_debug, "%s: power %d, c_air %3.2f, c_water %3.2f, water max_in_mps %3.2f", name,
-            total_engine_w, coeff_air_drag(), coeff_water_drag(), max_in_mps);
+    add_msg(m_debug, "%s: power %d, c_air %3.2f, c_water %3.2f, water max_in_mps %3.2f", veh.name,
+            total_engine_w, veh.coeff_air_drag(), veh.coeff_water_drag(), max_in_mps);
     return mps_to_cmps(max_in_mps);
 }
 
-int vehicle::max_air_velocity(const bool fueled, const bool ideal) const {
-    const double max_air_mps = std::sqrt(total_thrust(fueled, false, ideal) / coeff_air_drag());
+int vehicle_dynamics::max_air_velocity(const vehicle& veh, const bool fueled, const bool ideal) {
+    const double max_air_mps = std::sqrt(
+        total_thrust(veh, fueled, false, ideal) / veh.coeff_air_drag());
     // fly fast at your own risk
     return mps_to_cmps(max_air_mps);
 }
 
-int vehicle::max_velocity(const bool fueled, const bool ideal) const {
-    if (is_flying && is_aircraft()) {
-        return max_air_velocity(fueled, ideal);
-    } else if (is_watercraft()) {
-        return max_water_velocity(fueled, ideal);
+int vehicle_dynamics::max_velocity(const vehicle& veh, const bool fueled, const bool ideal) {
+    if (veh.flying_flag() && is_aircraft(veh)) {
+        return max_air_velocity(veh, fueled, ideal);
+    } else if (is_watercraft(veh)) {
+        return max_water_velocity(veh, fueled, ideal);
     } else {
-        return max_ground_velocity(fueled, ideal);
+        return max_ground_velocity(veh, fueled, ideal);
     }
 }
 
-int vehicle::max_reverse_velocity(const bool fueled, const bool ideal) const {
-    int max_vel = max_velocity(fueled, ideal);
-    if (has_engine_type(fuel_type_battery, true)) {
+int vehicle_dynamics::max_reverse_velocity(
+    const vehicle& veh, const bool fueled, const bool ideal) {
+    int max_vel = max_velocity(veh, fueled, ideal);
+    if (veh.has_engine_type(fuel_type_battery, true)) {
         // Electric motors can go in reverse as well as forward
         return -max_vel;
     } else {
@@ -465,12 +477,13 @@ int vehicle::max_reverse_velocity(const bool fueled, const bool ideal) const {
 }
 
 // the same physics as max_ground_velocity, but with a smaller engine power
-int vehicle::safe_ground_velocity(const bool fueled, const bool ideal) const {
-    for (size_t e = 0; e < parts.size(); e++) {
-        const vehicle_part& vp = parts[e];
+int vehicle_dynamics::safe_ground_velocity(
+    const vehicle& veh, const bool fueled, const bool ideal) {
+    for (size_t e = 0; e < veh.part_storage().size(); e++) {
+        const vehicle_part& vp = veh.part_storage()[e];
         int animal_vel = 0;
-        if (vp.info().fuel_type == fuel_type_animal && engines.size() != 1) {
-            monster* mon = get_pet(e);
+        if (vp.info().fuel_type == fuel_type_animal && veh.engines.size() != 1) {
+            monster* mon = veh.get_pet(e);
             if (mon != nullptr && mon->has_effect(effect_harnessed)) {
                 int animal_vel_cur = mon->get_speed() * 12;
                 if (animal_vel > 0) {
@@ -482,38 +495,41 @@ int vehicle::safe_ground_velocity(const bool fueled, const bool ideal) const {
         }
         // Cap safe speed at the point where the slowest animal found would start to damage their
         // yoke If damage or weight has pulled max speed lower than this, cap at that instead.
-        if (animal_vel > 0) { return std::min(animal_vel, max_ground_velocity(fueled)); }
+        if (animal_vel > 0) { return std::min(animal_vel, max_ground_velocity(veh, fueled)); }
     }
-    int effective_engine_w = (ideal ? ideal_engine_power(true) : total_power_w(fueled, true));
-    double c_rolling_drag = coeff_rolling_drag();
+    int effective_engine_w =
+        (ideal ? ideal_engine_power(veh, true) : total_power_w(veh, fueled, true));
+    double c_rolling_drag = veh.coeff_rolling_drag();
     double safe_in_mps = simple_cubic_solution(
-        coeff_air_drag(), c_rolling_drag, c_rolling_drag * vehicles::rolling_constant_to_variable,
-        -effective_engine_w);
+        veh.coeff_air_drag(), c_rolling_drag,
+        c_rolling_drag * vehicles::rolling_constant_to_variable, -effective_engine_w);
     return mps_to_cmps(safe_in_mps);
 }
 
 // TODO: Consider some kind of dynamic pressure based safe velocity
 // or something simpler maybe
-int vehicle::safe_aircraft_velocity(const bool fueled, const bool ideal) const {
-    const double max_air_mps = std::sqrt(total_thrust(fueled, true, ideal) / coeff_air_drag());
+int vehicle_dynamics::safe_aircraft_velocity(
+    const vehicle& veh, const bool fueled, const bool ideal) {
+    const double max_air_mps = std::sqrt(
+        total_thrust(veh, fueled, true, ideal) / veh.coeff_air_drag());
     return mps_to_cmps(max_air_mps);
 }
 
 // the same physics as max_water_velocity, but with a smaller engine power
-int vehicle::safe_water_velocity(const bool fueled, const bool ideal) const {
-    int total_engine_w = (ideal ? ideal_engine_power(true) : total_power_w(fueled, true));
-    double total_drag = coeff_water_drag() + coeff_air_drag();
+int vehicle_dynamics::safe_water_velocity(const vehicle& veh, const bool fueled, const bool ideal) {
+    int total_engine_w = (ideal ? ideal_engine_power(veh, true) : total_power_w(veh, fueled, true));
+    double total_drag = veh.coeff_water_drag() + veh.coeff_air_drag();
     double safe_in_mps = std::cbrt(total_engine_w / total_drag);
     return mps_to_cmps(safe_in_mps);
 }
 
-int vehicle::safe_velocity(const bool fueled) const {
-    if (is_flying && is_aircraft()) {
-        return safe_aircraft_velocity(fueled);
-    } else if (is_watercraft()) {
-        return safe_water_velocity(fueled);
+int vehicle_dynamics::safe_velocity(const vehicle& veh, const bool fueled) {
+    if (veh.flying_flag() && is_aircraft(veh)) {
+        return safe_aircraft_velocity(veh, fueled);
+    } else if (is_watercraft(veh)) {
+        return safe_water_velocity(veh, fueled);
     } else {
-        return safe_ground_velocity(fueled);
+        return safe_ground_velocity(veh, fueled);
     }
 }
 
@@ -648,25 +664,27 @@ void vehicle::noise_and_smoke(int load, time_duration time) {
     se.volume = noise;
     se.category = sounds::sound_t::movement;
     se.movement_noise = true;
-    se.description = _(is_rotorcraft() ? heli_noise : sounds[lvl].first);
+    se.description = _(vehicle_dynamics::is_rotorcraft(*this) ? heli_noise : sounds[lvl].first);
 
     sounds::sound(se);
 }
 
-int vehicle::wheel_area() const {
+int vehicle_dynamics::wheel_area(const vehicle& veh) {
     int total_area = 0;
-    for (const int& wheel_index : wheelcache) { total_area += parts[wheel_index].wheel_area(); }
+    for (const int& wheel_index : veh.wheelcache) {
+        total_area += veh.part_storage()[wheel_index].wheel_area();
+    }
 
     return total_area;
 }
 
-float vehicle::average_or_rating() const {
-    if (wheelcache.empty()) { return 0.0f; }
+float vehicle_dynamics::average_or_rating(const vehicle& veh) {
+    if (veh.wheelcache.empty()) { return 0.0f; }
     float total_rating = 0;
-    for (const int& wheel_index : wheelcache) {
-        total_rating += part_info(wheel_index).wheel_or_rating();
+    for (const int& wheel_index : veh.wheelcache) {
+        total_rating += veh.part_info(wheel_index).wheel_or_rating();
     }
-    return total_rating / wheelcache.size();
+    return total_rating / veh.wheelcache.size();
 }
 
 static double tile_to_width(int tiles) {
@@ -828,7 +846,7 @@ double vehicle::coeff_air_drag() const {
     double cross_area = height * tile_to_width(width);
     add_msg(m_debug, "%s: height %3.2fm, width %3.2fm (%d tiles), c_air %3.2f\n", name, height,
             tile_to_width(width), width, c_air_drag);
-    if (!balloons.empty()) { c_air_drag += coeff_balloon_drag(); }
+    if (!balloons.empty()) { c_air_drag += vehicle_dynamics::coeff_balloon_drag(*this); }
     // F_air_drag = c_air_drag * cross_area * 1/2 * air_density * v^2
     // coeff_air_resistance = c_air_drag * cross_area * 1/2 * air_density
     coefficient_air_resistance = std::max(0.1, c_air_drag * cross_area * 0.5 * air_density);
@@ -836,10 +854,10 @@ double vehicle::coeff_air_drag() const {
     return coefficient_air_resistance;
 }
 
-double vehicle::coeff_balloon_drag() const {
-    double volume = std::
-        accumulate(balloons.begin(), balloons.end(), double{0.0}, [&](double acc, int balloon) {
-            const double height{parts[balloon].info().balloon_height()};
+double vehicle_dynamics::coeff_balloon_drag(const vehicle& veh) {
+    double volume = std::accumulate(
+        veh.balloons.begin(), veh.balloons.end(), double{0.0}, [&](double acc, int balloon) {
+            const double height{veh.part_storage()[balloon].info().balloon_height()};
             return acc + height;
         });
     return std::pow(volume, 2 / 3);
@@ -867,7 +885,8 @@ double vehicle::coeff_rolling_drag() const {
         wheel_factor *= wheel_ratio / (base_wheels * wheel_ratio - base_wheels + wheelcache.size());
     }
     coefficient_rolling_resistance =
-        newton_ratio * wheel_factor * to_kilogram(total_mass()) * get_lift_percent(true);
+        newton_ratio * wheel_factor * to_kilogram(total_mass())
+        * vehicle_dynamics::get_lift_percent(*this, true);
     coefficient_rolling_resistance = std::max(coefficient_rolling_resistance, 0.0);
     coeff_rolling_dirty = false;
     return coefficient_rolling_resistance;
@@ -883,24 +902,24 @@ double vehicle::water_draft() const {
     return draft_m;
 }
 
-bool vehicle::can_float() const {
-    if (coeff_water_dirty) { coeff_water_drag(); }
-    int float_force = max_buoyancy() + total_balloon_lift();
-    return to_newton(total_mass()) <= float_force;
+bool vehicle_dynamics::can_float(const vehicle& veh) {
+    veh.coeff_water_drag(); // refreshes the water cache when it is dirty
+    int float_force = max_buoyancy(veh) + total_balloon_lift(veh);
+    return to_newton(veh.total_mass()) <= float_force;
 }
 
 
-double vehicle::total_rotor_area() const {
-    return std::accumulate(rotors.begin(), rotors.end(), 0.0, [&](double acc, int rotor) {
-        const double radius{parts[rotor].info().rotor_diameter() / 2.0};
+double vehicle_dynamics::total_rotor_area(const vehicle& veh) {
+    return std::accumulate(veh.rotors.begin(), veh.rotors.end(), 0.0, [&](double acc, int rotor) {
+        const double radius{veh.part_storage()[rotor].info().rotor_diameter() / 2.0};
         return acc + M_PI * std::pow(radius, 2);
     });
 }
 
-double vehicle::total_propeller_area() const {
-    return std::
-        accumulate(propellers.begin(), propellers.end(), 0.0, [&](double acc, int propeller) {
-            const double radius{parts[propeller].info().propeller_diameter() / 2.0};
+double vehicle_dynamics::total_propeller_area(const vehicle& veh) {
+    return std::accumulate(
+        veh.propellers.begin(), veh.propellers.end(), 0.0, [&](double acc, int propeller) {
+            const double radius{veh.part_storage()[propeller].info().propeller_diameter() / 2.0};
             return acc + M_PI * std::pow(radius, 2);
         });
 }
@@ -909,91 +928,97 @@ double vehicle::total_propeller_area() const {
 // 1 tile is 1 m^2, but with an undefined height
 // So balloon height and balloon weight will be what changes
 // Returns a value in newtons
-double vehicle::total_balloon_lift() const {
+double vehicle_dynamics::total_balloon_lift(const vehicle& veh) {
     return GRAVITY_OF_EARTH
          * std::accumulate(
-               balloons.begin(), balloons.end(), double{0.0}, [&](double acc, int balloon) {
-                   const double height{parts[balloon].info().balloon_height()};
+               veh.balloons.begin(), veh.balloons.end(), double{0.0}, [&](double acc, int balloon) {
+                   const double height{veh.part_storage()[balloon].info().balloon_height()};
                    return acc + height;
                });
 }
 
 // Wing Lift
 // Based on air being 1kg/m^3
-double vehicle::total_wing_lift() const {
-    const double meterpersec = cmps_to_mps(velocity);
+double vehicle_dynamics::total_wing_lift(const vehicle& veh) {
+    const double meterpersec = cmps_to_mps(veh.velocity);
     const double meterpersecsquared = std::pow(meterpersec, 2);
     return meterpersecsquared
-         * std::accumulate(wings.begin(), wings.end(), double{0.0}, [&](double acc, int wing) {
-               const double liftcoff{parts[wing].info().lift_coff()};
-               // m^2 area is always 1
-               return acc + (0.5 * liftcoff);
-           });
+         * std::accumulate(
+               veh.wings.begin(), veh.wings.end(), double{0.0}, [&](double acc, int wing) {
+                   const double liftcoff{veh.part_storage()[wing].info().lift_coff()};
+                   // m^2 area is always 1
+                   return acc + (0.5 * liftcoff);
+               });
 }
 
 // constants were converted from imperial to SI goodness
 // returns as newton
-double vehicle::thrust_of_rotorcraft(const bool fuelled, const bool safe, const bool ideal) const {
+double vehicle_dynamics::thrust_of_rotorcraft(
+    const vehicle& veh, const bool fuelled, const bool safe, const bool ideal) {
     constexpr double coefficient = 0.8642;
     constexpr double exponentiation = -0.3107;
 
-    const double rotor_area = total_rotor_area();
+    const double rotor_area = total_rotor_area(veh);
     if (rotor_area == 0) { return 0; }
     // take off 15 % due to the imaginary tail rotor power?
-    const int engine_power = (ideal ? ideal_engine_power(safe) : total_power_w(fuelled, safe));
+    const int engine_power =
+        (ideal ? ideal_engine_power(veh, safe) : total_power_w(veh, fuelled, safe));
     if (engine_power <= 0) { return 0; }
     const double power_load = engine_power / rotor_area;
     const double lift_thrust = coefficient * engine_power * std::pow(power_load, exponentiation);
-    add_msg(m_debug, "lift thrust(N) of %s: %f, rotor area (m^2): %f, engine power (w): %i", name,
-            lift_thrust, rotor_area, engine_power);
+    add_msg(m_debug, "lift thrust(N) of %s: %f, rotor area (m^2): %f, engine power (w): %i",
+            veh.name, lift_thrust, rotor_area, engine_power);
     return lift_thrust;
 }
 
 // constants were converted from imperial to SI goodness
 // returns as newton
-double vehicle::foward_thrust_of_propellers(
-    const bool fuelled, const bool safe, const bool ideal) const {
+double vehicle_dynamics::foward_thrust_of_propellers(
+    const vehicle& veh, const bool fuelled, const bool safe, const bool ideal) {
     constexpr double coefficient = 0.8642;
     constexpr double exponentiation = -0.3107;
 
-    const double rotor_area = total_propeller_area();
+    const double rotor_area = total_propeller_area(veh);
     if (rotor_area == 0) { return 0; }
     // take off 15 % due to the imaginary tail rotor power?
-    const int engine_power = (ideal ? ideal_engine_power(safe) : total_power_w(fuelled, safe));
+    const int engine_power =
+        (ideal ? ideal_engine_power(veh, safe) : total_power_w(veh, fuelled, safe));
 
     const double power_load = engine_power / rotor_area;
     const double foward_thrust = coefficient * engine_power * std::pow(power_load, exponentiation);
     add_msg(m_debug, "foward thrust(N) of %s: %f, propeller area (m^2): %f, engine power (w): %i",
-            name, foward_thrust, rotor_area, engine_power);
+            veh.name, foward_thrust, rotor_area, engine_power);
     return foward_thrust;
 }
 
 // get sum of horizontal thrust from all lifting parts
-double vehicle::total_thrust(const bool fuelled, const bool safe, const bool ideal) const {
-    return thrust_of_rotorcraft(fuelled, safe, ideal)
-         + foward_thrust_of_propellers(fuelled, safe, ideal);
+double vehicle_dynamics::total_thrust(
+    const vehicle& veh, const bool fuelled, const bool safe, const bool ideal) {
+    return thrust_of_rotorcraft(veh, fuelled, safe, ideal)
+         + foward_thrust_of_propellers(veh, fuelled, safe, ideal);
 }
 
 // get sum of lift from all lifting parts
-double vehicle::total_lift(
-    const bool fuelled, const bool safe, const bool ideal, const bool unpowered,
-    const bool idle) const {
-    if (idle) { return total_balloon_lift(); }
+double vehicle_dynamics::total_lift(
+    const vehicle& veh, const bool fuelled, const bool safe, const bool ideal, const bool unpowered,
+    const bool idle) {
+    if (idle) { return total_balloon_lift(veh); }
     if (unpowered) {
-        return total_balloon_lift() + total_wing_lift();
+        return total_balloon_lift(veh) + total_wing_lift(veh);
     } else {
-        return thrust_of_rotorcraft(fuelled, safe, ideal) + total_balloon_lift()
-             + total_wing_lift();
+        return thrust_of_rotorcraft(veh, fuelled, safe, ideal) + total_balloon_lift(veh)
+             + total_wing_lift(veh);
     }
 }
 
-int vehicle::get_takeoff_speed(std::string speed_type) const {
+int vehicle_dynamics::get_takeoff_speed(const vehicle& veh, std::string speed_type) {
     const int needed_force =
-        to_newton(total_mass()) - thrust_of_rotorcraft(true, false, true) - total_balloon_lift();
+        to_newton(veh.total_mass()) - thrust_of_rotorcraft(veh, true, false, true)
+        - total_balloon_lift(veh);
 
     const double liftwithoutspeed =
-        std::accumulate(wings.begin(), wings.end(), double{0.0}, [&](double acc, int wing) {
-            const double liftcoff{parts[wing].info().lift_coff()};
+        std::accumulate(veh.wings.begin(), veh.wings.end(), double{0.0}, [&](double acc, int wing) {
+            const double liftcoff{veh.part_storage()[wing].info().lift_coff()};
             // m^2 area is always 1
             return acc + (0.5 * liftcoff);
         });
@@ -1015,34 +1040,42 @@ int vehicle::get_takeoff_speed(std::string speed_type) const {
 // For some reason, just checking total lift > 0 doesn't seem to work if the vehicle hasn't been
 // piloted before, which was impacting the design view. This fixes it, and can be used to check if
 // the vehicle HAS lift, but not enough to fly by doing has_lift && !has_sufficient_lift
-bool vehicle::has_lift() const {
-    return has_part(VPFLAG_ROTOR) || has_part(VPFLAG_BALLOON) || has_part(VPFLAG_WING);
+bool vehicle_dynamics::has_lift(const vehicle& veh) {
+    return veh.has_part(VPFLAG_ROTOR) || veh.has_part(VPFLAG_BALLOON) || veh.has_part(VPFLAG_WING);
 }
 
-bool vehicle::has_sufficient_lift(const bool unpowered, const bool idle) const {
-    return total_lift(true, false, false, unpowered, idle) > to_newton(total_mass());
+bool vehicle_dynamics::has_sufficient_lift(
+    const vehicle& veh, const bool unpowered, const bool idle) {
+    return total_lift(veh, true, false, false, unpowered, idle) > to_newton(veh.total_mass());
 }
 
-double vehicle::get_lift_percent(const bool unpowered) const {
-    return std::max(0.0, 1 - (total_lift(true, false, false, unpowered) / to_newton(total_mass())));
+double vehicle_dynamics::get_lift_percent(const vehicle& veh, const bool unpowered) {
+    return std::max(
+        0.0, 1 - (total_lift(veh, true, false, false, unpowered) / to_newton(veh.total_mass())));
 }
 
-bool vehicle::is_rotorcraft() const { return (has_part(VPFLAG_ROTOR)) && has_sufficient_lift(); }
+bool vehicle_dynamics::is_rotorcraft(const vehicle& veh) {
+    return (veh.has_part(VPFLAG_ROTOR)) && has_sufficient_lift(veh);
+}
 // requires vehicle to have sufficient rotor lift
-bool vehicle::is_aircraft() const {
-    return (has_part(VPFLAG_ROTOR) || has_part(VPFLAG_WING) || has_part(VPFLAG_BALLOON))
-        && has_sufficient_lift();
+bool vehicle_dynamics::is_aircraft(const vehicle& veh) {
+    return (veh.has_part(VPFLAG_ROTOR) || veh.has_part(VPFLAG_WING) || veh.has_part(VPFLAG_BALLOON))
+        && has_sufficient_lift(veh);
 }
 
-int vehicle::get_z_change() const { return requested_z_change; }
+int vehicle_dynamics::get_z_change(const vehicle& veh) { return veh.z_change_request(); }
 
-bool vehicle::is_flying_in_air() const { return is_flying; }
+bool vehicle_dynamics::is_flying_in_air(const vehicle& veh) { return veh.flying_flag(); }
 
 void vehicle::set_flying(bool new_flying_value) { is_flying = new_flying_value; }
 
-bool vehicle::is_watercraft() const { return is_floating || (in_water && wheelcache.empty()); }
+bool vehicle_dynamics::is_watercraft(const vehicle& veh) {
+    return veh.floating_flag() || (veh.in_water_flag() && veh.wheelcache.empty());
+}
 
-bool vehicle::is_in_water(bool deep_water) const { return deep_water ? is_floating : in_water; }
+bool vehicle_dynamics::is_in_water(const vehicle& veh, bool deep_water) {
+    return deep_water ? veh.floating_flag() : veh.in_water_flag();
+}
 
 static constexpr double water_density = 1000.0; // kg/m^3
 
@@ -1084,7 +1117,8 @@ double vehicle::coeff_water_drag() const {
     if (hull_area == 0) {
         draft_m = 1;
     } else {
-        draft_m = to_kilogram(total_mass()) / water_density / hull_area * get_lift_percent(true);
+        draft_m = to_kilogram(total_mass()) / water_density / hull_area
+                * vehicle_dynamics::get_lift_percent(*this, true);
         draft_m = std::max(draft_m, 0.0);
     }
     // increase the streamlining as more of the boat is covered in boat boards
@@ -1102,25 +1136,25 @@ double vehicle::coeff_water_drag() const {
     return coefficient_water_resistance;
 }
 
-double vehicle::max_buoyancy() const {
-    if (coeff_water_dirty) { coeff_water_drag(); }
-    const double total_volume = hull_area * water_hull_height();
+double vehicle_dynamics::max_buoyancy(const vehicle& veh) {
+    veh.coeff_water_drag(); // refreshes the water cache when it is dirty
+    const double total_volume = veh.hull_area_m2() * veh.water_hull_height();
     return total_volume * water_density * GRAVITY_OF_EARTH;
 }
 
-float vehicle::k_traction(float wheel_traction_area) const {
-    if (is_floating) { return can_float() ? 1.0f : -1.0f; }
-    if (is_flying) {
+float vehicle_dynamics::k_traction(const vehicle& veh, float wheel_traction_area) {
+    if (veh.floating_flag()) { return can_float(veh) ? 1.0f : -1.0f; }
+    if (veh.flying_flag()) {
         // Dont prematurely kill our flight, we'll fall soon enough
-        return (has_lift()) ? 1.0f : -1.0f;
+        return (has_lift(veh)) ? 1.0f : -1.0f;
     }
-    if (is_watercraft() && can_float()) { return 1.0f; }
+    if (is_watercraft(veh) && can_float(veh)) { return 1.0f; }
 
-    const float fraction_without_traction = 1.0f - wheel_traction_area / wheel_area();
+    const float fraction_without_traction = 1.0f - wheel_traction_area / wheel_area(veh);
     if (fraction_without_traction == 0) { return 1.0f; }
-    const float mass_penalty = fraction_without_traction * to_kilogram(total_mass());
+    const float mass_penalty = fraction_without_traction * to_kilogram(veh.total_mass());
     float traction = std::min(1.0f, wheel_traction_area / mass_penalty);
-    add_msg(m_debug, "%s has traction %.2f", name, traction);
+    add_msg(m_debug, "%s has traction %.2f", veh.name, traction);
 
     // For now make it easy until it gets properly balanced: add a low cap of 0.1
     return std::max(0.1f, traction);

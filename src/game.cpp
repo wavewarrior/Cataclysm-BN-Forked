@@ -189,6 +189,7 @@
 #include "veh_interact.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_grab.h"
 #include "vehicle_ownership.h"
 #include "vehicle_part.h"
@@ -572,7 +573,7 @@ vehicle* game::place_vehicle_nearby(
     std::vector<std::string> search_types = omt_search_types;
     if (search_types.empty()) {
         vehicle veh(id);
-        if (!notwater && veh.can_float() && veh.has_part(VPFLAG_FLOATS)) {
+        if (!notwater && vehicle_dynamics::can_float(veh) && veh.has_part(VPFLAG_FLOATS)) {
             search_types.emplace_back("river_shore");
             search_types.emplace_back("lake_shore");
             search_types.emplace_back("lake_surface");

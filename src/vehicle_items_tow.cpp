@@ -52,6 +52,7 @@
 #include "veh_type.h"
 #include "vehicle.h"
 #include "vehicle_display.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_functions.h"
 #include "vehicle_palette.h"
 #include "vehicle_part.h"   // IWYU pragma: associated
@@ -553,7 +554,7 @@ void vehicle::refresh_pivot() const {
     // Const method, but messes with mutable fields
     pivot_dirty = false;
 
-    if (wheelcache.empty() || !valid_wheel_config()) {
+    if (wheelcache.empty() || !vehicle_dynamics::valid_wheel_config(*this)) {
         // No usable wheels, use CoM (dragging)
         pivot_cache = local_center_of_mass();
         return;

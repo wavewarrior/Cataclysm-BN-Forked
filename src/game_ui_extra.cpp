@@ -77,6 +77,7 @@
 #include "units_utility.h"
 #include "vehicle.h"
 #include "vehicle_display.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "vpart_range.h"
@@ -1851,7 +1852,7 @@ static auto list_vehicles(const vehicle_list_t& vehicle_list) -> vehicle_menu_re
             const int speed = static_cast<int>(convert_velocity(cur_vehicle->velocity, VU_VEHICLE));
             const std::string speed_text =
                 string_format(_("%d %s"), speed, velocity_units(VU_VEHICLE));
-            const bool wheels_ok = cur_vehicle->sufficient_wheel_config();
+            const bool wheels_ok = vehicle_dynamics::sufficient_wheel_config(*cur_vehicle);
             const auto [status_text, status_color] = vehicle_damage_summary(*cur_vehicle);
             const bool is_boat = !cur_vehicle->floating.empty();
             units::volume total_cargo = 0_ml;
@@ -1869,7 +1870,7 @@ static auto list_vehicles(const vehicle_list_t& vehicle_list) -> vehicle_menu_re
                 leaking_fuel = true;
                 break;
             }
-            const bool can_float = cur_vehicle->can_float();
+            const bool can_float = vehicle_dynamics::can_float(*cur_vehicle);
             std::string info;
             info += cata_text_to_rml(colorize(cur_vehicle->name, c_light_gray));
             info += "<br/>";

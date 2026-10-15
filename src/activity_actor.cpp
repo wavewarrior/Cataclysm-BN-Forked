@@ -83,6 +83,7 @@
 #include "units.h"
 #include "veh_interact.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 
@@ -445,8 +446,8 @@ void autodrive_activity_actor::start(player_activity& /* act */, Character& who)
     }
 
     player_vehicle = &vp->vehicle();
-    if (player_vehicle->is_flying_in_air()) {
-        int min_speed = player_vehicle->get_takeoff_speed("t/t");
+    if (vehicle_dynamics::is_flying_in_air(*player_vehicle)) {
+        int min_speed = vehicle_dynamics::get_takeoff_speed(*player_vehicle, "t/t");
         if (player_vehicle->velocity * 0.8 < min_speed * vehicles::cmps_per_tile) {
             if (!g->u.query_yn("Warning: Current Speed is below recommened values, proceed?")) {
                 who.cancel_activity();

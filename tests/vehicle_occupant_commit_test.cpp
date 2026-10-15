@@ -13,6 +13,7 @@
 #include "type_id.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "vpart_range.h"
@@ -225,10 +226,10 @@ TEST_CASE(
     here.vehmove();
     veh.cruise_velocity = 179;
     veh.velocity = 179;
-    REQUIRE(veh.safe_velocity() > 0);
+    REQUIRE(vehicle_dynamics::safe_velocity(veh) > 0);
 
     int cycles = 0;
-    while (veh.engine_on && veh.safe_velocity() > 0 && cycles < 10) {
+    while (veh.engine_on && vehicle_dynamics::safe_velocity(veh) > 0 && cycles < 10) {
         CAPTURE(cycles);
         const tripoint_bub_ms before_seat = veh.bub_part_location(seat_part);
         const tripoint_bub_ms before_player = player_character.bub_pos();

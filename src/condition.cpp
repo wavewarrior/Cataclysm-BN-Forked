@@ -26,6 +26,7 @@
 #include "string_id.h"
 #include "type_id.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 
@@ -578,7 +579,8 @@ template <class T> void conditional_t<T>::set_is_driving(bool is_npc) {
         player* actor = d.alpha;
         if (is_npc) { actor = dynamic_cast<player*>(d.beta); }
         if (const optional_vpart_position vp = get_map().veh_at(actor->bub_pos())) {
-            return vp->vehicle().is_moving() && vp->vehicle().player_in_control(*actor);
+            return vehicle_dynamics::is_moving(vp->vehicle())
+                && vp->vehicle().player_in_control(*actor);
         }
         return false;
     };

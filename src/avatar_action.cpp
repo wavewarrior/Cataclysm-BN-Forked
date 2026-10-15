@@ -56,6 +56,7 @@
 #include "veh_type.h"
 #include "vehicle.h"
 #include "vehicle_display.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_grab.h"
 #include "vehicle_ownership.h"
 #include "vehicle_part.h"
@@ -571,7 +572,7 @@ bool avatar_action::move(avatar& you, map& m, const tripoint_rel_ms& d) {
         veh_closed_door = door_part >= 0 && !dst_veh->part(door_part).open;
     }
 
-    if (src_veh != nullptr && src_veh->is_moving()) {
+    if (src_veh != nullptr && vehicle_dynamics::is_moving(*src_veh)) {
         if (dst_veh == nullptr) {
             if (query_yn(_("Dive from moving vehicle?"))) { g->moving_vehicle_dismount(dest_loc); }
             return false;

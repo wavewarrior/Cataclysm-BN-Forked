@@ -48,6 +48,7 @@
 #include "translations.h"
 #include "ui_manager.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "weather.h"
 
 #include <algorithm>
@@ -146,12 +147,12 @@ auto game::has_activity_skip_relevant_vehicle() -> bool {
         const vehicle* veh = wrapped.v;
         if (!log_activity_skip_state) {
             return veh != nullptr
-                && (veh->is_moving() || veh->vertical_velocity != 0 || veh->skidding
-                    || veh->is_falling || veh->is_autodriving || veh->is_following
+                && (vehicle_dynamics::is_moving(*veh) || veh->vertical_velocity != 0
+                    || veh->skidding || veh->is_falling || veh->is_autodriving || veh->is_following
                     || veh->is_patrolling || veh->autopilot_on || veh->is_alarm_on);
         }
         if (veh == nullptr) { return false; }
-        if (veh->is_moving() || veh->vertical_velocity != 0 || veh->is_falling) {
+        if (vehicle_dynamics::is_moving(*veh) || veh->vertical_velocity != 0 || veh->is_falling) {
             add_msg("Vehicles are actively moving, cannot skip time");
             return true;
         }

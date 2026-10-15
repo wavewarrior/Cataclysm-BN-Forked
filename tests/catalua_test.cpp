@@ -45,6 +45,7 @@
 #include "units_volume.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 
 #include <memory>
@@ -931,7 +932,8 @@ TEST_CASE("lua_map_vehicle_replacement", "[lua]") {
     REQUIRE(vehicles.front().v != nullptr);
     CHECK(vehicles.front().v->type == vproto_id("swivel_chair"));
     CHECK(normalize(vehicles.front().v->face.dir()) == normalize(overridden_facing));
-    CHECK(vehicles.front().v->static_drag() == vehicles.front().v->static_drag(false));
+    CHECK(vehicle_dynamics::static_drag(*vehicles.front().v)
+          == vehicle_dynamics::static_drag(*vehicles.front().v, false));
     const auto part_count = vehicles.front().v->part_count();
     auto has_lock = false;
     for (auto index = 0; index < part_count; ++index) {
@@ -972,7 +974,8 @@ TEST_CASE("lua_mapgen_vehicle_replacement", "[lua][mapgen]") {
     CHECK(project_remain<coords::omt>(vehicles.front()->abs_ms_location()).remainder == origin);
     CHECK(vehicles.front()->type == vproto_id("swivel_chair"));
     CHECK(normalize(vehicles.front()->face.dir()) == normalize(overridden_facing));
-    CHECK(vehicles.front()->static_drag() == vehicles.front()->static_drag(false));
+    CHECK(vehicle_dynamics::static_drag(*vehicles.front())
+          == vehicle_dynamics::static_drag(*vehicles.front(), false));
 }
 
 TEST_CASE("lua_table_serde", "[lua]") {

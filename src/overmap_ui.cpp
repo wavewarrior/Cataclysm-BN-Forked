@@ -66,6 +66,7 @@
 #include "uistate.h"
 #include "units.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "weather.h"
@@ -1452,17 +1453,21 @@ static std::vector<tripoint_abs_omt> get_overmap_path_to(
         }
         player_veh = &vp->vehicle();
         // for now we can only handle flyers if already in the air
-        const bool can_fly = player_veh->is_aircraft() && player_veh->is_flying_in_air();
-        const bool can_float = player_veh->can_float();
-        const bool can_drive = player_veh->valid_wheel_config();
+        const bool can_fly =
+            vehicle_dynamics::is_aircraft(*player_veh)
+            && vehicle_dynamics::is_flying_in_air(*player_veh);
+        const bool can_float = vehicle_dynamics::can_float(*player_veh);
+        const bool can_drive = vehicle_dynamics::valid_wheel_config(*player_veh);
         // TODO: check engines/fuel
         if (can_fly) {
             params = overmap_path_params::for_aircraft();
         } else if (can_float && !can_drive) {
             params = overmap_path_params::for_watercraft();
         } else if (can_drive) {
-            const float offroad_coeff = player_veh->k_traction(
-                player_veh->wheel_area() * player_veh->average_or_rating());
+            const float offroad_coeff = vehicle_dynamics::k_traction(
+                *player_veh,
+                vehicle_dynamics::wheel_area(*player_veh)
+                    * vehicle_dynamics::average_or_rating(*player_veh));
             const bool tiny = player_veh->get_points().size() <= 3;
             params = overmap_path_params::for_land_vehicle(offroad_coeff, tiny, can_float);
         } else {

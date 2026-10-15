@@ -70,6 +70,7 @@
 #include "value_ptr.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "visitable.h"
 #include "vpart_position.h"
@@ -252,7 +253,7 @@ float npc::vehicle_danger(int radius) const {
     // TODO: check for most dangerous vehicle?
     for (size_t i = 0; i < vehicles.size(); ++i) {
         const wrapped_vehicle& wrapped_veh = vehicles[i];
-        if (wrapped_veh.v->is_moving()) {
+        if (vehicle_dynamics::is_moving(*wrapped_veh.v)) {
             // FIXME: this can't be the right way to do this
             units::angle facing = wrapped_veh.v->face.dir();
 

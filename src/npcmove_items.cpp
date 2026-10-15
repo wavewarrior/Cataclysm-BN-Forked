@@ -65,6 +65,7 @@
 #include "value_ptr.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "visitable.h"
 #include "vpart_position.h"
@@ -281,7 +282,7 @@ void npc::find_item() {
             consider_terrain(eq_bub_pos);
         }
 
-        if (!vp || vp->vehicle().is_moving() || !(can_see || sees(eq_bub_pos))) {
+        if (!vp || vehicle_dynamics::is_moving(vp->vehicle()) || !(can_see || sees(eq_bub_pos))) {
             cache_tile();
             continue;
         }

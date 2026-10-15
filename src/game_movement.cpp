@@ -60,6 +60,7 @@
 #include "utils/pit_trap_helpers.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_grab.h"
 #include "vehicle_ownership.h"
 #include "vehicle_part.h"
@@ -861,7 +862,7 @@ auto game::place_player(const tripoint_bub_ms& dest_loc, const bool keep_grab) -
     }
     // Drench the player if swimmable
     if (m.has_flag("SWIMMABLE", u.bub_pos())
-        && !(u.is_mounted() || (u.in_vehicle && vp1->vehicle().can_float()))) {
+        && !(u.is_mounted() || (u.in_vehicle && vehicle_dynamics::can_float(vp1->vehicle())))) {
         u.drench(
             40,
             {{bodypart_str_id("foot_l"), bodypart_str_id("foot_r"), bodypart_str_id("leg_l"),

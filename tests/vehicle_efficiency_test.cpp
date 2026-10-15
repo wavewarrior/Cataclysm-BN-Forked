@@ -18,6 +18,7 @@
 #include "units.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "vpart_range.h"
@@ -218,7 +219,7 @@ static int test_efficiency(
     }
     expected_mass = to_gram(veh.total_mass());
     veh.check_falling_or_floating();
-    REQUIRE(!veh.is_in_water());
+    REQUIRE(!vehicle_dynamics::is_in_water(veh));
     const auto& starting_fuel = set_vehicle_fuel(veh, fuel_level);
     // This is ugly, but improves accuracy: compare the result of fuel approx function
     // rather than the amount of fuel we actually requested
@@ -230,7 +231,8 @@ static int test_efficiency(
     veh.engine_on = true;
 
     const int sign = in_reverse ? -1 : 1;
-    const int target_velocity = sign * std::min(2235, veh.safe_ground_velocity(false));
+    const int target_velocity =
+        sign * std::min(2235, vehicle_dynamics::safe_ground_velocity(veh, false));
     veh.cruise_velocity = target_velocity;
     // If we aren't testing repeated cold starts, start the vehicle at cruising velocity.
     // Otherwise changing the amount of fuel in the tank perturbs the test results.
@@ -239,8 +241,8 @@ static int test_efficiency(
     int tiles_travelled = 0;
     int cycles_left = cycle_limit;
     bool accelerating = true;
-    CHECK(veh.safe_velocity() > 0);
-    while (veh.engine_on && veh.safe_velocity() > 0 && cycles_left > 0) {
+    CHECK(vehicle_dynamics::safe_velocity(veh) > 0);
+    while (veh.engine_on && vehicle_dynamics::safe_velocity(veh) > 0 && cycles_left > 0) {
         cycles_left--;
         here.vehmove();
         veh.idle(true);
@@ -301,7 +303,7 @@ TEST_CASE("vehicle_efficiency_movement_keeps_vehicle_on_valid_terrain", "[vehicl
     vehicle& veh = *veh_ptr;
     veh.tags.insert("IN_CONTROL_OVERRIDE");
     veh.engine_on = true;
-    veh.cruise_velocity = std::min(2235, veh.safe_ground_velocity(false));
+    veh.cruise_velocity = std::min(2235, vehicle_dynamics::safe_ground_velocity(veh, false));
     veh.velocity = veh.cruise_velocity;
 
     for (auto cycle = 0; cycle < 10; ++cycle) {

@@ -22,6 +22,7 @@
 #include "units.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_grab.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
@@ -143,7 +144,7 @@ static void ramp_transition_angled(
     // Ramp tests require tile-step movement (move_vehicle), not Box2D physics.
     veh.box2d_position_authority = false;
 
-    REQUIRE(!veh.is_in_water());
+    REQUIRE(!vehicle_dynamics::is_in_water(veh));
 
     veh.tags.insert("IN_CONTROL_OVERRIDE");
     veh.engine_on = true;
@@ -163,12 +164,12 @@ static void ramp_transition_angled(
     const int target_velocity = 179;
     veh.cruise_velocity = target_velocity;
     veh.velocity = target_velocity;
-    CHECK(veh.safe_velocity() > 0);
+    CHECK(vehicle_dynamics::safe_velocity(veh) > 0);
     int cycles = 0;
     const int target_z = use_ramp ? (up ? 1 : -1) : 0;
 
     std::set<tripoint_abs_ms> vpts = veh.get_points();
-    while (veh.engine_on && veh.safe_velocity() > 0 && cycles < 10) {
+    while (veh.engine_on && vehicle_dynamics::safe_velocity(veh) > 0 && cycles < 10) {
         CAPTURE(cycles);
         for (const tripoint_abs_ms& checkpt : vpts) {
             int partnum = 0;

@@ -403,9 +403,6 @@ private:
     std::pair<int, int> get_controls_and_security() const;
     // damages vehicle controls and security system
     void smash_security_system();
-    // get vpart powerinfo for part number, accounting for variable-sized parts and hps.
-    int part_vpower_w(int index, bool at_full_hp = false) const;
-
     // get vpart epowerinfo for part number.
     int part_epower_w(int index) const;
 
@@ -969,60 +966,6 @@ public:
     // vehicle motion after precalc[1] is prepared.
     tripoint_rel_ms pivot_displacement() const;
 
-    // Get combined power of all engines, the ideal amount of power, not the current power
-    int ideal_engine_power(bool safe = false) const;
-    // Get combined power of all engines. If fueled == true, then only engines which
-    // vehicle have fuel for are accounted.  If safe == true, then limit engine power to
-    // their safe power.
-    int total_power_w(bool fueled = true, bool safe = false) const;
-
-    // Get ground acceleration gained by combined power of all engines. If fueled == true,
-    // then only engines which the vehicle has fuel for are included
-    int ground_acceleration(bool fueled = true, int at_vel_in_vmi = -1, bool ideal = false) const;
-    // Get water acceleration gained by combined power of all engines. If fueled == true,
-    // then only engines which the vehicle has fuel for are included
-    int water_acceleration(bool fueled = true, int at_vel_in_vmi = -1, bool ideal = false) const;
-    // get air acceleration gained by combined power of all engines. If fueled == true,
-    // then only engines which the vehicle hs fuel for are included
-    int aircraft_acceleration(bool fueled = true, int at_vel_in_vmi = -1, bool ideal = false) const;
-
-    // Get acceleration for the current movement mode
-    int acceleration(bool fueled = true, int at_vel_in_vmi = -1) const;
-
-    // Get the vehicle's actual current acceleration
-    int current_acceleration(bool fueled = true) const;
-
-    // is the vehicle currently moving?
-    bool is_moving() const;
-
-    // can the vehicle use rails?
-    bool can_use_rails() const;
-
-    // Get maximum ground velocity gained by combined power of all engines.
-    // If fueled == true, then only the engines which the vehicle has fuel for are included
-    int max_ground_velocity(bool fueled = true, bool ideal = false) const;
-    // Get maximum water velocity gained by combined power of all engines.
-    // If fueled == true, then only the engines which the vehicle has fuel for are included
-    int max_water_velocity(bool fueled = true, bool ideal = false) const;
-    // get maximum air velocity based on rotor physics
-    int max_air_velocity(bool fueled = true, bool ideal = false) const;
-    // Get maximum velocity for the current movement mode
-    int max_velocity(bool fueled = true, bool ideal = false) const;
-    // Get maximum reverse velocity for the current movement mode
-    int max_reverse_velocity(bool fueled = true, bool ideal = false) const;
-
-    // Get safe ground velocity gained by combined power of all engines.
-    // If fueled == true, then only the engines which the vehicle has fuel for are included
-    int safe_ground_velocity(bool fueled = true, bool ideal = false) const;
-    // get safe air velocity gained by combined power of all engines.
-    // if fueled == true, then only the engines which the vehicle hs fuel for are included
-    int safe_aircraft_velocity(bool fueled = true, bool ideal = false) const;
-    // Get safe water velocity gained by combined power of all engines.
-    // If fueled == true, then only the engines which the vehicle has fuel for are included
-    int safe_water_velocity(bool fueled = true, bool ideal = false) const;
-    // Get maximum velocity for the current movement mode
-    int safe_velocity(bool fueled = true) const;
-
     // Generate field from a part, either at front or back of vehicle depending on velocity.
     void spew_field(double joules, int part, field_type_id type, int intensity = 1);
 
@@ -1030,16 +973,8 @@ public:
     void noise_and_smoke(int load, time_duration time = 1_turns);
 
     /**
-     * Calculates the sum of the area under the wheels of the vehicle.
-     */
-    int wheel_area() const;
-    // average off-road rating for displaying off-road performance
-    float average_or_rating() const;
-
-    /**
      * Physical coefficients used for vehicle calculations.
      */
-    /*@{*/
     /**
      * coefficient of air drag in kg/m
      * multiplied by the square of speed to calculate air drag force in N
@@ -1047,11 +982,6 @@ public:
      * times a dimensional constant based on the vehicle's shape
      */
     double coeff_air_drag() const;
-
-    /**
-     * coefficient of airship balloon drag
-     */
-    double coeff_balloon_drag() const;
 
     /**
      * coefficient of rolling resistance
@@ -1070,19 +1000,6 @@ public:
     double coeff_water_drag() const;
 
     /**
-     * maximum possible buoyancy in Newtons.
-     *
-     * buoyancy force = V * D * g
-     *
-     * V: total volume of the vehicle (because it's maximally submerged)
-     * D: density of submerged fluid (in our case, water)
-     * g: force of gravity
-     *
-     * @return The max buoyancy in Newtons.
-     */
-    double max_buoyancy() const;
-
-    /**
      * watertight hull height in meters measures distance from bottom of vehicle
      * to the point where the vehicle will start taking on water
      */
@@ -1095,99 +1012,7 @@ public:
      */
     double water_draft() const;
 
-    /**
-     * can_float
-     * does the vehicle have freeboard or does it overflow with water?
-     */
-    bool can_float() const;
-    /**
-     * is the vehicle mostly in water or mostly on fairly dry land?
-     */
-    bool is_in_water(bool deep_water = false) const;
-    bool is_watercraft() const;
-    /**
-     * is the vehicle flying? is it an aircraft?
-     */
-    bool is_aircraft() const;
-    /**
-     * does the vehicle use rotors?
-     */
-    bool is_rotorcraft() const;
-    /**
-     * does the vehicle have lift-generating parts?
-     */
-    bool has_lift() const;
-    /**
-     * total area of every rotors in m^2
-     */
-    double total_rotor_area() const;
-    /**
-     * lift of balloons in newtons
-     */
-    double total_balloon_lift() const;
-    /**
-     * lift from wings in newtons
-     */
-    double total_wing_lift() const;
-    /**
-     * speed needed for aircraft takeoff
-     */
-    int get_takeoff_speed(std::string speed_type = "default") const;
-    /**
-     * total area of every propeller in m^2
-     */
-    double total_propeller_area() const;
-    /**
-     * lift of rotorcraft in newton
-     */
-    double thrust_of_rotorcraft(bool fuelled, bool safe = false, bool ideal = false) const;
-    /**
-     * foward thrust of propellers in newtons
-     */
-    double foward_thrust_of_propellers(bool fuelled, bool safe = false, bool ideal = false) const;
-    /**
-     * total foward thrust of all airborn pushers
-     */
-    double total_thrust(bool fuelled, bool safe = false, bool ideal = false) const;
-    /**
-     * total lift of all lifters
-     */
-    double total_lift(
-        bool fuelled, bool safe = false, bool ideal = false, bool unpowered = false,
-        bool idle = false) const;
-    bool has_sufficient_lift(bool unpowered = false, bool idle = false) const;
-    double get_lift_percent(bool unpowered = false) const;
-    int get_z_change() const;
-    bool is_flying_in_air() const;
     void set_flying(bool new_flying_value);
-    /**
-     * Traction coefficient of the vehicle.
-     * 1.0 on road. Outside roads, depends on mass divided by wheel area
-     * and the surface beneath wheels.
-     *
-     * Affects safe velocity, acceleration and handling difficulty.
-     */
-    float k_traction(float wheel_traction_area) const;
-    /*@}*/
-
-    // Extra drag on the vehicle from components other than wheels.
-    // @param actual is current drag if true or nominal drag otherwise
-    int static_drag(bool actual = true) const;
-
-    // strain of engine(s) if it works higher that safe speed (0-1.0)
-    float strain() const;
-
-    // Calculate if it can move using its wheels
-    bool sufficient_wheel_config() const;
-    bool balanced_wheel_config() const;
-    bool valid_wheel_config() const;
-
-    // return the relative effectiveness of the steering (1.0 is normal)
-    // <0 means there is no steering installed at all.
-    float steering_effectiveness() const;
-
-    /** Returns roughly driving skill level at which there is no chance of fumbling. */
-    float handling_difficulty() const;
 
     /**
      * Use grid traversal to enumerate all connected vehicles.
@@ -1442,7 +1267,6 @@ private:
      * @return npc object with suitable attributes for targeting a vehicle turret.
      */
     std::unique_ptr<npc> get_targeting_npc(const vehicle_part& pt);
-    /*@}*/
 
 public:
     /**
@@ -1608,6 +1432,16 @@ private:
 
     std::vector<vehicle_part> parts; // Parts which occupy different tiles
 public:
+    // Read access to the state the movement model (vehicle_dynamics.h) works from.
+    auto floating_flag() const -> bool { return is_floating; }
+    auto flying_flag() const -> bool { return is_flying; }
+    auto in_water_flag() const -> bool { return in_water; }
+    auto z_change_request() const -> int { return requested_z_change; }
+    auto hull_area_m2() const -> double { return hull_area; }
+    auto part_storage() const -> const std::vector<vehicle_part>& { return parts; }
+    auto part_storage() -> std::vector<vehicle_part>& { return parts; }
+    // get vpart powerinfo for part number, accounting for variable-sized parts and hps.
+    int part_vpower_w(int index, bool at_full_hp = false) const;
     // Number of parts contained in this vehicle
     int part_count() const;
     // Returns the vehicle_part with the given part number
@@ -1784,7 +1618,6 @@ public:
     tileray face;
     // direction we are moving
     tileray move;
-
 
 private:
     tripoint_rel_ms rotate_to_world(

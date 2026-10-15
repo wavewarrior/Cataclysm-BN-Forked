@@ -12,6 +12,7 @@
 #include "test_statistics.h"
 #include "type_id.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "vpart_range.h"
@@ -104,8 +105,8 @@ static bool test_drag(
 
     const double c_air = veh_ptr->coeff_air_drag();
     const double c_rolling = veh_ptr->coeff_rolling_drag();
-    const int safe_v = veh_ptr->safe_ground_velocity(false, true);
-    const int max_v = veh_ptr->max_ground_velocity(false, true);
+    const int safe_v = vehicle_dynamics::safe_ground_velocity(*veh_ptr, false, true);
+    const int max_v = vehicle_dynamics::max_ground_velocity(*veh_ptr, false, true);
 
     const auto d_in_bounds = [&](const double expected, double value) {
         double expected_high = expected * 1.05;

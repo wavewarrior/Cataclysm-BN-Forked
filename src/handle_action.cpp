@@ -100,6 +100,7 @@
 #include "utils/url.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_grab.h"
 #include "vehicle_part.h"
 #include "vehicle_wait.h"
@@ -798,7 +799,8 @@ bool game::handle_action() {
                         }
                     }
                 }
-                if (controlled_vehicle != nullptr && controlled_vehicle->is_aircraft()) {
+                if (controlled_vehicle != nullptr
+                    && vehicle_dynamics::is_aircraft(*controlled_vehicle)) {
                     pldrive(tripoint_rel_veh::below());
                 } else if (!u.in_vehicle) {
                     vertical_move(-1, false);
@@ -853,13 +855,13 @@ bool game::handle_action() {
                     }
                 }
                 if (controlled_vehicle != nullptr) {
-                    if (controlled_vehicle->is_aircraft()) {
+                    if (vehicle_dynamics::is_aircraft(*controlled_vehicle)) {
                         pldrive(tripoint_rel_veh::above());
                     } else if (
                         (controlled_vehicle->has_part("ROTOR")
                          || controlled_vehicle->has_part("BALLOON")
                          || controlled_vehicle->has_part("WING"))
-                        && !controlled_vehicle->has_sufficient_lift()) {
+                        && !vehicle_dynamics::has_sufficient_lift(*controlled_vehicle)) {
                         add_msg(m_bad, _("The craft struggles to generate enough lift!"));
                     } else {
                         u.add_msg_if_player(_("You need a propeller to take off!"));
@@ -2050,7 +2052,8 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                         }
                     }
                 }
-                if (controlled_vehicle != nullptr && controlled_vehicle->is_aircraft()) {
+                if (controlled_vehicle != nullptr
+                    && vehicle_dynamics::is_aircraft(*controlled_vehicle)) {
                     pldrive(tripoint_rel_veh::below());
                 } else if (!u.in_vehicle) {
                     vertical_move(-1, false);
@@ -2104,13 +2107,13 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                     }
                 }
                 if (controlled_vehicle != nullptr) {
-                    if (controlled_vehicle->is_aircraft()) {
+                    if (vehicle_dynamics::is_aircraft(*controlled_vehicle)) {
                         pldrive(tripoint_rel_veh::above());
                     } else if (
                         (controlled_vehicle->has_part("ROTOR")
                          || controlled_vehicle->has_part("BALLOON")
                          || controlled_vehicle->has_part("WING"))
-                        && !controlled_vehicle->has_sufficient_lift()) {
+                        && !vehicle_dynamics::has_sufficient_lift(*controlled_vehicle)) {
                         add_msg(m_bad, _("The craft struggles to generate enough lift!"));
                     } else {
                         u.add_msg_if_player(_("You need a propeller to take off!"));
@@ -3078,7 +3081,8 @@ auto game::handle_action_from(const std::string& pre_action) -> bool {
                 coop_client_->queue_action("FIRE", ctx_oss.str());
             }
         } else if (act == ACTION_MOVE_UP || act == ACTION_MOVE_DOWN) {
-            if (controlled_vehicle != nullptr && controlled_vehicle->is_aircraft()) {
+            if (controlled_vehicle != nullptr
+                && vehicle_dynamics::is_aircraft(*controlled_vehicle)) {
                 // D1: aircraft altitude — the local pldrive(above/below) above is mirrored
                 // on the host as a z-axis VEH_DRIVE.
                 coop_client_->queue_action(

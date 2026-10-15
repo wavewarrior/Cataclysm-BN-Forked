@@ -55,8 +55,9 @@
 #include "units_mass.h"
 #include "units_utility.h"
 #include "veh_type.h"
-#include "vehicle_driver.h"
 #include "vehicle_display.h"
+#include "vehicle_driver.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_functions.h"
 #include "vehicle_palette.h"
 #include "vehicle_part.h"   // IWYU pragma: associated
@@ -906,7 +907,7 @@ void vehicle::init_state(
     if (destroyTires && !wheelcache.empty()) {
         int tries = 0;
         int maxtries = wheelcache.size();
-        while (valid_wheel_config() && tries < maxtries) {
+        while (vehicle_dynamics::valid_wheel_config(*this) && tries < maxtries) {
             // keep going until either we've ruined all wheels or made one attempt for every wheel
             set_hp(parts[random_entry(wheelcache)], 0);
             tries++;
@@ -1143,14 +1144,18 @@ void vehicle::drive_to_local_target(const tripoint_abs_ms& target, bool follow_p
             || rl_dist(vehpos, g->u.abs_pos()) < 7 + ((mount_max.y() * 3) + 4)) {
             accel_y = 1;
         }
-        if ((velocity < std::min(safe_velocity(), safe_player_follow_speed) && turn_x == 0
-             && rl_dist(vehpos, g->u.abs_pos()) > 8 + ((mount_max.y() * 3) + 4))
+        if ((velocity < std::min(vehicle_dynamics::safe_velocity(*this), safe_player_follow_speed)
+             && turn_x == 0 && rl_dist(vehpos, g->u.abs_pos()) > 8 + ((mount_max.y() * 3) + 4))
             || velocity < 45) {
             accel_y = -1;
         }
     } else {
         if ((turn_x > 0 || turn_x < 0) && velocity > 447) { accel_y = 1; }
-        if ((velocity < std::min(safe_velocity(), is_aircraft() && is_flying_in_air() ? 5364 : 1431)
+        if ((velocity < std::min(
+                 vehicle_dynamics::safe_velocity(*this),
+                 vehicle_dynamics::is_aircraft(*this) && vehicle_dynamics::is_flying_in_air(*this)
+                     ? 5364
+                     : 1431)
              && turn_x == 0)
             || velocity < 224) {
             accel_y = -1;
@@ -1500,29 +1505,30 @@ int vehicle::fuel_left(const itype_id& ftype, bool recurse) const {
 }
 
 
-int vehicle::static_drag(bool actual) const {
-    return extra_drag + (actual && !engine_on && !is_towed() && brake_hold ? -1500 : 0);
+int vehicle_dynamics::static_drag(const vehicle& veh, bool actual) {
+    return veh.extra_drag
+         + (actual && !veh.engine_on && !veh.is_towed() && veh.brake_hold ? -1500 : 0);
 }
 
-float vehicle::strain() const {
-    int mv = max_velocity();
-    int sv = safe_velocity();
+float vehicle_dynamics::strain(const vehicle& veh) {
+    int mv = max_velocity(veh);
+    int sv = safe_velocity(veh);
     if (mv <= sv) { mv = sv + 1; }
-    if (velocity < sv && velocity > -sv) {
+    if (veh.velocity < sv && veh.velocity > -sv) {
         return 0;
     } else {
-        return static_cast<float>(std::abs(velocity) - sv) / static_cast<float>(mv - sv);
+        return static_cast<float>(std::abs(veh.velocity) - sv) / static_cast<float>(mv - sv);
     }
 }
 
-bool vehicle::sufficient_wheel_config() const {
-    if (wheelcache.empty()) {
+bool vehicle_dynamics::sufficient_wheel_config(const vehicle& veh) {
+    if (veh.wheelcache.empty()) {
         // No wheels!
         return false;
-    } else if (wheelcache.size() == 1) {
+    } else if (veh.wheelcache.size() == 1) {
         // Has to be a stable wheel, and one wheel can only support a 1-3 tile vehicle
-        if (!part_info(wheelcache.front()).has_flag("STABLE")
-            || all_parts_at_location(part_location_structure).size() > 3) {
+        if (!veh.part_info(veh.wheelcache.front()).has_flag("STABLE")
+            || veh.all_parts_at_location(part_location_structure).size() > 3) {
             return false;
         }
     }
@@ -1547,12 +1553,12 @@ void vehicle::remove_old_owner() {
     old_owner = faction_id::NULL_ID();
 }
 
-bool vehicle::balanced_wheel_config() const {
+bool vehicle_dynamics::balanced_wheel_config(const vehicle& veh) {
     auto min = tripoint_mnt_veh(tripoint_max);
     auto max = tripoint_mnt_veh(tripoint_min);
     // find the bounding box of the wheels
-    for (auto& w : wheelcache) {
-        const auto& pt = parts[w].mount;
+    for (auto& w : veh.wheelcache) {
+        const auto& pt = veh.part_storage()[w].mount;
         min.x() = std::min(min.x(), pt.x());
         min.y() = std::min(min.y(), pt.y());
         max.x() = std::max(max.x(), pt.x());
@@ -1563,52 +1569,52 @@ bool vehicle::balanced_wheel_config() const {
 
     // Check center of mass inside support of wheels (roughly)
     const inclusive_cuboid<tripoint_mnt_veh> support(min, max);
-    return support.contains(local_center_of_mass());
+    return support.contains(veh.local_center_of_mass());
 }
 
-bool vehicle::valid_wheel_config() const {
-    return sufficient_wheel_config() && balanced_wheel_config();
+bool vehicle_dynamics::valid_wheel_config(const vehicle& veh) {
+    return sufficient_wheel_config(veh) && balanced_wheel_config(veh);
 }
 
-float vehicle::steering_effectiveness() const {
-    if (is_floating) {
+float vehicle_dynamics::steering_effectiveness(const vehicle& veh) {
+    if (veh.floating_flag()) {
         // I'M ON A BOAT
-        return can_float() ? 1.0f : 0.0f;
+        return can_float(veh) ? 1.0f : 0.0f;
     }
-    if (is_flying || has_sufficient_lift(true)) {
+    if (veh.flying_flag() || has_sufficient_lift(veh, true)) {
         // I'M IN THE AIR
         // May need to add a separate check for planes, if/when they happen
-        return is_aircraft() ? 1.0f : 0.0f;
+        return is_aircraft(veh) ? 1.0f : 0.0f;
     }
     // irksome special case for boats in shallow water
-    if (is_watercraft() && can_float()) { return 1.0f; }
+    if (is_watercraft(veh) && can_float(veh)) { return 1.0f; }
 
-    if (steering.empty()) {
+    if (veh.steering.empty()) {
         return -1.0f; // No steering installed
     }
     // If the only steering part is an animal harness, with no animal in, it
     // is not steerable.
-    const vehicle_part& vp = parts[steering[0]];
-    if (steering.size() == 1 && vp.info().fuel_type == fuel_type_animal) {
-        monster* mon = get_pet(steering[0]);
+    const vehicle_part& vp = veh.part_storage()[veh.steering[0]];
+    if (veh.steering.size() == 1 && vp.info().fuel_type == fuel_type_animal) {
+        monster* mon = veh.get_pet(veh.steering[0]);
         if (mon == nullptr || !mon->has_effect(effect_harnessed)) { return -2.0f; }
     }
     // For now, you just need one wheel working for 100% effective steering.
     // TODO: return something less than 1.0 if the steering isn't so good
     // (unbalanced, long wheelbase, back-heavy vehicle with front wheel steering,
     // etc)
-    for (int p : steering) {
-        if (parts[p].is_available()) { return 1.0f; }
+    for (int p : veh.steering) {
+        if (veh.part_storage()[p].is_available()) { return 1.0f; }
     }
 
     // We have steering, but it's all broken.
     return 0.0f;
 }
 
-float vehicle::handling_difficulty() const {
-    const float steer = std::max(0.0f, steering_effectiveness());
-    const float ktraction = k_traction(g->m.vehicle_wheel_traction(*this));
-    const float aligned = std::max(0.0f, 1.0f - (face_vec() - dir_vec()).magnitude());
+float vehicle_dynamics::handling_difficulty(const vehicle& veh) {
+    const float steer = std::max(0.0f, steering_effectiveness(veh));
+    const float ktraction = k_traction(veh, g->m.vehicle_wheel_traction(veh));
+    const float aligned = std::max(0.0f, 1.0f - (veh.face_vec() - veh.dir_vec()).magnitude());
 
     // TestVehicle: perfect steering, moving on road at 100 mph (25 tiles per turn) = 0.0
     // TestVehicle but on grass (0.75 friction) = 2.5
@@ -1616,7 +1622,7 @@ float vehicle::handling_difficulty() const {
     // TestVehicle but on fungal bed (0.5 friction) and bad steering = 10
     // TestVehicle but turned 90 degrees during this turn (0 align) = 10
     const float diff_mod = ((1.0f - steer) + (1.0f - ktraction) + (1.0f - aligned));
-    return velocity * diff_mod / vehicles::cmps_per_tile;
+    return veh.velocity * diff_mod / vehicles::cmps_per_tile;
 }
 
 std::map<itype_id, int> vehicle::fuel_usage() const {
@@ -1668,8 +1674,8 @@ double vehicle::drain_energy(const itype_id& ftype, double energy_j) {
 }
 
 void vehicle::consume_fuel(int load, const int t_seconds, bool skip_electric) {
-    double st = strain();
-    if (current_acceleration() == 0) { return; }
+    double st = vehicle_dynamics::strain(*this);
+    if (vehicle_dynamics::current_acceleration(*this) == 0) { return; }
     for (auto& fuel_pr : fuel_usage()) {
         auto& ft = fuel_pr.first;
         if (skip_electric && ft == fuel_type_battery) { continue; }
@@ -2015,7 +2021,7 @@ void vehicle::idle_turns(const int turns) {
     power_parts(turns);
     // Validate muscle engines - auto-disable if conditions are not met
     validate_muscle_engines();
-    if (engine_on && total_power_w() > 0) {
+    if (engine_on && vehicle_dynamics::total_power_w(*this) > 0) {
         bool no_electric_power = true;
         int idle_rate = alternator_load;
         if (idle_rate < 10) {
@@ -2028,10 +2034,12 @@ void vehicle::idle_turns(const int turns) {
            this Possibly something like total lift / total engine power, maybe some factors for
            hovering efficiency of different types Also consider adding a hover efficiency field
         */
-        if (is_rotorcraft() && is_flying_in_air()) {
-            const auto rotor_newtons =
-                std::max(0.0, to_newton(total_mass()) - total_balloon_lift() - total_wing_lift());
-            const auto rotor_capacity = rotor_newtons / thrust_of_rotorcraft(true);
+        if (vehicle_dynamics::is_rotorcraft(*this) && vehicle_dynamics::is_flying_in_air(*this)) {
+            const auto rotor_newtons = std::
+                max(0.0, to_newton(total_mass()) - vehicle_dynamics::total_balloon_lift(*this)
+                             - vehicle_dynamics::total_wing_lift(*this));
+            const auto rotor_capacity =
+                rotor_newtons / vehicle_dynamics::thrust_of_rotorcraft(*this, true);
             idle_rate = std::max(10, int(std::floor(100 * rotor_capacity)));
             no_electric_power = false;
         }
@@ -2054,7 +2062,7 @@ void vehicle::idle(bool on_map) {
     power_parts();
     // Validate muscle engines - auto-disable if conditions are not met
     validate_muscle_engines();
-    if (engine_on && total_power_w() > 0) {
+    if (engine_on && vehicle_dynamics::total_power_w(*this) > 0) {
         bool no_electric_power = true;
         int idle_rate = alternator_load;
         if (idle_rate < 10) {
@@ -2067,10 +2075,12 @@ void vehicle::idle(bool on_map) {
            this Possibly something like total lift / total engine power, maybe some factors for
            hovering efficiency of different types Also consider adding a hover efficiency field
         */
-        if (is_rotorcraft() && is_flying_in_air()) {
-            const auto rotor_newtons =
-                std::max(0.0, to_newton(total_mass()) - total_balloon_lift() - total_wing_lift());
-            const auto rotor_capacity = rotor_newtons / thrust_of_rotorcraft(true);
+        if (vehicle_dynamics::is_rotorcraft(*this) && vehicle_dynamics::is_flying_in_air(*this)) {
+            const auto rotor_newtons = std::
+                max(0.0, to_newton(total_mass()) - vehicle_dynamics::total_balloon_lift(*this)
+                             - vehicle_dynamics::total_wing_lift(*this));
+            const auto rotor_capacity =
+                rotor_newtons / vehicle_dynamics::thrust_of_rotorcraft(*this, true);
             idle_rate = std::max(10, int(std::floor(100 * rotor_capacity)));
             no_electric_power = false;
         }
@@ -2732,7 +2742,7 @@ void vehicle::set_cruise_control_speed() {
     max_autodrive_speed =
         requested_max_autodrive_speed > 0 ? requested_max_autodrive_speed : max_autodrive_speed;
     if (max_autodrive_speed < min_autodrive_speed) { max_autodrive_speed = min_autodrive_speed; }
-    const auto takeoff = get_takeoff_speed("t/t");
+    const auto takeoff = vehicle_dynamics::get_takeoff_speed(*this, "t/t");
     if (takeoff > 0 && takeoff > min_autodrive_speed * 0.8) {
         popup("Warning: Minimum speed is less than safe flight speed");
     }
@@ -2745,7 +2755,7 @@ void vehicle::gain_moves() {
     fuel_used_last_turn.clear();
     check_falling_or_floating();
     const bool pl_control = vehicle_driver(*this) != nullptr;
-    if (is_moving() || is_falling) {
+    if (vehicle_dynamics::is_moving(*this) || is_falling) {
         if (!loose_parts.empty()) { shed_loose_parts(); }
         of_turn = 1 + of_turn_carry;
         const int vslowdown = slowdown(velocity);

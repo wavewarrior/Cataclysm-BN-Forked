@@ -39,6 +39,7 @@
 #include "units_temperature.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "weather.h"
@@ -1126,7 +1127,7 @@ void do_pause(Character& who) {
         vehicle* veh = nullptr;
         for (auto& v : vehs) {
             veh = v.v;
-            if (veh && veh->is_moving() && veh->player_in_control(who)) {
+            if (veh && vehicle_dynamics::is_moving(*veh) && veh->player_in_control(who)) {
                 double exp_temp =
                     1 + veh->total_mass() / 400.0_kilogram + std::abs(veh->velocity / 3200.0);
                 int experience = static_cast<int>(exp_temp);

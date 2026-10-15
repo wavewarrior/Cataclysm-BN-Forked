@@ -47,6 +47,7 @@
 #include "units_angle.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "weather.h"
@@ -3620,7 +3621,7 @@ void sfx::do_vehicle_engine_sfx() {
         in_reverse = true;
     }
     double pitch = 1.0;
-    int safe_speed = veh->safe_velocity();
+    int safe_speed = vehicle_dynamics::safe_velocity(*veh);
     int current_gear;
     if (in_reverse) {
         current_gear = -1;

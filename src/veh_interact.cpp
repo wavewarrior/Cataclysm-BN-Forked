@@ -50,6 +50,7 @@
 #include "veh_utils.h"
 #include "vehicle.h"
 #include "vehicle_display.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vehicle_preview.h"
@@ -2162,12 +2163,12 @@ static std::string wheel_state_description(const vehicle& veh) {
     bool is_boat = !veh.floating.empty();
     bool is_land = !veh.wheelcache.empty() || !is_boat;
 
-    bool suf_land = veh.sufficient_wheel_config();
-    bool bal_land = veh.balanced_wheel_config();
+    bool suf_land = vehicle_dynamics::sufficient_wheel_config(veh);
+    bool bal_land = vehicle_dynamics::balanced_wheel_config(veh);
 
-    bool suf_boat = veh.can_float();
+    bool suf_boat = vehicle_dynamics::can_float(veh);
 
-    float steer = veh.steering_effectiveness();
+    float steer = vehicle_dynamics::steering_effectiveness(veh);
 
     std::string wheel_status;
     if (!suf_land && is_boat) {
@@ -2225,7 +2226,8 @@ std::vector<std::string> veh_interact::stats_lines() const {
 
     const bool is_boat = !veh->floating.empty();
     const bool is_ground = !veh->wheelcache.empty() || !is_boat;
-    const bool is_aircraft = veh->is_aircraft() && veh->is_flying_in_air();
+    const bool is_aircraft =
+        vehicle_dynamics::is_aircraft(*veh) && vehicle_dynamics::is_flying_in_air(*veh);
 
     const auto vel_to_int = [](const double vel) {
         return static_cast<int>(convert_velocity(vel, VU_VEHICLE));
@@ -2234,57 +2236,58 @@ std::vector<std::string> veh_interact::stats_lines() const {
     if (is_aircraft) {
         stat(string_format(
             _("Air Safe/Top Speed: <color_light_green>%3d</color>/<color_light_red>%3d</color> %s"),
-            vel_to_int(veh->safe_aircraft_velocity(false, !veh->engine_on)),
-            vel_to_int(veh->max_air_velocity(false, !veh->engine_on)), velocity_units(VU_VEHICLE)));
+            vel_to_int(vehicle_dynamics::safe_aircraft_velocity(*veh, false, !veh->engine_on)),
+            vel_to_int(vehicle_dynamics::max_air_velocity(*veh, false, !veh->engine_on)),
+            velocity_units(VU_VEHICLE)));
         stat(string_format(
             _("Air Acceleration: <color_light_blue>%3d</color> %s/s"),
-            vel_to_int(veh->aircraft_acceleration(false, !veh->engine_on)),
+            vel_to_int(vehicle_dynamics::aircraft_acceleration(*veh, false, !veh->engine_on)),
             velocity_units(VU_VEHICLE)));
     } else {
         if (is_ground) {
             stat(string_format(
                 _("Safe/Top Speed: <color_light_green>%3d</color>/<color_light_red>%3d</color> %s"),
-                vel_to_int(veh->safe_ground_velocity(false, !veh->engine_on)),
-                vel_to_int(veh->max_ground_velocity(false, !veh->engine_on)),
+                vel_to_int(vehicle_dynamics::safe_ground_velocity(*veh, false, !veh->engine_on)),
+                vel_to_int(vehicle_dynamics::max_ground_velocity(*veh, false, !veh->engine_on)),
                 velocity_units(VU_VEHICLE)));
             stat(string_format(
                 //~ /t means per turn
                 _("Acceleration: <color_light_blue>%3d</color> %s/s"),
-                vel_to_int(veh->ground_acceleration(false, !veh->engine_on)),
+                vel_to_int(vehicle_dynamics::ground_acceleration(*veh, false, !veh->engine_on)),
                 velocity_units(VU_VEHICLE)));
         }
         if (is_boat) {
             stat(string_format(
                 _("Water Safe/Top Speed: "
                   "<color_light_green>%3d</color>/<color_light_red>%3d</color> %s"),
-                vel_to_int(veh->safe_water_velocity(false, !veh->engine_on)),
-                vel_to_int(veh->max_water_velocity(false, !veh->engine_on)),
+                vel_to_int(vehicle_dynamics::safe_water_velocity(*veh, false, !veh->engine_on)),
+                vel_to_int(vehicle_dynamics::max_water_velocity(*veh, false, !veh->engine_on)),
                 velocity_units(VU_VEHICLE)));
             stat(string_format(
                 //~ /t means per turn
                 _("Water Acceleration: <color_light_blue>%3d</color> %s/s"),
-                vel_to_int(veh->water_acceleration(false, !veh->engine_on)),
+                vel_to_int(vehicle_dynamics::water_acceleration(*veh, false, !veh->engine_on)),
                 velocity_units(VU_VEHICLE)));
         }
     }
     stat(string_format(
         _("Mass: <color_light_blue>%5.0f</color> %s"), convert_weight(veh->total_mass()),
         weight_units()));
-    if (veh->has_lift()) {
+    if (vehicle_dynamics::has_lift(*veh)) {
         units::mass lift_as_mass = units::from_newton(
-            veh->total_lift(true, false, !veh->engine_on));
+            vehicle_dynamics::total_lift(*veh, true, false, !veh->engine_on));
         stat(string_format(
             _("Maximum Lift: <color_light_blue>%5.0f</color> %s"), convert_weight(lift_as_mass),
             weight_units()));
         if (veh->has_part("WING")) {
             stat(string_format(
-                _("Liftoff Speed: <color_light_blue>%3d</color> %s"), veh->get_takeoff_speed(),
-                velocity_units(VU_VEHICLE)));
+                _("Liftoff Speed: <color_light_blue>%3d</color> %s"),
+                vehicle_dynamics::get_takeoff_speed(*veh), velocity_units(VU_VEHICLE)));
         }
     }
     if (is_boat) {
         units::mass buoyancy_as_mass = units::from_newton(
-            veh->max_buoyancy() + veh->total_balloon_lift());
+            vehicle_dynamics::max_buoyancy(*veh) + vehicle_dynamics::total_balloon_lift(*veh));
         stat(string_format(
             _("Maximum Buoyancy: <color_light_blue>%5.0f</color> %s"),
             convert_weight(buoyancy_as_mass), weight_units()));
@@ -2325,11 +2328,15 @@ std::vector<std::string> veh_interact::stats_lines() const {
         stat(string_format(
             _("Rolling drag:   <color_light_blue>%5.2f</color>"), veh->coeff_rolling_drag()));
     }
-    stat(
-        string_format(_("Static drag:    <color_light_blue>%5d</color>"), veh->static_drag(false)));
+    stat(string_format(
+        _("Static drag:    <color_light_blue>%5d</color>"),
+        vehicle_dynamics::static_drag(*veh, false)));
     stat(string_format(
         _("Offroad:        <color_light_blue>%4d</color>%%"),
-        static_cast<int>(veh->k_traction(veh->wheel_area() * veh->average_or_rating()) * 100)));
+        static_cast<int>(
+            vehicle_dynamics::k_traction(
+                *veh, vehicle_dynamics::wheel_area(*veh) * vehicle_dynamics::average_or_rating(*veh))
+            * 100)));
     if (is_boat) {
         const double water_clearance = veh->water_hull_height() - veh->water_draft();
         std::string draft_string =
@@ -2396,7 +2403,8 @@ static std::string veh_overview_header_label(vehicle& veh, const std::string& ke
     if (key == "ENGINE") {
         return string_format(
             _("Engines: %sSafe %4d kW</color> %sMax %4d kW</color>"), health_color(true),
-            veh.total_power_w(true, true) / 1000, health_color(false), veh.total_power_w() / 1000);
+            vehicle_dynamics::total_power_w(veh, true, true) / 1000, health_color(false),
+            vehicle_dynamics::total_power_w(veh) / 1000);
     } else if (key == "TANK") {
         return _("Tanks");
     } else if (key == "BATTERY") {

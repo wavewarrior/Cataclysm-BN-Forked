@@ -12,6 +12,7 @@
 #include "units_utility.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_move.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
@@ -147,7 +148,7 @@ static vehicle& add_moving_vehicle(
     veh.tags.insert("IN_CONTROL_OVERRIDE");
     veh.engine_on = true;
     const int tgt_velocity = 89;
-    REQUIRE(veh.safe_velocity(true) >= std::abs(tgt_velocity));
+    REQUIRE(vehicle_dynamics::safe_velocity(veh, true) >= std::abs(tgt_velocity));
     veh.cruise_on = true;
     veh.cruise_velocity = tgt_velocity;
     veh.velocity = tgt_velocity;

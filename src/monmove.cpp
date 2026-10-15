@@ -51,6 +51,7 @@
 #include "type_id.h"
 #include "vehicle.h"
 #include "vehicle_display.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 
@@ -1016,7 +1017,8 @@ monster_action_t monster::decide_action() const {
     // Vehicle harness / pet-in-moving-vehicle checks (reads only).
     // execute_action() handles the remove_effect(effect_harnessed) write.
     const auto vp = g->m.veh_at(pos);
-    if (vp && vp->vehicle().is_moving() && vp->vehicle().get_pet(vp->part_index())) {
+    if (vp && vehicle_dynamics::is_moving(vp->vehicle())
+        && vp->vehicle().get_pet(vp->part_index())) {
         action.kind = monster_action_kind::idle;
         action.move_cost = moves;
         return action;
@@ -1501,7 +1503,8 @@ void monster::execute_action(const monster_action_t& action) {
     {
         const auto vp2 = g->m.veh_at(bub_pos());
         const bool harness_part = static_cast<bool>(vp2.part_with_feature("ANIMAL_CTRL", true));
-        if (vp2 && vp2->vehicle().is_moving() && vp2->vehicle().get_pet(vp2->part_index())) {
+        if (vp2 && vehicle_dynamics::is_moving(vp2->vehicle())
+            && vp2->vehicle().get_pet(vp2->part_index())) {
             moves = 0;
             return;
         } else if (vp2 && has_effect(effect_harnessed)) {

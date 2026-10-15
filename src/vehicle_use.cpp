@@ -50,6 +50,7 @@
 #include "veh_type.h"
 #include "vehicle.h"
 #include "vehicle_display.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_move.h"
 #include "vehicle_ownership.h"
 #include "vehicle_part.h" // IWYU pragma: associated
@@ -403,7 +404,7 @@ void vehicle::control_engines() {
 
     // if current velocity greater than new configuration safe speed
     // drop down cruise velocity.
-    int safe_vel = safe_velocity();
+    int safe_vel = vehicle_dynamics::safe_velocity(*this);
     if (velocity > safe_vel) { cruise_velocity = safe_vel; }
 
     if (engines_were_on && !engine_on) {
@@ -641,7 +642,8 @@ void vehicle::use_controls(const tripoint_bub_ms& pos) {
     bool has_electronic_controls = false;
     avatar& you = get_avatar();
     const auto confirm_stop_driving = [this] {
-        return !is_flying_in_air() || has_sufficient_lift(true, true) || !has_part(VPFLAG_WING)
+        return !vehicle_dynamics::is_flying_in_air(*this)
+            || vehicle_dynamics::has_sufficient_lift(*this, true, true) || !has_part(VPFLAG_WING)
             || query_yn(_("Really let go of controls while flying?  This will result in a crash."));
     };
 
@@ -682,7 +684,8 @@ void vehicle::use_controls(const tripoint_bub_ms& pos) {
     if (!interact_vehicle_locked()) { return; }
 
     if (has_part("ENGINE")
-        && !(is_flying && units::to_newton(total_mass()) >= total_balloon_lift()
+        && !(is_flying
+             && units::to_newton(total_mass()) >= vehicle_dynamics::total_balloon_lift(*this)
              && has_part(VPFLAG_ROTOR))) {
         if (you.controlling_vehicle || (remote && engine_on)) {
             options.emplace_back(_("Stop driving"), keybind("TOGGLE_ENGINE"));
@@ -1385,7 +1388,7 @@ void vehicle::play_chimes() {
 }
 
 void vehicle::crash_terrain_around() {
-    if (total_power_w() <= 0) { return; }
+    if (vehicle_dynamics::total_power_w(*this) <= 0) { return; }
     for (const vpart_reference& vp : get_enabled_parts("CRASH_TERRAIN_AROUND")) {
         tripoint_bub_ms crush_target(0, 0, -OVERMAP_LAYERS);
         const tripoint_bub_ms start_pos = vp.pos();

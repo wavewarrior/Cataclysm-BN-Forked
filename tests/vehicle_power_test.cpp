@@ -13,6 +13,7 @@
 #include "ui.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "vehicle_selector.h"
 #include "weather.h"
@@ -241,8 +242,8 @@ TEST_CASE("maximum reverse velocity", "[vehicle][power][reverse]") {
             veh_ptr->start_engines();
 
             THEN("it can go in both forward and reverse") {
-                int max_fwd = veh_ptr->max_velocity(false, true);
-                int max_rev = veh_ptr->max_reverse_velocity(false, true);
+                int max_fwd = vehicle_dynamics::max_velocity(*veh_ptr, false, true);
+                int max_rev = vehicle_dynamics::max_reverse_velocity(*veh_ptr, false, true);
 
                 CHECK(max_rev < 0);
                 CHECK(max_fwd > 0);
@@ -266,8 +267,8 @@ TEST_CASE("maximum reverse velocity", "[vehicle][power][reverse]") {
             veh_ptr->start_engines();
 
             THEN("it can go in both forward and reverse") {
-                int max_fwd = veh_ptr->max_velocity(false, true);
-                int max_rev = veh_ptr->max_reverse_velocity(false, true);
+                int max_fwd = vehicle_dynamics::max_velocity(*veh_ptr, false, true);
+                int max_rev = vehicle_dynamics::max_reverse_velocity(*veh_ptr, false, true);
 
                 CHECK(max_rev < 0);
                 CHECK(max_fwd > 0);

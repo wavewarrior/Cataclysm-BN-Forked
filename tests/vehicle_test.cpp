@@ -27,6 +27,7 @@
 #include "units_utility.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vehicle_wait.h"
@@ -1336,7 +1337,7 @@ TEST_CASE("starting_engines_from_the_controls_lets_the_car_roll", "[vehicle][ste
 
     CHECK(veh.engine_on);
     CHECK(you.controlling_vehicle);
-    CHECK(veh.max_velocity() > 0);
+    CHECK(vehicle_dynamics::max_velocity(veh) > 0);
 
     veh.cruise_on = true;
     veh.cruise_velocity = 0;

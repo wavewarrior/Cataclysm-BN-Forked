@@ -16,6 +16,7 @@
 #include "translations.h"
 #include "units.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_grab.h"
 #include "vehicle_ownership.h"
 #include "vehicle_part.h"
@@ -75,16 +76,17 @@ auto get_vehicle_str_requirement(vehicle* veh) -> int {
     // Really as it is floating behind you it shouldn't be too hard to do slowly
     // If one can do 2000 in a wheelbarrow
     // 400kg blimp at 20 str should be easy
-    if (veh->has_sufficient_lift(true)) {
+    if (vehicle_dynamics::has_sufficient_lift(*veh, true)) {
         return base_str_req(veh) / 50;
-    } else if (!veh->valid_wheel_config()) {
+    } else if (!vehicle_dynamics::valid_wheel_config(*veh)) {
         return base_str_req(veh) * 10;
     }
 
     // if vehicle is rollable we modify str_req based on a function of movecost per wheel.
     const int all_movecost = get_grabbed_vehicle_movecost(veh);
     // off-road coefficient (always 1.0 on a road, as low as 0.1 off road.)
-    const float traction = veh->k_traction(get_map().vehicle_wheel_traction(*veh));
+    const float traction =
+        vehicle_dynamics::k_traction(*veh, get_map().vehicle_wheel_traction(*veh));
     return (1 + all_movecost / get_effective_wheels(veh)) / traction;
 }
 
@@ -164,7 +166,8 @@ bool game::grabbed_veh_move(const tripoint_rel_ms& dp) {
     // final strength check and outcomes
     ///\EFFECT_STR determines ability to drag vehicles
     if (str_req <= str) {
-        if (!grabbed_vehicle->valid_wheel_config() && !grabbed_vehicle->has_sufficient_lift(true)) {
+        if (!vehicle_dynamics::valid_wheel_config(*grabbed_vehicle)
+            && !vehicle_dynamics::has_sufficient_lift(*grabbed_vehicle, true)) {
             make_scraping_noise(grabbed_vehicle->bub_ms_location(), std::min(80, str_req * 2));
         }
 

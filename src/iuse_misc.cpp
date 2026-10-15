@@ -100,6 +100,7 @@
 #include "value_ptr.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_ownership.h"
 #include "vehicle_part.h"
 #include "vehicle_selector.h"
@@ -920,7 +921,7 @@ int iuse::unfold_generic(player* p, item* it, bool, const tripoint_bub_ms&) {
         g->m.destroy_vehicle(veh);
         return 0;
     }
-    const bool can_float = veh->can_float();
+    const bool can_float = vehicle_dynamics::can_float(*veh);
 
     const auto invalid_pos = [](const tripoint_bub_ms& pp, bool can_float) {
         return (g->m.has_flag_ter(TFLAG_DEEP_WATER, pp) && !can_float) || g->m.veh_at(pp)

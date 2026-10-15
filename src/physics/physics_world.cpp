@@ -9,6 +9,7 @@
 #include "terrain_body.h"
 #include "units_mass.h"        // units::to_kilogram
 #include "vehicle.h"           // vehicle, velo_vec, face_vec, bub_ms_location, total_mass
+#include "vehicle_dynamics.h"
 #include "vehicle_shape.h"     // vehicle_box2d_shape, TILE_M
 #include "vehicle_tile_bash.h" // bash_vehicle_tile
 
@@ -118,7 +119,7 @@ void PhysicsWorld::on_vehicle_added(vehicle& v) {
     // stops suppressing it.  A free rigid-body integrator cannot express the
     // constraint, so the tile-step mover keeps ownership.  The body is still built,
     // so other vehicles and terrain collide with it normally.
-    v.box2d_position_authority = !v.can_use_rails();
+    v.box2d_position_authority = !vehicle_dynamics::can_use_rails(v);
 }
 
 void PhysicsWorld::on_vehicle_parts_changed(vehicle& v) {

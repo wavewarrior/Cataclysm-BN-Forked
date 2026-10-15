@@ -31,6 +31,7 @@
 #include "uistate.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "vehicle_selector.h"
 #include "vpart_position.h"
@@ -164,7 +165,7 @@ bool can_fly(Character& ch) {
 
 auto is_driving(const Character& p) -> bool {
     const optional_vpart_position vp = get_map().veh_at(p.bub_pos());
-    return vp && vp->vehicle().is_moving() && vp->vehicle().player_in_control(p);
+    return vp && vehicle_dynamics::is_moving(vp->vehicle()) && vp->vehicle().player_in_control(p);
 }
 
 bool is_book_morale_boosted(const Character& ch, const item& book) {

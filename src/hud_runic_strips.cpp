@@ -29,6 +29,7 @@
 #include "units.h"
 #include "units_utility.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vpart_position.h"
 #include "weather.h"
 #include "weather_type.h"
@@ -720,8 +721,8 @@ auto hud_veh_panel(avatar& u, const hud_runic::layout&) -> std::string {
 
     // Speed against the safe and maximum envelope.
     const auto abs_vel = std::abs(veh->velocity);
-    const auto safe_vel = veh->safe_velocity();
-    const auto max_vel = veh->max_velocity();
+    const auto safe_vel = vehicle_dynamics::safe_velocity(*veh);
+    const auto max_vel = vehicle_dynamics::max_velocity(*veh);
     const auto to_display = [](int v) -> int {
         return static_cast<int>(convert_velocity(std::abs(v), VU_VEHICLE));
     };

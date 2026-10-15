@@ -18,6 +18,7 @@
 #include "translations.h"
 #include "type_id.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vpart_position.h"
 #include "weather.h"
 
@@ -217,8 +218,9 @@ bool Character::in_climate_control() {
         if (const optional_vpart_position vp = here.veh_at(bub_pos())) {
             // TODO: (?) Force player to scrounge together an AC unit
             regulated_area =
-                (vp->is_inside() &&                    // Already checks for opened doors
-                 vp->vehicle().total_power_w(true) > 0 // Out of gas? No AC for you!
+                (vp->is_inside() && // Already checks for opened doors
+                 vehicle_dynamics::total_power_w(vp->vehicle(), true) > 0 // Out of gas? No AC for
+                                                                          // you!
                 );
         }
         // TODO: AC check for when building power is implemented

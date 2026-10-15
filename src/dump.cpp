@@ -21,6 +21,7 @@
 #include "units.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "vitamin.h"
 
@@ -253,14 +254,16 @@ bool game::dump_stats(
             r.push_back(veh_empty.name);
             r.push_back(std::to_string(to_kilogram(veh_empty.total_mass())));
             r.push_back(std::to_string(to_kilogram(veh_fueled.total_mass())));
-            r.push_back(std::to_string(veh_fueled.max_velocity() / 100));
-            r.push_back(std::to_string(veh_fueled.safe_velocity() / 100));
-            r.push_back(std::to_string(veh_fueled.acceleration() / 100));
+            r.push_back(std::to_string(vehicle_dynamics::max_velocity(veh_fueled) / 100));
+            r.push_back(std::to_string(vehicle_dynamics::safe_velocity(veh_fueled) / 100));
+            r.push_back(std::to_string(vehicle_dynamics::acceleration(veh_fueled) / 100));
             r.push_back(std::to_string(veh_fueled.coeff_air_drag()));
             r.push_back(std::to_string(veh_fueled.coeff_rolling_drag()));
-            r.push_back(std::to_string(veh_fueled.static_drag(false)));
-            r.push_back(std::to_string(
-                static_cast<int>(50 * veh_fueled.k_traction(veh_fueled.wheel_area()))));
+            r.push_back(std::to_string(vehicle_dynamics::static_drag(veh_fueled, false)));
+            r.push_back(std::to_string(static_cast<int>(
+                50
+                * vehicle_dynamics::
+                    k_traction(veh_fueled, vehicle_dynamics::wheel_area(veh_fueled)))));
             rows.push_back(r);
         };
         for (auto& e : vehicle_prototype::get_all()) { dump(e); }

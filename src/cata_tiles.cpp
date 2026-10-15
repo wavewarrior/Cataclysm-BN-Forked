@@ -77,6 +77,7 @@
 #include "units_temperature.h"
 #include "veh_type.h"
 #include "vehicle.h"
+#include "vehicle_dynamics.h"
 #include "vehicle_part.h"
 #include "vpart_position.h"
 #include "weather.h"
@@ -563,7 +564,7 @@ auto own_composite_vehicle() -> const vehicle* {
     if (const vehicle* driven = driven_vehicle_for_render()) { return driven; }
     if (!g || !g->u.in_vehicle) { return nullptr; }
     const optional_vpart_position vp = g->m.veh_at(g->u.bub_pos());
-    if (!vp || !vp->vehicle().is_moving()) { return nullptr; }
+    if (!vp || !vehicle_dynamics::is_moving(vp->vehicle())) { return nullptr; }
     return &vp->vehicle();
 }
 } // namespace
@@ -594,7 +595,7 @@ auto cata_tiles::prepare_vehicle_composites() -> std::optional<SDL_FPoint> {
             // avoids dropping the composite for those frames, the camera branch flipping,
             // and the >8-tile snap that follows when it flips back.
             if (vehicle* ridden = resolve_vehicle(g->u.boarded_vehicle);
-                ridden != nullptr && ridden->is_moving()) {
+                ridden != nullptr && vehicle_dynamics::is_moving(*ridden)) {
                 v = ridden;
             }
         }
