@@ -26,6 +26,7 @@
 #include "lighting/render_state.h"
 #include "render_frame_compare.h"
 #include "sdl_render_frame.h"
+#include "tile_light_mode.h"
 
 #include <SDL3/SDL.h>
 #include <cmath>
@@ -200,27 +201,30 @@ struct checker_options {
     int w = 0;
     int h = 0;
     float tile_px = 0.0f;
-    float scale = 1.0f;
+    float ambient = 0.5f;
 };
 
-/// The checker grid of fixture B at `opts.scale` brightness: one fresh frame, captured. Every call
+/// The checker grid of fixture B, gpu_lit at `opts.ambient` (no world, so the shader's ambient
+/// term is this uniform): one fresh frame, captured. Every call
 /// starts from cleared queues so repeated calls are the same scene.
 auto render_checker(lighting::render_state& rs, const checker_options& opts)
     -> std::vector<uint8_t> {
-    const auto [target, w, h, tile_px, scale] = opts;
+    const auto [target, w, h, tile_px, ambient] = opts;
     auto* white = rs.geometry().white_texture();
     REQUIRE(white != nullptr);
     rs.clear_frame_queues();
     lighting::render_state::frame_light_inputs base_in{};
     base_in.tile_pixel_size = tile_px;
+    base_in.ambient = ambient;
     rs.begin_lighting_frame(base_in);
     const int cols = w / static_cast<int>(tile_px);
     const int rows = h / static_cast<int>(tile_px);
     for (int r = 0; r < rows; ++r) {
         for (int c = 0; c < cols; ++c) {
-            const float tint = ((r + c) % 2 == 0 ? 1.0f : 0.3f) * scale;
+            const float tint = (r + c) % 2 == 0 ? 1.0f : 0.3f;
             lighting::sprite_instance s = make_white_sprite(
                 static_cast<float>(c) * tile_px, static_cast<float>(r) * tile_px, tile_px, tile_px);
+            s.light_mode = static_cast<float>(sprite_light_mode::gpu_lit);
             s.tint_r = tint;
             s.tint_g = tint;
             s.tint_b = tint;
@@ -556,16 +560,16 @@ TEST_CASE("render_regression", "[.gpu][render]") {
         const auto spec = checker_options{.target = offscreen, .w = W, .h = H, .tile_px = TILE_PX};
         const auto base_a = render_checker(rs, spec);
         const auto base_b = render_checker(rs, spec);
-        const auto dimmed = render_checker(
-            rs, {.target = offscreen, .w = W, .h = H, .tile_px = TILE_PX, .scale = 0.5f});
+        const auto brighter = render_checker(
+            rs, {.target = offscreen, .w = W, .h = H, .tile_px = TILE_PX, .ambient = 0.75f});
         SDL_ReleaseGPUTexture(rs.device().raw(), offscreen);
 
         const auto a = render_compare::image_from_rgba(base_a, W, H);
         const auto b = render_compare::image_from_rgba(base_b, W, H);
-        const auto changed = render_compare::image_from_rgba(dimmed, W, H);
+        const auto changed = render_compare::image_from_rgba(brighter, W, H);
         const auto mask = render_compare::noise_mask(a, b);
         const auto verdict = render_compare::changed_pixel_count(a, changed, mask);
-        std::fprintf(stderr, "render_tier: dimmed changed=%zu max_delta=%u mean_abs_delta=%.4f\n",
+        std::fprintf(stderr, "render_tier: ambient changed=%zu max_delta=%u mean_abs_delta=%.4f\n",
                      verdict.count, verdict.max_delta, render_compare::mean_abs_delta(a, changed));
         CHECK_FALSE(verdict.within());
         CHECK(verdict.count > render_compare::max_changed_default);
