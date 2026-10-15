@@ -101,6 +101,7 @@
 #include "map_item_stack.h"
 #include "map_iterator.h"
 #include "map_selector.h"
+#include "map_spawn.h"
 #include "mapbuffer.h"
 #include "mapbuffer_registry.h"
 #include "mapdata.h"
@@ -804,7 +805,7 @@ bool game::start_game() {
         }
     }
 
-    m.spawn_monsters(!spawn_near); // Static monsters
+    map_spawn::spawn_monsters(m, !spawn_near); // Static monsters
 
     // Make sure that no monsters are near the player
     // This can happen in lab starts
@@ -1707,7 +1708,7 @@ bool game::travel_to_dimension(
             level_cache_freshness::lightmap_policy::normal));
 
         load_npcs();
-        here.spawn_monsters(true);
+        map_spawn::spawn_monsters(here, true);
 
         get_weather().weather_override = weather_type_id::NULL_ID();
         get_weather().set_nextweather(calendar::turn);

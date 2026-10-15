@@ -15,6 +15,7 @@
 #include "level_cache_freshness.h"
 #include "map.h"
 #include "map_helpers.h"
+#include "map_spawn.h"
 #include "mapbuffer.h"
 #include "mongroup.h"
 #include "monster.h"
@@ -516,7 +517,7 @@ TEST_CASE("horde_spawns_skip_owned_vehicle_tiles", "[horde][vehicle][monster]") 
     SECTION("unowned and untracked vehicle tiles remain valid horde spawn locations") {
         const auto fixture = make_horde_vehicle_spawn_fixture(horde_vehicle_spawn_options{});
 
-        get_map().spawn_monsters(true);
+        map_spawn::spawn_monsters(get_map(), true);
 
         CHECK(vehicle_points_contain_monster(fixture.vehicle_points));
         CHECK(fixture.horde->empty());
@@ -526,7 +527,7 @@ TEST_CASE("horde_spawns_skip_owned_vehicle_tiles", "[horde][vehicle][monster]") 
         const auto fixture = make_horde_vehicle_spawn_fixture(
             horde_vehicle_spawn_options{.tracked = true});
 
-        get_map().spawn_monsters(true);
+        map_spawn::spawn_monsters(get_map(), true);
 
         CHECK(vehicle_points_contain_monster(fixture.vehicle_points));
         CHECK(fixture.horde->empty());
@@ -536,7 +537,7 @@ TEST_CASE("horde_spawns_skip_owned_vehicle_tiles", "[horde][vehicle][monster]") 
         const auto fixture = make_horde_vehicle_spawn_fixture(
             horde_vehicle_spawn_options{.owned = true});
 
-        get_map().spawn_monsters(true);
+        map_spawn::spawn_monsters(get_map(), true);
 
         CHECK_FALSE(vehicle_points_contain_monster(fixture.vehicle_points));
         CHECK_FALSE(fixture.horde->empty());
@@ -546,7 +547,7 @@ TEST_CASE("horde_spawns_skip_owned_vehicle_tiles", "[horde][vehicle][monster]") 
         const auto fixture = make_horde_vehicle_spawn_fixture(
             horde_vehicle_spawn_options{.owned = true, .tracked = true});
 
-        get_map().spawn_monsters(true);
+        map_spawn::spawn_monsters(get_map(), true);
 
         CHECK_FALSE(vehicle_points_contain_monster(fixture.vehicle_points));
         CHECK_FALSE(fixture.horde->empty());

@@ -105,6 +105,7 @@
 #include "map_item_stack.h"
 #include "map_iterator.h"
 #include "map_selector.h"
+#include "map_spawn.h"
 #include "mapbuffer.h"
 #include "mapbuffer_registry.h"
 #include "mapdata.h"
@@ -901,7 +902,7 @@ bool game::do_turn() {
         }
         // Hordes that reached the reality bubble need to spawn,
         // make them spawn in invisible areas only.
-        m.spawn_monsters(false);
+        map_spawn::spawn_monsters(m, false);
     }
 
     debug_hour_timer.print_time();
@@ -2643,7 +2644,7 @@ void game::place_player_overmap(const tripoint_abs_omt& om_dest) {
         const int z_after = u.bub_pos().z();
         if (z_before != z_after) { pw->on_zlevel_changed(m, z_before, z_after); }
     }
-    m.spawn_monsters(true); // Static monsters
+    map_spawn::spawn_monsters(m, true); // Static monsters
     update_overmap_seen();
     // load_npcs() scans around the player's absolute position, updated by place_player().
     load_npcs();
@@ -2737,7 +2738,7 @@ void game::resize_reality_bubble_to(int new_size) {
     // When the bubble grew, submaps outside the old (smaller) bubble just entered.
     // Their stored monsters are still in the overmap monster_map; spawn them now
     // so the expanded bubble isn't empty until the next boundary crossing.
-    if (grid_origin_delta_in_sm < 0) { m.spawn_monsters(false); }
+    if (grid_origin_delta_in_sm < 0) { map_spawn::spawn_monsters(m, false); }
 
     load_npcs();
 

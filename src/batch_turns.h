@@ -6,7 +6,7 @@
  * during that period.  These are called from:
  *   - mapbuffer::actualize_submap()
  *   - game::load_npcs()  (per-NPC catchup via Creature::batch_turns)
- *   - map::spawn_monsters_submap() (per-monster catchup)
+ *   - map_spawn::spawn_monsters_submap() (per-monster catchup)
  *
  * All functions scale O(1) with respect to n and are uncapped.
  * Distribution grid catchup is handled by per-tile timestamps in

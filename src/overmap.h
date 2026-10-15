@@ -475,7 +475,7 @@ private:
 public:
     /**
      * When monsters despawn during map-shifting they will be added here.
-     * map::spawn_monsters will load them and place them into the reality bubble
+     * map_spawn::spawn_monsters will load them and place them into the reality bubble
      * (adding it to the creature tracker and putting it onto the map).
      * This stores each submap worth of monsters in a different bucket of the multimap.
      */

@@ -103,6 +103,7 @@
 #include "map_iterator.h"
 #include "map_load_stats.h"
 #include "map_selector.h"
+#include "map_spawn.h"
 #include "mapbuffer.h"
 #include "mapbuffer_registry.h"
 #include "mapdata.h"
@@ -1645,7 +1646,7 @@ point_rel_sm game::update_map(int& x, int& y) {
 
     // Spawn monsters only in the strip of submaps that just entered the bubble
     // to avoid duplicating already-active monsters from stale monster_map entries.
-    m.spawn_monsters_new_submaps(shift); // Static monsters
+    map_spawn::spawn_monsters_new_submaps(m, shift); // Static monsters
     _sh_lap(_sh_spawn);
 
     // Update what parts of the world map we can see

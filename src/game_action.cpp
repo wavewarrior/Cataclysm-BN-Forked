@@ -48,6 +48,7 @@
 #include "iuse_actor.h"
 #include "level_cache_freshness.h"
 #include "map.h"
+#include "map_spawn.h"
 #include "mapdata.h"
 #include "messages.h"
 #include "mission.h"
@@ -1848,7 +1849,7 @@ auto game::post_action_world_step() -> void {
         }
         // Hordes that reached the reality bubble need to spawn,
         // make them spawn in invisible areas only.
-        m.spawn_monsters(false);
+        map_spawn::spawn_monsters(m, false);
     }
 
     debug_hour_timer.print_time();

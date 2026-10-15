@@ -1875,31 +1875,6 @@ public:
     // set NPC positions.  if false, cannot use setpos
     void rotate(int turns, bool setpos_safe = false);
 
-    // Monster spawning:
-public:
-    /**
-     * Spawn monsters from submap spawn points and from the overmap.
-     * @param ignore_sight If true, monsters may spawn in the view of the player
-     * character (useful when the whole map has been loaded instead, e.g.
-     * when starting a new game, or after teleportation or after moving vertically).
-     * If false, monsters are not spawned in view of player character.
-     */
-    void spawn_monsters(bool ignore_sight);
-    /**
-     * Like spawn_monsters(), but only processes the strip of submaps that
-     * newly entered the reality bubble due to a map shift.  Avoids
-     * re-processing already-loaded submaps and spuriously placing stale
-     * monster_map entries that correspond to already-active monsters.
-     * @param shift_amount The shift that just occurred, in submap units.
-     */
-    void spawn_monsters_new_submaps(const point_rel_sm& shift_amount);
-
-private:
-    // Helper #1 - spawns monsters on one submap
-    void spawn_monsters_submap(const tripoint_bub_sm& gp, bool ignore_sight);
-    // Helper #2 - spawns monsters on one submap and from one group on this submap
-    void spawn_monsters_submap_group(const tripoint_bub_sm& gp, mongroup& group, bool ignore_sight);
-
 protected:
     void loadn(const tripoint_bub_sm& grid, bool update_vehicles, bool incremental = false);
     void loadn(const point_bub_sm& grid, bool update_vehicles) {

@@ -26,6 +26,7 @@
 #include "init.h"
 #include "level_cache_freshness.h"
 #include "map.h"
+#include "map_spawn.h"
 #include "mapbuffer.h"
 #include "mapbuffer_registry.h"
 #include "messages.h"
@@ -315,7 +316,7 @@ auto game::execute_activity_fixed_window_skip(const time_duration& duration) -> 
             if (u.has_trait(trait_HAS_NEMESIS)) {
                 get_overmapbuffer(current_dimension_id_).move_nemesis();
             }
-            m.spawn_monsters(false);
+            map_spawn::spawn_monsters(m, false);
         }
         if (get_option<bool>("AUTOSAVE")
             && action_time_scale::once_every_this_tick(1_turns * get_option<int>("AUTOSAVE_TURNS"))

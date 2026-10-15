@@ -23,6 +23,7 @@
 #include "line.h"
 #include "map.h"
 #include "map_iterator.h"
+#include "map_spawn.h"
 #include "mapbuffer.h"
 #include "mapbuffer_registry.h"
 #include "mapgen.h"
@@ -5731,7 +5732,7 @@ void overmap::spawn_ores(const tripoint_abs_omt& p) {
             for (auto& veh : destsm->vehicles) { veh->abs_sm_pos = dest_pos; }
 
             if (!destsm->spawns.empty()) { // trigger spawnpoints
-                here.spawn_monsters(true);
+                map_spawn::spawn_monsters(here, true);
             }
         }
 

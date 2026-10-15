@@ -470,7 +470,7 @@ public:
     void add_nemesis(const tripoint_abs_omt& p);
     /**
      * Let hordes move a step. Note that this may move monster groups inside the reality bubble,
-     * therefore you should probably call @ref map::spawn_monsters to spawn them.
+     * therefore you should probably call @ref map_spawn::spawn_monsters to spawn them.
      */
     void move_hordes();
     /**

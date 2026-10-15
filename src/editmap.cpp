@@ -22,6 +22,7 @@
 #include "line.h"
 #include "map.h"
 #include "map_iterator.h"
+#include "map_spawn.h"
 #include "mapbuffer.h"
 #include "mapdata.h"
 #include "mapgen_constructor.h"
@@ -1582,7 +1583,7 @@ void editmap::mapgen_preview(const point_abs_ms& tc, uilist& gmenu) {
             invalidate_cache();
         } else if (gpmenu.ret == 2) {
             // Trigger spawns now, they are dependent on the map so only can be added at this point
-            here.spawn_monsters(true);
+            map_spawn::spawn_monsters(here, true);
         } else if (gpmenu.ret == 3) {
             popup(_("Changed oter_id from '%s' (%s) to '%s' (%s)"), orig_oters->get_name(),
                   orig_oters.id().str(), omt_ref->get_name(), omt_ref.id().str());

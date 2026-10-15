@@ -34,6 +34,7 @@
 #include "level_cache_freshness.h"
 #include "map.h"
 #include "map/utils/map_functions.h"
+#include "map_spawn.h"
 #include "mapdata.h"
 #include "messages.h"
 #include "monster.h"
@@ -2257,7 +2258,7 @@ auto game::vertical_shift_notify(const int z_before, const int z_after) -> void 
 
     scent.reset();
 
-    m.spawn_monsters(true);
+    map_spawn::spawn_monsters(m, true);
     vertical_notes(z_before, z_after);
     update_overmap_seen();
 }
